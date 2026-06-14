@@ -98,7 +98,7 @@
 
 - **背景**: `ChannelController` は `EnemyMatrix<T>`（Core）の行を放射状ワールド座標に対応づける。`EnemyMatrix.RemoveFrontRow` は list index をずらすため、座標を index から都度計算すると先頭行消去のたびに残存敵が砦側へ滑ってしまい、「雪崩が手前→奥へ進む（敵は静止）」という仕様の手触りと食い違う。また phase1-plan §13 は雪崩タイミングを純ロジックに分離して EditMode 検証する方針。
 - **決定**:
-  - **座標は湧き時に固定**: 各敵の depth（先頭=0 が砦最寄り、奥ほど麓側）を単調増加カウンタで割り当て、湧き時にワールド座標を確定して以後動かさない。先頭行消去は撃破フロントを外へ進めるだけで survivor は静止する（`ChannelController` 内の depth/スロット管理を `EnemyMatrix` の index と独立に保つ）。
+  - ~~**座標は湧き時に固定**: 各敵の depth を単調増加カウンタで割り当て、湧き時にワールド座標を確定して以後動かさない（survivor 静止）。~~ → **ADR-14 で改訂**（単調増加 depth は長時間プレイで敵が画面外へドリフトし「見えない位置から攻撃される」不具合を生んだ。座標は現在の行インデックスで決め、先頭行消去で繰り上げる方式に変更）。
   - **雪崩タイミングは純ロジック**: `AvalancheClock`（Core・UnityEngine 非依存）が delay→開始・`killInterval` ごと 1 行・停止/谷変更でリセットを担い EditMode 検証（7 本）。`AvalancheController`（Gameplay）は `IInputSource`（ADR-6）・`IceStock`・谷適用を結ぶアダプタに徹する（ADR-8/11 を踏襲）。
 - **結果**: 「削る→雪崩→先頭行消去（深さ制御）」を EditMode（AvalancheClock 7／累計 71 本）＋ Play Mode（北谷 9→0・氷 50→0・停止/氷枯渇で不可）で完了判定。既知の限界: depth 単調増加のため長時間プレイで編隊が外周へドリフトしうる（Wave 管理＝マイルストーン E で上限/間引きを検討）。ADR-8/11 を補強し覆さない。
 
@@ -111,3 +111,11 @@
   - **入力境界の拡張**: `IInputSource.ConfirmPressed`（Enter のエッジ）を追加し Title 開始/Result 再挑戦に使う。`UnityEngine.InputSystem` 参照は `KeyboardInputSource` 内に限定（ADR-6 を踏襲・拡張）。
   - **見た目はプレースホルダ**: 敵/弾/砦は URP/Unlit のプリミティブをコード生成（`GameManager`）。プレハブ/美術は Phase 後続。
 - **結果**: Phase 1 受け入れ基準を全充足。Wave1 通しを Unity-MCP Play Mode で検証（Title→Wave1/2/3→削り→duration→Result(Win/Lose)→再挑戦、スコア=残HP）。EditMode 累計 **76 本緑**。ADR-5/6/9 を踏襲し覆さない。補助変更（`IceStock.Refill`、`Fort.Initialize` の `OnHpChanged` 発火）はリトライ時の状態/表示リセット用。
+
+## ADR-14: 谷の座標は現在の行インデックスで決め、画面内行数を上限とする（ADR-12 の座標方針を Supersede）— Accepted
+
+- **背景**: ADR-12 は敵座標を湧き時の単調増加 depth で固定し survivor 静止としたが、長時間プレイで編隊が外周へドリフトし、**敵がカメラ視野外に湧いて「見えない位置から砦を攻撃する」不具合**を生んだ（プレイ報告）。spec は「先頭行が消えると次行が**繰り上がる**」と明記しており、固定座標より繰り上げ（compaction）が仕様に忠実。
+- **決定**:
+  - 各敵のワールド座標を **現在の行インデックス**（0=砦最寄り … 麓側）から算出し、先頭行消去のたびに全敵を再配置（`ChannelController.RepositionAll`、`EnemyMatrix.RowAt` を追加）。先頭行が消えると後続が 1 つ手前へ繰り上がる（spec どおり）。
+  - **画面内行数の上限 `_maxRows`**（既定4・`frontGap`/`rowSpacing` と合わせ最外 row が ortho 視野内に収まる）を設け、満杯の谷には湧かせない（`SpawnEnemy` が null を返し `WaveManager` は次の谷を試す）。敵は常に画面内＝見える位置からのみ攻撃する。
+- **結果**: 「画面外から攻撃される」不具合を解消。MCP 検証: 1谷へ 30 体投入→ rows=4 / enemies=12 / `IsFull`、最外敵 y=4.15（視野±5 内）、超過22体は拒否。通常プレイでも最大距離 2.45 でドリフトなし。ADR-12 の「座標固定/survivor 静止」決定を本 ADR が置換（cap・繰り上げ方針）。雪崩タイミング分離（ADR-12 後半 / `AvalancheClock`）は不変。

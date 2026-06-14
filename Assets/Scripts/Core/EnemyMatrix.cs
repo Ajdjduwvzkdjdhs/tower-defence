@@ -44,6 +44,13 @@ namespace KakigoriTD.Core
         public IReadOnlyList<T> FrontRow => _rows.Count > 0 ? _rows[0] : EmptyRow;
 
         /// <summary>
+        /// 指定インデックスの行（0=先頭/山頂側 … RowCount-1=最奥/麓側）。範囲外なら空リスト。
+        /// 上位層が現在の行位置に応じてワールド座標を割り当てる（先頭行消去で行が繰り上がる）ために使う。
+        /// </summary>
+        public IReadOnlyList<T> RowAt(int index) =>
+            (index >= 0 && index < _rows.Count) ? _rows[index] : EmptyRow;
+
+        /// <summary>
         /// 新規湧きを最奥（麓側）に積む。最奥行が満杯（RowWidth）なら新しい行を作る。
         /// </summary>
         public void AddToBack(T item)

@@ -13,17 +13,20 @@ namespace KakigoriTD.Gameplay
     /// 純粋な行ロジックは Core の <see cref="EnemyMatrix{T}"/>（テスト済み）。本 MonoBehaviour は
     /// その行を放射状のワールド座標に対応づける薄いアダプタ（ADR-8 / ADR-11）。敵はプールで使い回す（ADR-4）。
     ///
-    /// 配置: 砦中心から外向き <see cref="OutwardDirection"/> に行が並ぶ。先頭行(depth0)が砦に最も近く、
-    /// 奥(depth大)ほど麓側。各敵の座標は湧き時に固定し、先頭行消去では動かさない
-    /// （雪崩の到達点＝撃破フロントが手前→奥へ進む。survivor は静止）。
+    /// 配置: 砦中心から外向き <see cref="OutwardDirection"/> に行が並ぶ。先頭行(index0)が砦に最も近く、
+    /// 奥(index大)ほど麓側。座標は「現在の行インデックス」で決まるため、先頭行が消えると残りの行が
+    /// 1 つ手前へ繰り上がる（spec「次行が先頭に＝削り続けると奥へ進む」）。
+    /// 行数は <see cref="_maxRows"/> で上限を設け、敵が画面外（カメラ視野外）に湧かない＝
+    /// 見えない位置から攻撃しないようにする。
     /// </summary>
     public class ChannelController : MonoBehaviour
     {
         [Header("配置（砦中心からの外向き）")]
-        [SerializeField] private float _frontGap = 2.0f;   // 先頭行(depth0)の砦中心からの距離
-        [SerializeField] private float _rowSpacing = 1.1f;  // 行間（奥行き方向）
-        [SerializeField] private float _slotSpacing = 0.7f; // 行内の体の間隔（横方向）
-        [SerializeField] private int _rowWidth = 3;         // 1行の最大体数（rowWidth）
+        [SerializeField] private float _frontGap = 1.6f;    // 先頭行(index0)の砦中心からの距離
+        [SerializeField] private float _rowSpacing = 0.85f; // 行間（奥行き方向）
+        [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
+        [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
+        [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数（これ以上は湧かせない）
 
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
@@ -32,10 +35,6 @@ namespace KakigoriTD.Gameplay
         private Vector3 _center;
         private Vector3 _outwardDir;
         private Vector3 _perpDir;
-
-        // 安定座標のための深さ管理（EnemyMatrix の list index は先頭消去でずれるため、別途持つ）。
-        private int _deepestDepth = -1;   // 現在の最奥行の深さ（最初の行で 0）
-        private int _backRowRemaining = 0; // 現在の最奥行の空きスロット数
 
         /// <summary>谷ID（0:N / 1:W / 2:S / 3:E）。</summary>
         public int ChannelId { get; private set; }
@@ -51,6 +50,9 @@ namespace KakigoriTD.Gameplay
 
         /// <summary>この谷に敵が居ないか。</summary>
         public bool IsEmpty => _matrix == null || _matrix.IsEmpty;
+
+        /// <summary>これ以上湧かせられないか（画面内行数の上限に達した）。</summary>
+        public bool IsFull => _matrix != null && _matrix.RowCount >= _maxRows && IsBackRowFull();
 
         /// <summary>
         /// Composition Root（or デモ）から依存を注入して谷を構成する。
@@ -70,8 +72,6 @@ namespace KakigoriTD.Gameplay
             _perpDir = new Vector3(_outwardDir.y, -_outwardDir.x, 0f); // 外向きを画面内で90°回した横方向
             _matrix = new EnemyMatrix<Enemy>(_rowWidth);
             _pool = new ObjectPool<Enemy>(createEnemy);
-            _deepestDepth = -1;
-            _backRowRemaining = 0;
         }
 
         /// <summary>0:N(+y) / 1:W(-x) / 2:S(-y) / 3:E(+x)。</summary>
@@ -88,30 +88,23 @@ namespace KakigoriTD.Gameplay
         }
 
         /// <summary>
-        /// 敵を最奥（麓側）に1体湧かせる。プールから取得し、Init・配置・行列追加を行う。
+        /// 敵を最奥（麓側）に1体湧かせる。画面内行数の上限に達していれば湧かせず null を返す
+        /// （見えない位置に敵を出さない＝画面外から攻撃させない）。
         /// </summary>
         public Enemy SpawnEnemy(EnemyTypeSO type)
         {
-            // 最奥行が満杯/未作成なら新しい行を 1 段奥に作る（EnemyMatrix.AddToBack と同じ条件で同期）。
-            if (_matrix.IsEmpty) { _backRowRemaining = 0; }
-            if (_backRowRemaining <= 0)
-            {
-                _deepestDepth++;
-                _backRowRemaining = _rowWidth;
-            }
-            int depth = _deepestDepth;
-            int slot = _rowWidth - _backRowRemaining;
-            _backRowRemaining--;
+            if (IsFull) return null;
 
             var enemy = _pool.Get();
             enemy.Init(type, _projectileFactory, _fort);
-            enemy.transform.position = PositionFor(depth, slot);
             _matrix.AddToBack(enemy);
+            RepositionAll();
             return enemy;
         }
 
         /// <summary>
         /// 雪崩 1 ヒット = 先頭行（山頂側）を消す。消えた敵は撃破（発射停止）してプールへ返す。
+        /// 残りの行は 1 つ手前へ繰り上げ（座標を振り直し）。
         /// </summary>
         /// <returns>この一撃で消えた敵数。</returns>
         public int ApplyAvalanche()
@@ -126,7 +119,7 @@ namespace KakigoriTD.Gameplay
                 e.Kill();
                 _pool.Release(e);
             }
-            if (_matrix.IsEmpty) _backRowRemaining = 0; // 空になったら次の湧きは新しい行から
+            RepositionAll();
             return n;
         }
 
@@ -142,13 +135,32 @@ namespace KakigoriTD.Gameplay
                 e.Kill();
                 _pool.Release(e);
             }
-            _backRowRemaining = 0;
         }
 
-        // 行(depth)・スロット(slot) → ワールド座標。手前(depth0)が砦寄り、奥ほど麓側。
-        private Vector3 PositionFor(int depth, int slot)
+        private bool IsBackRowFull()
         {
-            float along = _frontGap + depth * _rowSpacing;
+            int rc = _matrix.RowCount;
+            return rc == 0 || _matrix.RowAt(rc - 1).Count >= _rowWidth;
+        }
+
+        // 現在の行インデックスに従って全敵を再配置する（先頭行消去で繰り上がる）。
+        private void RepositionAll()
+        {
+            for (int row = 0; row < _matrix.RowCount; row++)
+            {
+                var members = _matrix.RowAt(row);
+                for (int slot = 0; slot < members.Count; slot++)
+                {
+                    var e = members[slot];
+                    if (e != null) e.transform.position = PositionFor(row, slot);
+                }
+            }
+        }
+
+        // 行(row)・スロット(slot) → ワールド座標。手前(row0)が砦寄り、奥ほど麓側。
+        private Vector3 PositionFor(int row, int slot)
+        {
+            float along = _frontGap + row * _rowSpacing;
             float across = (slot - (_rowWidth - 1) * 0.5f) * _slotSpacing;
             return _center + _outwardDir * along + _perpDir * across;
         }

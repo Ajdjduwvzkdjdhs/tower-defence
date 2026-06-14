@@ -62,11 +62,19 @@ namespace KakigoriTD.Gameplay
             var type = PickEnemyType();
             if (type == null) return;
 
-            // 4 谷へ順番に配る（全谷に均等に圧力をかける）。
-            var channel = _channels[_nextChannel % _channels.Length];
-            _nextChannel++;
-            channel.SpawnEnemy(type);
-            _spawnedThisWave++;
+            // 4 谷へ順番に配る（全谷に均等に圧力をかける）。満杯の谷は飛ばして次を試す
+            // （画面内上限に達した谷には湧かせない＝画面外から攻撃させない）。
+            for (int tries = 0; tries < _channels.Length; tries++)
+            {
+                var channel = _channels[_nextChannel % _channels.Length];
+                _nextChannel++;
+                if (channel.SpawnEnemy(type) != null)
+                {
+                    _spawnedThisWave++;
+                    return;
+                }
+            }
+            // 全谷が満杯ならこのフレームの湧きは見送る。
         }
 
         private EnemyTypeSO PickEnemyType()
