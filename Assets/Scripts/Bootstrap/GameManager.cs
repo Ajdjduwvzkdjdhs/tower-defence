@@ -49,10 +49,11 @@ namespace KakigoriTD.Bootstrap
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
 
-            _fortMat = MakeUnlit(new Color(0.85f, 0.90f, 0.97f));
+            _fortMat = MakeUnlit(new Color(0.92f, 0.95f, 1.0f));
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
 
+            BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
             BuildChannels();
@@ -207,6 +208,71 @@ namespace KakigoriTD.Bootstrap
             var m = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             m.SetColor("_BaseColor", c);
             return m;
+        }
+
+        // 雪山を俯瞰した背景。中央=雪の頂上（砦）→ 外周=麓（敵が居る暗い裾野）の放射グラデーション＋等高線。
+        // 全オブジェクトより奥(z)に置く大きな板ポリゴンに、手続き生成したテクスチャを貼る。
+        private void BuildMountain()
+        {
+            var tex = GenerateMountainTexture(512);
+            var mat = MakeUnlit(Color.white);
+            mat.SetTexture("_BaseMap", tex);
+
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            go.name = "Mountain";
+            go.transform.SetParent(transform);
+            go.transform.position = new Vector3(0f, 0f, 3f); // 最奥
+            go.transform.localScale = new Vector3(20f, 12f, 1f); // 画面全体を覆う
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+
+        private static Texture2D GenerateMountainTexture(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            // 中央=頂上の雪 → 中腹 → 麓 → 背景の紺へ。
+            Color summit = new Color(0.74f, 0.84f, 0.96f);
+            Color slope  = new Color(0.42f, 0.54f, 0.68f);
+            Color foot   = new Color(0.26f, 0.36f, 0.50f);
+            Color navy   = new Color(0.19f, 0.30f, 0.47f);
+            const float worldW = 20f, worldH = 12f, mountainR = 5.5f, footR = 7.2f;
+            // 等高線（俯瞰の標高線）を入れる半径（ワールド）。
+            float[] rings = { 1.5f, 3.0f, 4.4f };
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float wx = ((x + 0.5f) / size - 0.5f) * worldW;
+                    float wy = ((y + 0.5f) / size - 0.5f) * worldH;
+                    float r = Mathf.Sqrt(wx * wx + wy * wy);
+
+                    Color c;
+                    if (r <= mountainR)
+                    {
+                        float t = r / mountainR;
+                        c = t < 0.55f
+                            ? Color.Lerp(summit, slope, Mathf.SmoothStep(0f, 1f, t / 0.55f))
+                            : Color.Lerp(slope, foot, Mathf.SmoothStep(0f, 1f, (t - 0.55f) / 0.45f));
+                    }
+                    else
+                    {
+                        float t = Mathf.Clamp01((r - mountainR) / (footR - mountainR));
+                        c = Color.Lerp(foot, navy, t);
+                    }
+
+                    // 等高線（うっすら明るいリッジ）。
+                    for (int i = 0; i < rings.Length; i++)
+                    {
+                        if (Mathf.Abs(r - rings[i]) < 0.05f) { c.r += 0.08f; c.g += 0.08f; c.b += 0.09f; break; }
+                    }
+
+                    c.a = 1f;
+                    tex.SetPixel(x, y, c);
+                }
+            }
+            tex.Apply();
+            return tex;
         }
 
         // 加算合成の Unlit（照準レーン用）。暗い背景に「光る帯」として乗り、濁らず明るく見える。
