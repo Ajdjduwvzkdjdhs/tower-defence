@@ -41,7 +41,8 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat;
+        private Material _fortMat, _enemyMat, _projMat, _aimMat;
+        private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
         {
@@ -68,6 +69,8 @@ namespace KakigoriTD.Bootstrap
             _ui = NewChild("UIManager").AddComponent<UIManager>();
             _ui.Configure(_fort, _ice, _avalanche);
 
+            BuildAimIndicator();
+
             _machine = new GameStateMachine();
             _machine.Change(new TitleState(_machine, this));
         }
@@ -76,6 +79,7 @@ namespace KakigoriTD.Bootstrap
         {
             _machine.Tick(Time.deltaTime);
             UpdateStatusUI();
+            UpdateAimIndicator();
         }
 
         // ---- IGameContext ----------------------------------------------------
@@ -203,6 +207,61 @@ namespace KakigoriTD.Bootstrap
             var m = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             m.SetColor("_BaseColor", c);
             return m;
+        }
+
+        // 加算合成の Unlit（照準レーン用）。暗い背景に「光る帯」として乗り、濁らず明るく見える。
+        // 色 RGB がそのまま加算量（アルファは無視）。
+        private static Material MakeUnlitAdditive(Color c)
+        {
+            var m = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            m.SetFloat("_ZWrite", 0f);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            m.SetColor("_BaseColor", c);
+            return m;
+        }
+
+        // 照準中の谷を示す半透明レーン（砦付近→麓へ伸びる帯）。敵より奥(z)に置き敵を隠さない。
+        private void BuildAimIndicator()
+        {
+            _aimMat = MakeUnlitAdditive(new Color(0.30f, 0.26f, 0.05f, 1f));
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            go.name = "AimIndicator";
+            go.transform.SetParent(transform);
+            // ローカル +Y を「外向き」に合わせる前提で、幅2.2 × 長さ4.4 の帯。
+            go.transform.localScale = new Vector3(2.2f, 4.4f, 1f);
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _aimMat;
+            _aimIndicator = go;
+            _aimIndicator.SetActive(false);
+        }
+
+        private void UpdateAimIndicator()
+        {
+            int ch = _avalanche != null ? _avalanche.ActiveChannel : -1;
+            if (ch < 0 || ch > 3)
+            {
+                if (_aimIndicator.activeSelf) _aimIndicator.SetActive(false);
+                return;
+            }
+
+            Vector3 dir = ChannelController.DirectionFor(ch);
+            // 砦付近(≈0.8)から麓(≈5.0)までを覆う帯。z=0.6 で敵(z=0)より奥に置く。
+            // Z軸回転のみ（XY平面・法線は -Z のままカメラを向く。FromToRotation だと S/E/W で
+            // 法線が反転して裏面カリングされ見えなくなるため）。ローカル +Y を dir に向ける。
+            float angleDeg = Mathf.Atan2(-dir.x, dir.y) * Mathf.Rad2Deg;
+            _aimIndicator.transform.SetPositionAndRotation(
+                dir * 2.9f + new Vector3(0f, 0f, 0.6f),
+                Quaternion.Euler(0f, 0f, angleDeg));
+            if (!_aimIndicator.activeSelf) _aimIndicator.SetActive(true);
+
+            // 削り中はより明るく（加算量UP）。RGB がそのまま加算される。
+            bool shaving = _avalanche.IsAvalanching;
+            _aimMat.SetColor("_BaseColor", shaving ? new Color(0.70f, 0.52f, 0.08f, 1f)
+                                                   : new Color(0.30f, 0.26f, 0.05f, 1f));
         }
 
         private void OnDestroy()
