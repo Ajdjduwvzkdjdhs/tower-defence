@@ -101,3 +101,13 @@
   - **座標は湧き時に固定**: 各敵の depth（先頭=0 が砦最寄り、奥ほど麓側）を単調増加カウンタで割り当て、湧き時にワールド座標を確定して以後動かさない。先頭行消去は撃破フロントを外へ進めるだけで survivor は静止する（`ChannelController` 内の depth/スロット管理を `EnemyMatrix` の index と独立に保つ）。
   - **雪崩タイミングは純ロジック**: `AvalancheClock`（Core・UnityEngine 非依存）が delay→開始・`killInterval` ごと 1 行・停止/谷変更でリセットを担い EditMode 検証（7 本）。`AvalancheController`（Gameplay）は `IInputSource`（ADR-6）・`IceStock`・谷適用を結ぶアダプタに徹する（ADR-8/11 を踏襲）。
 - **結果**: 「削る→雪崩→先頭行消去（深さ制御）」を EditMode（AvalancheClock 7／累計 71 本）＋ Play Mode（北谷 9→0・氷 50→0・停止/氷枯渇で不可）で完了判定。既知の限界: depth 単調増加のため長時間プレイで編隊が外周へドリフトしうる（Wave 管理＝マイルストーン E で上限/間引きを検討）。ADR-8/11 を補強し覆さない。
+
+## ADR-13: GameManager 統合方針 — UI は IMGUI（プロト）／入力境界に Confirm 追加／IGameContext で結線 — Accepted
+
+- **背景**: マイルストーン E で Composition Root（`GameManager`）・進行 UI・Wave 進行を結線する。美術アセットは未定（spec: 形は TBD）で、State 群（Core）は `IGameContext` 越しにのみ外界へ作用する（ADR-9）。Title 開始・Result 再挑戦には「決定」入力が要るが、`IInputSource` は `ActiveChannel`/`IsShaving` のみだった。
+- **決定**:
+  - **唯一の Singleton = `GameManager`（ADR-5）**。`Awake` で Fort / `ProjectileFactory` / `ChannelController×4` / `IceStock` / `KeyboardInputSource` / `AvalancheController` / `WaveManager` / `UIManager` を生成・配線し、`IGameContext` を実装して `GameStateMachine` を `Update` で駆動（初期 `TitleState`）。`BeginWave(0)`＝新規プレイで砦HP・氷・残敵をリセット。
+  - **UI は IMGUI（`OnGUI`）でプロトタイプ実装**（`UIManager`）。氷/砦HPバー・谷ハイライト・Wave ステータス・リザルトを描画。砦HP は `Fort.OnHpChanged` 購読（ADR-3、`OnDestroy` で解除）。uGUI 化・本番ビジュアルは後続の見栄え調整に委ねる（フォント/Canvas 依存を避け検証を高速化）。
+  - **入力境界の拡張**: `IInputSource.ConfirmPressed`（Enter のエッジ）を追加し Title 開始/Result 再挑戦に使う。`UnityEngine.InputSystem` 参照は `KeyboardInputSource` 内に限定（ADR-6 を踏襲・拡張）。
+  - **見た目はプレースホルダ**: 敵/弾/砦は URP/Unlit のプリミティブをコード生成（`GameManager`）。プレハブ/美術は Phase 後続。
+- **結果**: Phase 1 受け入れ基準を全充足。Wave1 通しを Unity-MCP Play Mode で検証（Title→Wave1/2/3→削り→duration→Result(Win/Lose)→再挑戦、スコア=残HP）。EditMode 累計 **76 本緑**。ADR-5/6/9 を踏襲し覆さない。補助変更（`IceStock.Refill`、`Fort.Initialize` の `OnHpChanged` 発火）はリトライ時の状態/表示リセット用。

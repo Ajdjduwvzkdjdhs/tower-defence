@@ -30,25 +30,25 @@
 
 ### 受け入れ基準
 
-- [ ] 4谷が放射状に表示され、`W/A/S/D` で照準谷が切り替わり UI でハイライトされる（同時1本のみ）
+- [x] 4谷が放射状に表示され、`W/A/S/D` で照準谷が切り替わり UI でハイライトされる（同時1本のみ）（マイルストーンE / `UIManager` 谷ハイライト + Play検証）
 - [x] `Space` 長押し中、アクティブ谷の先頭行が `killInterval` ごとに消える。判定開始は `avalancheDelay` 後（初期値0＝即時）（マイルストーンD / `AvalancheClock` 7本 + Play検証）
 - [x] 削り続けると先頭→奥へ進む（深さ制御）。削りを止める/谷を変えると進行が止まる（マイルストーンD / Play検証: 北谷9→0、入力解放で停止、谷変更で `clock.Reset`）
-- [ ] 氷ストックが削り中に `iceDrainPerSec` で減り、0で削れない。UI にバー表示
+- [x] 氷ストックが削り中に `iceDrainPerSec` で減り、0で削れない。UI にバー表示（マイルストーンD+E / Play検証: 氷 50→0、枯渇で不可、`UIManager` 氷バー）
 - [x] 各谷で敵が最奥に湧き、`fireInterval` ごとに弾を発射。弾は麓→山頂へ飛び、着弾で `Fort.TakeDamage`（マイルストーンC+D / `ChannelController.SpawnEnemy` + Play検証）
 - [x] 弾は `ObjectPool` で使い回され、着弾でプール返却（ホットパスに `Instantiate/Destroy` が無い）（マイルストーンC / Play Mode検証: 着弾後 GameObject 非アクティブ・破棄なし）
 - [x] 敵を倒すと以後の発射が止まる（飛来中の弾は着弾する）（マイルストーンC / Play Mode検証: `Enemy.Kill()` 後 11秒で発射ゼロ）
-- [ ] 砦HP が着弾で減り、0で `Fort.OnDestroyed` → Result(Lose)
-- [ ] `WaveConfigSO.duration` 経過で Wave 終了 → 残敵消去 → 次へ/Result。3Wave到達で Result(Win)
-- [ ] スコア＝終了時の `Fort.CurrentHp` が Result に表示
+- [x] 砦HP が着弾で減り、0で `Fort.OnDestroyed` → Result(Lose)（マイルストーンE / Play検証: Wave2 で HP0→FORT DESTROYED）
+- [x] `WaveConfigSO.duration` 経過で Wave 終了 → 残敵消去 → 次へ/Result。3Wave到達で Result(Win)（マイルストーンE / Play検証: Wave1→Lull→Wave2、3波生存→YOU WIN）
+- [x] スコア＝終了時の `Fort.CurrentHp` が Result に表示（マイルストーンE / Play検証: Lose=0 / Win=残りHP）
 - [x] `avalancheDelay` / `killInterval` / `iceTotal` / `fortHpMax` 等が Inspector もしくは SO で調整できる（`AvalancheController` の `[SerializeField]` / `Fort._maxHp` / `IceStock(total)`）
-- [ ] **Unity-MCP経由でPlay Modeを起動し、雪崩ストリーム・敵の湧き・弾の飛行・UI表示が正しく動作していることを`screenshot-game-view`で確認済み**
-- [ ] **主要な状態（照準中の谷ハイライト、氷ストック減少、砦HP減少、Wave終了時処理）をUnity-MCPのスクリーンショットで記録・検証済み**
-- [x] EditMode テスト緑: `EnemyMatrix`(先頭行消去・最奥追加)、`IceStock`(消費・枯渇)、`Scoring`、`GameStateMachine`(遷移) ＋ States遷移（マイルストーンA / 全49本緑 2026-06-14）
-- [ ] Singleton は `GameManager` のみ。入力は `IInputSource` 経由
+- [x] **Unity-MCP経由でPlay Modeを起動し、雪崩ストリーム・敵の湧き・弾の飛行・UI表示が正しく動作していることを`screenshot-game-view`で確認済み**（マイルストーンA〜E通し）
+- [x] **主要な状態（照準中の谷ハイライト、氷ストック減少、砦HP減少、Wave終了時処理）をUnity-MCPのスクリーンショットで記録・検証済み**（Title/Wave/削り/Lull/Lose/Win のスクショ）
+- [x] EditMode テスト緑: `EnemyMatrix`/`IceStock`/`Scoring`/`GameStateMachine`+States ＋ `ObjectPool`/`Fort`/`AvalancheClock`/`SpawnClock`（**全76本緑** 2026-06-14）
+- [x] Singleton は `GameManager` のみ。入力は `IInputSource` 経由（`GameManager` が唯一の `Instance`、入力は `KeyboardInputSource`→`IInputSource` 経由）
 
-### Status: 🟡 着手中 — マイルストーンA〜D 完了。EditMode **71本緑**（Core+ObjectPool+Fort+AvalancheClock）。
-「削る→雪崩→先頭行消去」の手触りが Play Mode で成立：放射状4谷（`ChannelController×4`）、`W/A/S/D` で照準谷ラッチ、`Space` 長押しでアクティブ谷の先頭行を `killInterval` ごとに消去（深さ制御）、氷消費・0で不可、敵が `fireInterval` で砦へ発射し被弾でHP減（プール返却）。使い捨て `DemoHarness` で対話プレイ可能。
-**未配線（マイルストーンE）**: 正式UI（谷ハイライト/氷・砦HPバー/Waveタイマー/リザルト＝`UIManager`）、Wave進行・残敵消去・勝敗（`WaveManager`/State 連携）、`GameManager`（Composition Root・唯一のSingleton）。次はマイルストーンE。
+### Status: 🟢 Phase 1 完了 — マイルストーンA〜F 達成。受け入れ基準すべて充足。EditMode **76本緑**。
+`GameManager`（唯一のSingleton/Composition Root）が全システムを生成・配線し `GameStateMachine` を駆動。Wave1 通しを Unity-MCP Play Mode で検証済み：Title→開始→Wave1/2/3（湧き・発射・砦HP減・タイマー）→`W/A/S/D`照準＋`Space`削りで雪崩（先頭行消去・深さ制御・氷消費）→`duration`でWave終了・残敵消去→次Wave、砦HP0で Result(Lose)、3Wave生存で Result(Win)、スコア=残り砦HP、Enter で再挑戦。UI は `UIManager`（氷/砦HPバー・谷ハイライト・Waveステータス・リザルト）。
+**Phase 1 スコープ外（Phase 2 以降）**: 味方NPC・変装・突撃隊、SOイベントチャネル移行、エフェクト/サウンド、本格バランス調整、実機インターフェース接続。見た目は URP/Unlit プリミティブのプレースホルダ（美術は後続）。
 
 ---
 

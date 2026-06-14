@@ -164,6 +164,19 @@
   - MCP Play（mcp-guide パターンA）: `Space`長押しでアクティブ谷の先頭行が`killInterval`ごとに消え、**削り続けると奥へ**、**止めると停止**。氷消費（`IceStock`連動・0で不可）。スクショ証拠を残す。
 - → 受け入れ基準「先頭行消去」「深さ制御」「氷ストック減少・枯渇」を一括検証。
 
+> **進捗（2026-06-14）— マイルストーン E + F 完了 ✅ → Phase 1 達成**
+> | Unit | 成果物 | 検証 | 状態 |
+> |---|---|---|---|
+> | 14 | `SpawnClock`（Core）+ `WaveManager`（Gameplay） | SpawnClockTests **5本緑**。Play: `spawnInterval` で4谷へラウンドロビン湧き | ✅ |
+> | 15 | `UIManager`（UI・IMGUI） | Play: 氷/砦HPバー・谷ハイライト・Waveステータス・リザルトをスクショ確認（`OnHpChanged` 購読、`OnDestroy` 解除） | ✅ |
+> | 16 | `GameManager`（Bootstrap・唯一のSingleton/Composition Root、`IGameContext` 実装） | Play: 全系を生成・配線し FSM 駆動。入力は `IInputSource` 経由 | ✅ |
+> | 17 | Wave1 通し | Play 通し: Title→Wave1/2/3→削り(雪崩/氷/ハイライト)→duration→残敵消去→次/Result、HP0=Lose、3波=Win、スコア=残HP、Enter再挑戦（各状態スクショ） | ✅ |
+>
+> EditMode 累計 **76本緑**（+SpawnClock 5）。コミットはユニット単位（Unit14 / Unit15 / Unit16-17）。使い捨て `DemoHarness` は削除し、`GameManager` 本配線に置換。
+> 補助変更: `IInputSource.ConfirmPressed`（Enter エッジ=開始/再挑戦）、`IceStock.Refill`、`Fort.Initialize` が `OnHpChanged` 発火、Wave2/Wave3 実体（dur40/45・spawn1.0/0.6）。
+> 設計判断（**ADR-13**）: UI は Phase1 プロトタイプとして IMGUI（uGUI 化は後続の見栄え調整）。`ConfirmPressed` を `IInputSource` に追加し ADR-6 の入力境界を拡張。`GameManager` が `IGameContext` を実装して State 群と Gameplay を結線（ADR-5/9）。
+> 既知の限界: 見た目は URP/Unlit プリミティブのプレースホルダ（美術未定）。長時間プレイでの編隊外周ドリフト（ADR-12）は WaveManager の上限/間引きで将来調整。
+
 ### マイルストーン E — 進行・UI・配線
 
 **Unit 14: `WaveManager`（G6）**
