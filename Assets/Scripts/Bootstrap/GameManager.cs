@@ -210,7 +210,8 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
-        // 雪山を俯瞰した背景。中央=雪の頂上（砦）→ 外周=麓（敵が居る暗い裾野）の放射グラデーション＋等高線。
+        // 山を俯瞰した背景。中央=頂上（砦）から外へ広がる「緑の同心円（弓道の的状）」、
+        // 一番外側の円より外は茶色い地面（＝麓）。敵はこの一番外側の円の外＝地面に湧く。
         // 全オブジェクトより奥(z)に置く大きな板ポリゴンに、手続き生成したテクスチャを貼る。
         private void BuildMountain()
         {
@@ -230,14 +231,17 @@ namespace KakigoriTD.Bootstrap
         private static Texture2D GenerateMountainTexture(int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            // 中央=頂上の雪 → 中腹 → 麓 → 背景の紺へ。
-            Color summit = new Color(0.74f, 0.84f, 0.96f);
-            Color slope  = new Color(0.42f, 0.54f, 0.68f);
-            Color foot   = new Color(0.26f, 0.36f, 0.50f);
-            Color navy   = new Color(0.19f, 0.30f, 0.47f);
-            const float worldW = 20f, worldH = 12f, mountainR = 5.5f, footR = 7.2f;
-            // 等高線（俯瞰の標高線）を入れる半径（ワールド）。
-            float[] rings = { 1.5f, 3.0f, 4.4f };
+            // 緑の山＝中央(頂上)から外へ向かう同心円バンド。一番外側の円(mountainR)より外は茶色い地面。
+            Color summit   = new Color(0.60f, 0.82f, 0.46f); // 頂上（明るい緑）
+            Color midSlope = new Color(0.38f, 0.64f, 0.32f); // 中腹
+            Color lowSlope = new Color(0.24f, 0.48f, 0.24f); // 麓側の山肌（濃い緑）
+            Color ground   = new Color(0.42f, 0.30f, 0.18f); // 地面（茶色）＝麓。敵はここに湧く
+            Color ringLine = new Color(0.15f, 0.32f, 0.17f); // 円の輪郭線（濃い緑）
+            const float worldW = 20f, worldH = 12f;
+            const float mountainR = 2.2f;  // 一番外側の円＝山の縁（これより外は地面）
+            const float edgeBlend = 0.16f; // 山→地面のなじませ幅
+            // 同心円のバンド境界（内側→外側）。ここに輪郭線を引いて「的」状に見せる。
+            float[] bands = { 0.85f, 1.55f, mountainR };
 
             for (int y = 0; y < size; y++)
             {
@@ -248,23 +252,26 @@ namespace KakigoriTD.Bootstrap
                     float r = Mathf.Sqrt(wx * wx + wy * wy);
 
                     Color c;
-                    if (r <= mountainR)
+                    if (r >= mountainR + edgeBlend)
                     {
-                        float t = r / mountainR;
-                        c = t < 0.55f
-                            ? Color.Lerp(summit, slope, Mathf.SmoothStep(0f, 1f, t / 0.55f))
-                            : Color.Lerp(slope, foot, Mathf.SmoothStep(0f, 1f, (t - 0.55f) / 0.45f));
+                        c = ground; // 一番外側の円の外＝麓の地面
                     }
                     else
                     {
-                        float t = Mathf.Clamp01((r - mountainR) / (footR - mountainR));
-                        c = Color.Lerp(foot, navy, t);
-                    }
-
-                    // 等高線（うっすら明るいリッジ）。
-                    for (int i = 0; i < rings.Length; i++)
-                    {
-                        if (Mathf.Abs(r - rings[i]) < 0.05f) { c.r += 0.08f; c.g += 0.08f; c.b += 0.09f; break; }
+                        // バンドで山肌の緑を決める（同心円＝的の見た目）。
+                        Color mountain = r < bands[0] ? summit : (r < bands[1] ? midSlope : lowSlope);
+                        // 縁は地面へなじませる。
+                        if (r > mountainR - edgeBlend)
+                        {
+                            float t = Mathf.Clamp01((r - (mountainR - edgeBlend)) / (2f * edgeBlend));
+                            mountain = Color.Lerp(mountain, ground, t);
+                        }
+                        c = mountain;
+                        // バンド境界に円の輪郭線。
+                        for (int i = 0; i < bands.Length; i++)
+                        {
+                            if (Mathf.Abs(r - bands[i]) < 0.035f) { c = Color.Lerp(c, ringLine, 0.6f); break; }
+                        }
                     }
 
                     c.a = 1f;

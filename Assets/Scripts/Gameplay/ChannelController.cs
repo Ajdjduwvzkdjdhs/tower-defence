@@ -22,8 +22,10 @@ namespace KakigoriTD.Gameplay
     public class ChannelController : MonoBehaviour
     {
         [Header("配置（砦中心からの外向き）")]
-        [SerializeField] private float _frontGap = 1.6f;    // 先頭行(index0)の砦中心からの距離
-        [SerializeField] private float _rowSpacing = 0.85f; // 行間（奥行き方向）
+        // 先頭行(index0)は山の一番外側の円(r≈2.2)より外＝麓の茶色い地面に置く。
+        // 最奥行(index3)でも画面内: 2.7 + 3*0.55 = 4.35（敵半幅0.25 → y±4.6 < カメラ視野±5）。
+        [SerializeField] private float _frontGap = 2.7f;    // 先頭行(index0)の砦中心からの距離（山の外）
+        [SerializeField] private float _rowSpacing = 0.55f; // 行間（奥行き方向）
         [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数（これ以上は湧かせない）
