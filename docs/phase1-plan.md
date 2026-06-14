@@ -142,6 +142,16 @@
 **Unit 11: `Enemy`（G3）**
 - 完了条件 (MCP Play): 敵が`fireInterval`ごとに弾を発射し砦へ着弾。**撃破（プール返却）すると以後の発射が止まる**（飛来中の弾は着弾）。→ 「敵を倒すと発射停止」基準。
 
+> **進捗（2026-06-14）— マイルストーン D 完了 ✅**
+> | Unit | 成果物 | 検証 | 状態 |
+> |---|---|---|---|
+> | 12 | `ChannelController`（Gameplay・放射状4谷） | Play: 4谷 N/W/S/E に front(3)+back(2…) 行で配置、`ApplyAvalanche` で先頭行（山頂側）消去（北谷 killed=3, enemies 5→2, rows 2→1）。survivor 静止＝撃破フロントが手前→奥へ | ✅ |
+> | 13 | `AvalancheClock`（Core・純タイミング）+ `AvalancheController`（Gameplay） | AvalancheClockTests **7本緑**（delay→開始 / interval ごと / 停止リセット）。Play: W+Space で北谷 9→0、氷 50→0、入力解放で停止（9維持）、氷0では削れない（IsAvalanching=false） | ✅ |
+>
+> 実装: メインセッション直列。EditMode 累計 **71本緑**（+AvalancheClock 7）。コミットはユニット単位（Unit12 / Unit13）。
+> 設計判断（**ADR-12**）: `ChannelController` は各敵の座標を湧き時に固定し先頭行消去で動かさない（撃破フロントが外へ進む・survivor 静止）。雪崩タイミングは §13 方針どおり純ロジック `AvalancheClock` に分離し EditMode 検証、MonoBehaviour は入力（`IInputSource`）・氷（`IceStock`）・谷適用のアダプタ。
+> 使い捨てデモ `Assets/Scripts/Demo/DemoHarness.cs` を Unit 8-13 対話版に更新（W/A/S/D 選択＋Space 削り＋氷＋砦HP、`[R]` リセット）。GameManager 実装時に破棄。
+
 ### マイルストーン D — 谷と雪崩（手触りの核）
 
 **Unit 12: `ChannelController`×4（G4）**

@@ -93,3 +93,11 @@
   - **MCP Play Mode**: 時間的・視覚的挙動（弾の麓→山頂飛行と着弾減算、敵の `fireInterval` 発射、撃破での発射停止）は Unity-MCP の Play Mode ＋ `screenshot-game-view`/ログで検証（phase1-plan のユニット完了条件どおり）。
 - **補足（生成口の注入）**: `ProjectileFactory` は弾インスタンスの生成方法を `Func<Projectile>` で受け取り、内部に `ObjectPool<Projectile>` を持つ（ADR-4）。シーンやプレハブのアセット参照に依存せず、Composition Root（GameManager）やテストが生成デリゲートを注入する。これにより Factory 自体は純粋でテスト容易、`Projectile`→`Fort.TakeDamage` の着弾は ADR-7 を踏襲する。
 - **結果**: ADR-8 をビルド境界（`KakigoriTD.Core` の `noEngineReferences`）で維持しつつ、戦闘アクターは EditMode 緑（Fort 8 本／累計 64 本）＋ Play Mode 実証（弾飛行・HP 1000→995、発射 1発/2s、Kill で停止）で完了判定。ADR-8 を覆さず、適用範囲（純ロジックか時間的・視覚的挙動か）を明確化する補足。
+
+## ADR-12: 谷の座標は湧き時固定（survivor 静止）／雪崩タイミングは純ロジックに分離 — Accepted
+
+- **背景**: `ChannelController` は `EnemyMatrix<T>`（Core）の行を放射状ワールド座標に対応づける。`EnemyMatrix.RemoveFrontRow` は list index をずらすため、座標を index から都度計算すると先頭行消去のたびに残存敵が砦側へ滑ってしまい、「雪崩が手前→奥へ進む（敵は静止）」という仕様の手触りと食い違う。また phase1-plan §13 は雪崩タイミングを純ロジックに分離して EditMode 検証する方針。
+- **決定**:
+  - **座標は湧き時に固定**: 各敵の depth（先頭=0 が砦最寄り、奥ほど麓側）を単調増加カウンタで割り当て、湧き時にワールド座標を確定して以後動かさない。先頭行消去は撃破フロントを外へ進めるだけで survivor は静止する（`ChannelController` 内の depth/スロット管理を `EnemyMatrix` の index と独立に保つ）。
+  - **雪崩タイミングは純ロジック**: `AvalancheClock`（Core・UnityEngine 非依存）が delay→開始・`killInterval` ごと 1 行・停止/谷変更でリセットを担い EditMode 検証（7 本）。`AvalancheController`（Gameplay）は `IInputSource`（ADR-6）・`IceStock`・谷適用を結ぶアダプタに徹する（ADR-8/11 を踏襲）。
+- **結果**: 「削る→雪崩→先頭行消去（深さ制御）」を EditMode（AvalancheClock 7／累計 71 本）＋ Play Mode（北谷 9→0・氷 50→0・停止/氷枯渇で不可）で完了判定。既知の限界: depth 単調増加のため長時間プレイで編隊が外周へドリフトしうる（Wave 管理＝マイルストーン E で上限/間引きを検討）。ADR-8/11 を補強し覆さない。
