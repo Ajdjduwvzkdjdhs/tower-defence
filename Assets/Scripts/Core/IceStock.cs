@@ -27,6 +27,9 @@ namespace KakigoriTD.Core
         /// <summary>残量の正規化値 0..1（UI バー用）。Total が 0 なら 0。</summary>
         public float Normalized => Total <= 0f ? 0f : _current / Total;
 
+        /// <summary>残量を初期総量まで戻す（リトライ＝新規プレイ開始時）。</summary>
+        public void Refill() => _current = Total;
+
         /// <summary>
         /// 氷を <paramref name="amount"/> だけ消費しようと試みる。
         /// 残量があれば消費して true（＝この瞬間は削れる）。0 未満には下がらない。

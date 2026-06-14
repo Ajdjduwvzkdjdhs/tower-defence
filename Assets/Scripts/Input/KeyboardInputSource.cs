@@ -23,10 +23,16 @@ namespace KakigoriTD.Input
         /// <inheritdoc/>
         public bool IsShaving { get; private set; }
 
+        /// <inheritdoc/>
+        public bool ConfirmPressed { get; private set; }
+
         private void Update()
         {
             var keyboard = Keyboard.current;
-            if (keyboard == null) return;
+            if (keyboard == null) { ConfirmPressed = false; return; }
+
+            // 決定/開始/再挑戦は Enter のエッジ（押下の瞬間のみ）。削り Space と役割を分ける。
+            ConfirmPressed = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame;
 
             // 谷の選択はラッチ式・同時1本のみ。このフレームで押された方向に切り替える（else-if で1本に限定）。
             // W/A/S/D -> 0:N / 1:W / 2:S / 3:E。

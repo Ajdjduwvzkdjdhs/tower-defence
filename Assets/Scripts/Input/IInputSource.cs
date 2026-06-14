@@ -16,5 +16,11 @@ namespace KakigoriTD.Input
         /// 削り（Space）が押されているか。長押し中だけ true（雪崩ストリームが流れる）。
         /// </summary>
         bool IsShaving { get; }
+
+        /// <summary>
+        /// 決定/開始/再挑戦の入力がこのフレームに押されたか（エッジ）。
+        /// Title での開始・Result での再挑戦に使う。長押しではなく押下の瞬間だけ true。
+        /// </summary>
+        bool ConfirmPressed { get; }
     }
 }

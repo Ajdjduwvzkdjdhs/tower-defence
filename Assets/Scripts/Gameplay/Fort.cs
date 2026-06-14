@@ -47,6 +47,9 @@ namespace KakigoriTD.Gameplay
         {
             _maxHp = maxHp < 0 ? 0 : maxHp;
             _currentHp = _maxHp;
+            // 初期化も HP 変化として通知する（リトライ時に UI バーを満タンへ戻すため）。
+            // Awake 経由の初回はまだ購読者が居ないので無害。
+            OnHpChanged?.Invoke(_currentHp, _maxHp);
         }
 
         /// <summary>
