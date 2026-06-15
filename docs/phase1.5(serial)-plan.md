@@ -74,7 +74,7 @@
 
 ## 5. 前提・環境
 
-- **API Compatibility Level**: 本プロジェクトは既に `apiCompatibilityLevel: 6`（.NET Framework）＝ `System.IO.Ports` 利用可。**変更不要**（記事の「.NET Framework に変更」は対応済み。`ProjectSettings/ProjectSettings.asset` で確認済み）。
+- **API Compatibility Level**: ⚠️ 当初「`apiCompatibilityLevel: 6` ＝ .NET Framework で変更不要」と見積もったが**誤り**。`6` は **.NET Standard 2.1** で `System.IO.Ports` を含まず、コンパイルで `CS0234`（`System.IO.Ports` が無い）になる。**実装時に Standalone の API Compatibility Level を .NET Framework（`NET_Unity_4_8`＝3）へ変更**した（`apiCompatibilityLevelPerPlatform: {Standalone: 3}`）。記事／Ardity PDF FAQ② の前提どおり。詳細は ADR-15。
 - **3rd-party import 不要**: 自前コードは `KakigoriTD.Runtime.asmdef` 内に置く。`System.IO.Ports` は BCL 名前空間で asmdef からそのまま使える（Ardity 採用時に生じる `Assembly-CSharp` 参照問題が無い）。
 - **macOS ポート名**: 記事の `COM4` は Windows 表記。macOS は `/dev/tty.usbserial-*` / `/dev/tty.usbmodem*`。`SerialConfigSO.portName` で設定し環境差を吸収する。
 - **注意（Mono の癖）**: Unity/Mono の `System.IO.Ports` は macOS で挙動に癖がある場合がある（`ReadTimeout` の効き・列挙不可など）。実機検証時に問題が出たら本書 §9 に追記する。
@@ -96,15 +96,16 @@
 
 ## 7. 受け入れ基準（完了判定の bar）
 
-- [ ] `CompositeInputSource` がキーボード+シリアルを §1 規則で正しくマージ（EditMode 緑）
-- [ ] `SerialInputProtocol` が削り行を解析し、無受信 watchdog で `IsShaving=false`（EditMode 緑）
-- [ ] `SerialConfigSO` で `portName`/`baudRate` 等を Inspector 調整可（マジックナンバー直書きなし）
-- [ ] `SerialHandler` がスレッド/ポートを安全に開閉（Play 停止でフリーズ・ポート掴みっぱなしが無い）／未接続でも落ちない
-- [ ] `SerialHandler.Send(string)` で Unity→Arduino へ任意文字列を送信できる（接続時 smoke）／未接続でも落ちない／終了時に停止コマンド送出（任意設定時）
-- [ ] **キーボード操作が回帰しない**（WASD 谷選択・`Space` 削り・Enter 確定が Phase 1 同様に動く）
-- [ ] ハンドル回転（または テスト Arduino の `1`/`0`）で `IsShaving` が切り替わり、選択中の谷に雪崩（Play + screenshot）
-- [ ] Singleton は `GameManager` のみ・入力は `IInputSource`（Composite）経由を維持（ADR-5/6）
-- [ ] `docs/architecture.md` に **ADR-15** を追記、`docs/phases.md` に Phase 1.5 エントリを追加、関連 docs を更新（Definition of Done）
+- [x] `CompositeInputSource` がキーボード+シリアルを §1 規則で正しくマージ（EditMode 緑：5本）
+- [x] `SerialInputProtocol` が削り行を解析し、無受信 watchdog で `IsShaving=false`（EditMode 緑：11本）
+- [x] `SerialConfigSO` で `portName`/`baudRate` 等を Inspector 調整可（マジックナンバー直書きなし）
+- [x] `SerialHandler` がスレッド/ポートを安全に開閉（`OnDestroy`/`OnApplicationQuit`）／**未接続ポートでも警告のみで落ちない・固まらない**（MCP smoke 検証済み）
+- [ ] `SerialHandler.Send(string)` で Unity→Arduino へ任意文字列を送信できる（**接続時 smoke はハード入手後 = TODO**）／未接続でも落ちない（検証済み）
+- [x] **キーボード操作が回帰しない**（`_input`＝`CompositeInputSource`、`AvalancheController` に同一注入、Play で KB→Composite の `IsShaving` OR を実証）
+- [ ] ハンドル回転（または テスト Arduino の `1`/`0`）で `IsShaving` が切り替わり、選択中の谷に雪崩（Play + screenshot）（**ハード入手後 = TODO**）
+- [x] Singleton は `GameManager` のみ・入力は `IInputSource`（Composite）経由を維持（ADR-5/6）
+- [x] `docs/architecture.md` に **ADR-15** を追記、`docs/phases.md` に Phase 1.5 エントリを追加、関連 docs を更新（Definition of Done）
+- [x] Standalone の API Compatibility Level を .NET Framework（`NET_Unity_4_8`）へ変更（`System.IO.Ports` の前提・§5/ADR-15）
 
 ## 8. ADR-15 ドラフト（実装時に `docs/architecture.md` へ追記）
 

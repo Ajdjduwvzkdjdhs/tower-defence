@@ -56,6 +56,35 @@
 
 ---
 
+## Phase 1.5 — 実機シリアル接続（ハンドル回転 → 削り）／別計画　【🟢 コード実装・検証済み】
+
+**ゴール**: ADR-6 の `IInputSource` 差し替え方針どおり、実機（物理かき氷機）の**ハンドル回転**を Arduino 経由シリアルで取得し、削り（`IsShaving`）として読む足場を入れる。XY（谷選択）・決定はキーボード据え置き、Composite で併用。詳細計画は `docs/phase1.5(serial)-plan.md`、設計判断は **ADR-15**。
+
+### In scope
+
+- 自前シリアル transport（`System.IO.Ports` 別スレッド／Ardity 不使用）、`SerialConfigSO`、純ロジック `SerialInputProtocol`（行→削り＋watchdog）、`SerialInputSource`、`CompositeInputSource`、`GameManager` 配線、Unity→Arduino 汎用送信口（`SerialHandler.Send`）。
+
+### Out of scope（やらない）
+
+- 実機 **XY センサ**のシリアル化、送信コマンド体系の確定（汎用 `Send` 口のみ）、味方NPC など Phase 2/3 の要素。
+
+### 受け入れ基準
+
+- [x] `CompositeInputSource` が KB+シリアルを正しくマージ（`ActiveChannel`/`ConfirmPressed`=KB、`IsShaving`=OR）（EditMode 5 本）
+- [x] `SerialInputProtocol` が `1`/`0` を解析、無受信 watchdog で `IsShaving=false`、不正行無視（EditMode 11 本）
+- [x] `SerialConfigSO` で `portName`/`baudRate` 等を Inspector 調整可（マジックナンバーなし）
+- [x] `SerialHandler` が別スレッド受信＋ `Send` 送信、`OnDestroy`/`OnApplicationQuit` で安全解放／未接続ポートでも警告のみで落ちない・固まらない（MCP smoke 検証）
+- [x] **キーボード操作が回帰しない**（`_input`＝`CompositeInputSource`、`AvalancheController` に同一注入、Play で KB→Composite の `IsShaving` OR を実証）
+- [x] Standalone の API Compatibility Level を .NET Framework に変更（`System.IO.Ports` 利用の前提・ADR-15）
+- [x] EditMode テスト緑（**全92本**：従来76＋シリアル16）／`architecture.md` に ADR-15 追記
+- [ ] 実機（または テスト Arduino）でハンドル回転 → 雪崩を Play + screenshot で実証（**ハード入手後に実施 = TODO**）
+
+### Status: 🟢 コード実装・検証済み（ハード待ちの実機ライブ検証のみ TODO）
+
+`SerialConfigSO`/`SerialHandler`/`SerialInputProtocol`/`SerialInputSource`/`CompositeInputSource` を実装し `GameManager` が Composite を配線。`SerialConfigSO` 未割り当ての既定シーンはキーボードのみで Phase 1 同様に動作（回帰なし）。EditMode 92本緑、Unity-MCP で未接続 smoke・配線・KB→Composite OR を検証。残るは実機ハンドルでの回転→削りライブ検証（ハード入手後）。
+
+---
+
 ## Phase 2 — 味方NPC（深さ制御ジレンマ）/ Wave2
 
 **ゴール**: 味方を巻き込まずに敵を捌く判断（待つ/手前で止める/谷を変える）が成立する。
