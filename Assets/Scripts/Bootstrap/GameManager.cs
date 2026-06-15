@@ -22,6 +22,9 @@ namespace KakigoriTD.Bootstrap
         [Header("ウェーブ（順に Wave1/2/3 の WaveConfigSO を割り当て）")]
         [SerializeField] private WaveConfigSO[] _waveConfigs;
 
+        [Header("シリアル（実機ハンドル接続。未割り当てならキーボードのみで動作）")]
+        [SerializeField] private SerialConfigSO _serialConfig;
+
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
         [SerializeField] private float _iceTotal = 50f;
@@ -32,7 +35,7 @@ namespace KakigoriTD.Bootstrap
         private ProjectileFactory _projectileFactory;
         private ChannelController[] _channels;
         private IceStock _ice;
-        private KeyboardInputSource _input;
+        private IInputSource _input;
         private AvalancheController _avalanche;
         private WaveManager _waveManager;
         private UIManager _ui;
@@ -59,7 +62,7 @@ namespace KakigoriTD.Bootstrap
             BuildChannels();
 
             _ice = new IceStock(_iceTotal);
-            _input = NewChild("InputSource").AddComponent<KeyboardInputSource>();
+            _input = BuildInput();
 
             _avalanche = NewChild("AvalancheController").AddComponent<AvalancheController>();
             _avalanche.Configure(_input, _ice, _channels);
@@ -119,6 +122,27 @@ namespace KakigoriTD.Bootstrap
         public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score);
 
         // ---- build helpers ---------------------------------------------------
+
+        // 入力は Composite（キーボード＋シリアル、ADR-15）。谷選択/決定＝キーボード、
+        // 削り＝キーボード Space OR ハンドル回転。SerialConfigSO 未割り当てならシリアルは生成せず
+        // キーボードのみ（実機なしでもそのまま遊べる）。
+        private IInputSource BuildInput()
+        {
+            var keyboard = NewChild("InputSource").AddComponent<KeyboardInputSource>();
+
+            IInputSource serial = null;
+            if (_serialConfig != null)
+            {
+                var go = NewChild("SerialInput");
+                var handler = go.AddComponent<SerialHandler>();
+                var serialSource = go.AddComponent<SerialInputSource>();
+                handler.Begin(_serialConfig);
+                serialSource.Configure(handler);
+                serial = serialSource;
+            }
+
+            return new CompositeInputSource(keyboard, serial);
+        }
 
         private void BuildFort()
         {
