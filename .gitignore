@@ -105,3 +105,11 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# --- Project choice: Unity-MCP dev tooling is per-developer, not committed ---
+# MCP plugin NuGet/runtime DLLs (~17MB, reinstalled with the MCP package)
+/[Aa]ssets/Plugins/
+/[Aa]ssets/Plugins.meta
+# Claude Code / Unity-MCP local config & generated skill docs
+/.claude/
+/.mcp.json
