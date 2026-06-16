@@ -77,11 +77,11 @@
 - [x] **キーボード操作が回帰しない**（`_input`＝`CompositeInputSource`、`AvalancheController` に同一注入、Play で KB→Composite の `IsShaving` OR を実証）
 - [x] Standalone の API Compatibility Level を .NET Framework に変更（`System.IO.Ports` 利用の前提・ADR-15）
 - [x] EditMode テスト緑（**全92本**：従来76＋シリアル16）／`architecture.md` に ADR-15 追記
-- [ ] 実機（または テスト Arduino）でハンドル回転 → 雪崩を Play + screenshot で実証（**ハード入手後に実施 = TODO**）
+- [x] 実機（**M5StickC Plus** / `/dev/cu.M5StickCPlus` / 9600baud）でハンドル回転 → 雪崩を Play + screenshot で実証（**ライブ検証済み 2026-06-16**）
 
-### Status: 🟢 コード実装・検証済み（ハード待ちの実機ライブ検証のみ TODO）
+### Status: 🟢 完了（実機ライブ検証済み）
 
-`SerialConfigSO`/`SerialHandler`/`SerialInputProtocol`/`SerialInputSource`/`CompositeInputSource` を実装し `GameManager` が Composite を配線。`SerialConfigSO` 未割り当ての既定シーンはキーボードのみで Phase 1 同様に動作（回帰なし）。EditMode 92本緑、Unity-MCP で未接続 smoke・配線・KB→Composite OR を検証。残るは実機ハンドルでの回転→削りライブ検証（ハード入手後）。
+`SerialConfigSO`/`SerialHandler`/`SerialInputProtocol`/`SerialInputSource`/`CompositeInputSource` を実装し `GameManager` が Composite を配線。`SerialConfigSO` 未割り当ての既定シーンはキーボードのみで Phase 1 同様に動作（回帰なし）。EditMode 92本緑、Unity-MCP で未接続 smoke・配線・KB→Composite OR を検証。**実機 M5StickC Plus（`/dev/cu.M5StickCPlus`）でハンドル回転 → `IsShaving` → 選択谷の雪崩が走る／止まるをライブ検証済み（2026-06-16）**。配線は `BTSerialConfig.asset`（`SerialConfigSO`）を `GameManager._serialConfig` に割り当て。Unity→Arduino の `Send` は送信トリガ未配線のため smoke 未実施＝将来 consumer 実装時の拡張ポイント（受信パスは実機検証済み）。
 
 ---
 

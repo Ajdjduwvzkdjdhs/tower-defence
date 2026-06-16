@@ -91,8 +91,8 @@
   - 完了条件 (EditMode): `ActiveChannel`/`ConfirmPressed` はキーボード値を返す / `IsShaving` はキーボード OR シリアルの論理和になる（スタブ 2 実装でマージ検証）。
 - **Unit S3: `SerialInputSource`（MB）＋ `GameManager` 配線改修**
   - 完了条件: `GameManager` が `Composite(Keyboard, Serial)` を生成・配線。**既存キーボード操作が回帰しない**（Play で `Space` 削り・WASD 谷選択・Enter 確定）＋ シリアル smoke（接続/未接続）。
-- **Unit S4: 統合検証**
-  - 完了条件 (MCP Play): テスト Arduino（または実機）で `1`/`0` を送出 → `W/A/S/D` で谷選択しながら回転信号で雪崩が走る／止まることを `screenshot-game-view` で実証。ハード無の場合は `Space` 併用で回帰確認のみ（実機ライブ検証は §9 に TODO 化）。
+- **Unit S4: 統合検証** ✅ 完了（実機ライブ検証済み 2026-06-16）
+  - 完了条件 (MCP Play): テスト Arduino（または実機）で `1`/`0` を送出 → `W/A/S/D` で谷選択しながら回転信号で雪崩が走る／止まることを `screenshot-game-view` で実証。→ **実機 M5StickC Plus（`/dev/cu.M5StickCPlus`, 9600baud）でハンドル回転 → `IsShaving` → 選択谷の雪崩が走る／止まるをライブ検証済み**。配線は `BTSerialConfig.asset` を `GameManager._serialConfig` に割り当て。
 
 ## 7. 受け入れ基準（完了判定の bar）
 
@@ -100,9 +100,9 @@
 - [x] `SerialInputProtocol` が削り行を解析し、無受信 watchdog で `IsShaving=false`（EditMode 緑：11本）
 - [x] `SerialConfigSO` で `portName`/`baudRate` 等を Inspector 調整可（マジックナンバー直書きなし）
 - [x] `SerialHandler` がスレッド/ポートを安全に開閉（`OnDestroy`/`OnApplicationQuit`）／**未接続ポートでも警告のみで落ちない・固まらない**（MCP smoke 検証済み）
-- [ ] `SerialHandler.Send(string)` で Unity→Arduino へ任意文字列を送信できる（**接続時 smoke はハード入手後 = TODO**）／未接続でも落ちない（検証済み）
+- [ ] `SerialHandler.Send(string)` で Unity→Arduino へ任意文字列を送信できる（**送信トリガ未配線のため smoke は将来 consumer 実装時＝拡張ポイント**。受信パスは実機検証済み／未接続でも落ちない）
 - [x] **キーボード操作が回帰しない**（`_input`＝`CompositeInputSource`、`AvalancheController` に同一注入、Play で KB→Composite の `IsShaving` OR を実証）
-- [ ] ハンドル回転（または テスト Arduino の `1`/`0`）で `IsShaving` が切り替わり、選択中の谷に雪崩（Play + screenshot）（**ハード入手後 = TODO**）
+- [x] ハンドル回転（実機 **M5StickC Plus** / `/dev/cu.M5StickCPlus`）で `IsShaving` が切り替わり、選択中の谷に雪崩（Play + screenshot）（**ライブ検証済み 2026-06-16**）
 - [x] Singleton は `GameManager` のみ・入力は `IInputSource`（Composite）経由を維持（ADR-5/6）
 - [x] `docs/architecture.md` に **ADR-15** を追記、`docs/phases.md` に Phase 1.5 エントリを追加、関連 docs を更新（Definition of Done）
 - [x] Standalone の API Compatibility Level を .NET Framework（`NET_Unity_4_8`）へ変更（`System.IO.Ports` の前提・§5/ADR-15）
@@ -122,9 +122,15 @@
 | スレッド→メイン受け渡し | `volatile`/lock ＋ `Update` 消費 | スレッド安全性 |
 | macOS ポート名 | `SerialConfigSO` で設定 | 環境差吸収 |
 | 送信の具体トリガ/コマンド | 本フェーズ未定（汎用 `Send` のみ） | 将来 consumer で確定 |
-| 実機ライブ検証 | ハード入手後に実施（TODO） | §6 Unit S4 の達成度 |
+| 実機ライブ検証 | ✅ 実施済み（M5StickC Plus / `/dev/cu.M5StickCPlus` / 2026-06-16） | §6 Unit S4 達成 |
 
 > スコープ厳守: 味方NPC・変装・突撃隊（Phase 2/3）、実機 **XY センサ**のシリアル化、送信コマンド体系の確定は **Phase 1.5 では実装しない**。本フェーズはハンドル回転→`IsShaving` の受信と、汎用送信口の確保までを足場として通す。
+
+---
+
+### 完了メモ（2026-06-16）
+
+実機 **M5StickC Plus**（ESP32・`/dev/cu.M5StickCPlus`, 9600baud）でハンドル回転 → `IsShaving` → 選択谷の雪崩が走る／止まるをライブ検証し、Phase 1.5 を完了。配線成果物: `Assets/ScriptableObjects/BTSerialConfig.asset`（`SerialConfigSO`：portName=`/dev/cu.M5StickCPlus` / baud=9600 / readTimeout=20 / stopCommand=`0`）を `GameManager._serialConfig` に割り当て（`SampleScene.unity`）。残る Unity→Arduino の `Send` smoke は送信トリガ未配線のため将来 consumer 実装時の拡張ポイント（受信パスは検証済み）。
 
 ## 10. 付録: テスト用 Arduino スケッチ（実機かき氷機が無くても検証可能）
 
