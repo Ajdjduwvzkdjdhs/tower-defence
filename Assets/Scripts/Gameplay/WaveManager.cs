@@ -59,11 +59,22 @@ namespace KakigoriTD.Gameplay
 
         private void SpawnOne()
         {
+            // AllySpawnChance > 0 かつ今回の抽選で当たった場合は味方を湧かせる。
+            bool tryAlly = _config.AllyType != null && Random.value < _config.AllySpawnChance;
+            if (tryAlly)
+            {
+                SpawnOneAlly();
+                return;
+            }
+            SpawnOneEnemy();
+        }
+
+        private void SpawnOneEnemy()
+        {
             var type = PickEnemyType();
             if (type == null) return;
 
-            // 4 谷へ順番に配る（全谷に均等に圧力をかける）。満杯の谷は飛ばして次を試す
-            // （画面内上限に達した谷には湧かせない＝画面外から攻撃させない）。
+            // 4 谷へ順番に配る（全谷に均等に圧力をかける）。満杯の谷は飛ばして次を試す。
             for (int tries = 0; tries < _channels.Length; tries++)
             {
                 var channel = _channels[_nextChannel % _channels.Length];
@@ -74,7 +85,20 @@ namespace KakigoriTD.Gameplay
                     return;
                 }
             }
-            // 全谷が満杯ならこのフレームの湧きは見送る。
+        }
+
+        private void SpawnOneAlly()
+        {
+            for (int tries = 0; tries < _channels.Length; tries++)
+            {
+                var channel = _channels[_nextChannel % _channels.Length];
+                _nextChannel++;
+                if (channel.SpawnAlly(_config.AllyType) != null)
+                {
+                    _spawnedThisWave++;
+                    return;
+                }
+            }
         }
 
         private EnemyTypeSO PickEnemyType()
