@@ -20,6 +20,9 @@ namespace KakigoriTD.Data
         [SerializeField] private float _allySpawnChance = 0f;
         [SerializeField] private float _disguiseChance = 0f;
 
+        // Phase2: このウェーブで湧く味方NPC の種別（null の場合は味方なし）。
+        [SerializeField] private EnemyTypeSO _allyType;
+
         /// <summary>ウェーブ毎の制限時間（秒）。</summary>
         public float Duration => _duration;
 
@@ -34,5 +37,8 @@ namespace KakigoriTD.Data
 
         /// <summary>変装した敵の出現確率（Phase3 用。Phase1 では未使用）。</summary>
         public float DisguiseChance => _disguiseChance;
+
+        /// <summary>このウェーブで湧く味方NPC の種別（null なら味方なし）。</summary>
+        public EnemyTypeSO AllyType => _allyType;
     }
 }
