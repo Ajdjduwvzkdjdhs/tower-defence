@@ -26,6 +26,9 @@ namespace KakigoriTD.Core
         /// <summary>現在の砦HP（勝利時スコア算出に使用）。</summary>
         int FortHp { get; }
 
+        /// <summary>味方巻き込みペナルティの累積合計（Phase2 / ADR-17）。<see cref="Scoring.Compute"/> に渡す。</summary>
+        int PenaltyTotal { get; }
+
         /// <summary>Title で開始入力があったか。</summary>
         bool IsStartRequested { get; }
 

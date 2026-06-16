@@ -30,8 +30,10 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _iceTotal = 50f;
         [SerializeField] private float _waveLull = 5f;
         [SerializeField] private float _waveIntroDuration = 1.2f;
+        [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
 
         private Fort _fort;
+        private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
         private ChannelController[] _channels;
         private IceStock _ice;
@@ -95,6 +97,7 @@ namespace KakigoriTD.Bootstrap
         public float WaveIntroDuration => _waveIntroDuration;
         public bool IsFortDestroyed => _fort.IsDestroyed;
         public int FortHp => _fort.CurrentHp;
+        public int PenaltyTotal => _penalty?.Total ?? 0; // Phase2(Unit P8)で _penalty を生成・配線
         public bool IsStartRequested => _input.ConfirmPressed;
         public bool IsRetryRequested => _input.ConfirmPressed;
 
