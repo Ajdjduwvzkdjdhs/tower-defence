@@ -71,7 +71,12 @@
 
 各ユニットは **「完了条件」を満たした時点で次へ進む**。完了条件は EditMode 緑または MCP スクショ（`mcp-guide.md`）で客観確認する。コミットは **ユニット単位**（土台＝`main` から切った `phase2-allies`／MCP ツーリングは除外）。
 
-> **進捗**: ⬜ 未着手（本書は計画）。各マイルストーン完了時にこの位置へ Phase 1 と同様の進捗テーブル（Unit／成果物／検証／状態）を追記し、`phases.md` Phase 2 チェックリストと ADR を更新する。
+> **進捗（2026-06-16）— マイルストーン A 完了 ✅**　EditMode 全 **110 本緑**（ベースライン 92 ＋ 18）。
+> | Unit | 成果物 | 検証 | 状態 |
+> |---|---|---|---|
+> | P1 | `PenaltyTally`（Core） | PenaltyTallyTests **6本緑** | ✅ |
+> | P2 | `EnemyMatrix<T>` 拡張（`AddRow`/`RemoveRowAt`・隔離行） | EnemyMatrixTests **+9本＝21本緑**（ガード行シナリオ含む） | ✅ |
+> | P3 | `IGameContext.PenaltyTotal` ＋ `WavePlayingState` スコア配線（ADR-17 実装） | StatesTests **+3本緑**（win/lose penalty・回帰） | ✅ |
 
 ### マイルストーン A — Core 拡張（Unity 実行不要・EditMode で完結）
 

@@ -106,7 +106,14 @@
 - [ ] Wave2 構成（敵＋味方混在）が `WaveConfigSO` で定義され、通しで遊べる
 - [ ] EditMode テスト緑: 味方ガード下の深さ制御、ペナルティ加算ロジック
 
-### Status: ⬜ 未着手
+### Status: 🟡 進行中 — マイルストーン A 完了（2026-06-16）
+
+EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States penalty 3）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| P1 | `PenaltyTally`（Core） | PenaltyTallyTests **6本緑** | ✅ |
+| P2 | `EnemyMatrix<T>` 拡張（`AddRow`/`RemoveRowAt`・隔離行） | EnemyMatrixTests **9本追加＝21本緑**（ガード行シナリオ含む） | ✅ |
+| P3 | `IGameContext.PenaltyTotal` ＋ `WavePlayingState` スコア配線 | StatesTests **3本追加緑**（win/lose ペナルティ・回帰） | ✅ |
 
 ---
 
