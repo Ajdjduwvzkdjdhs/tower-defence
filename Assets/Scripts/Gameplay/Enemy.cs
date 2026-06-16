@@ -22,11 +22,21 @@ namespace KakigoriTD.Gameplay
         // 生存中のみ発射する。撃破後は false（飛来中の弾には影響しない）。
         private bool _alive;
 
+        // per-instance tint: sharedMaterial を汚さずプール再利用で色を切り替える（ADR-16）。
+        private Renderer _renderer;
+        private MaterialPropertyBlock _mpb;
+
         /// <summary>生存しているか（撃破されると false）。</summary>
         public bool IsAlive => _alive;
 
         /// <summary>これまでに発射した弾数（検証用の可観測性）。</summary>
         public int ShotsFired { get; private set; }
+
+        private void Awake()
+        {
+            _renderer = GetComponent<Renderer>();
+            _mpb = new MaterialPropertyBlock();
+        }
 
         /// <summary>
         /// 敵を初期化して稼働させる。プールから取得するたびに呼ぶ。
@@ -40,9 +50,14 @@ namespace KakigoriTD.Gameplay
             _fireTimer = type != null ? type.FireInterval : 0f;
             ShotsFired = 0;
             _alive = true;
+            if (_renderer != null)
+            {
+                _mpb.SetColor("_BaseColor", type != null ? type.Tint : Color.red);
+                _renderer.SetPropertyBlock(_mpb);
+            }
         }
 
-        private void Update()
+        protected virtual void Update()
         {
             if (!_alive) return;
 
