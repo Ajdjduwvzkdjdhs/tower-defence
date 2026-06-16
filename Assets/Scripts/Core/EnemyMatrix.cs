@@ -8,10 +8,15 @@ namespace KakigoriTD.Core
     /// 新規湧きは back（麓側・最奥）に積む。先頭行が消えると次行が繰り上がるため、
     /// 削り続けると手前から奥へ進む（深さ制御）。
     /// 型 <typeparamref name="T"/> には上位層（Gameplay の Enemy 等）を充てる。
+    ///
+    /// Phase2 拡張: <see cref="AddRow"/> で味方NPC 専用の隔離行を最奥に追加し、
+    /// <see cref="RemoveRowAt"/> で任意行を除去（自走退場・中段繰り上げ）。
     /// </summary>
     public class EnemyMatrix<T>
     {
         private readonly List<List<T>> _rows = new List<List<T>>();
+        // 隔離行のセット（object identity）: AddRow で追加した行は AddToBack で埋められない。
+        private readonly HashSet<List<T>> _isolatedRows = new HashSet<List<T>>();
         private static readonly IReadOnlyList<T> EmptyRow = new List<T>();
 
         /// <param name="rowWidth">1 行の最大体数（rowWidth=3）。1 未満は 1 に丸める。</param>
@@ -51,13 +56,39 @@ namespace KakigoriTD.Core
             (index >= 0 && index < _rows.Count) ? _rows[index] : EmptyRow;
 
         /// <summary>
-        /// 新規湧きを最奥（麓側）に積む。最奥行が満杯（RowWidth）なら新しい行を作る。
+        /// 新規湧きを最奥（麓側）に積む。最奥行が満杯（RowWidth）または隔離行なら新しい行を作る。
         /// </summary>
         public void AddToBack(T item)
         {
-            if (_rows.Count == 0 || _rows[_rows.Count - 1].Count >= RowWidth)
+            bool backIsolated = _rows.Count > 0 && _isolatedRows.Contains(_rows[_rows.Count - 1]);
+            if (_rows.Count == 0 || backIsolated || _rows[_rows.Count - 1].Count >= RowWidth)
                 _rows.Add(new List<T>(RowWidth));
             _rows[_rows.Count - 1].Add(item);
+        }
+
+        /// <summary>
+        /// 味方NPC など専用の隔離行を最奥に追加する（Phase2）。
+        /// この行は <see cref="AddToBack"/> で埋められない（＝ガード行として隔離）。
+        /// </summary>
+        public void AddRow(T item)
+        {
+            var row = new List<T>(RowWidth) { item };
+            _rows.Add(row);
+            _isolatedRows.Add(row);
+        }
+
+        /// <summary>
+        /// 指定インデックスの行を除去して中身を返す（自走退場・中段繰り上げ用）。
+        /// 除去後、後続行が 1 つ手前へ繰り上がる（＝味方退場後に奥の敵が解放される）。
+        /// 範囲外なら空リストを返し、マトリックスは変化しない。
+        /// </summary>
+        public IReadOnlyList<T> RemoveRowAt(int index)
+        {
+            if (index < 0 || index >= _rows.Count) return EmptyRow;
+            var row = _rows[index];
+            _rows.RemoveAt(index);
+            _isolatedRows.Remove(row);
+            return row;
         }
 
         /// <summary>
@@ -69,6 +100,7 @@ namespace KakigoriTD.Core
             if (_rows.Count == 0) return EmptyRow;
             var front = _rows[0];
             _rows.RemoveAt(0);
+            _isolatedRows.Remove(front);
             return front;
         }
 
@@ -80,6 +112,7 @@ namespace KakigoriTD.Core
             var all = new List<T>(Count);
             for (int i = 0; i < _rows.Count; i++) all.AddRange(_rows[i]);
             _rows.Clear();
+            _isolatedRows.Clear();
             return all;
         }
     }

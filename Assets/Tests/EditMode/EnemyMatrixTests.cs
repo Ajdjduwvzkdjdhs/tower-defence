@@ -123,5 +123,115 @@ namespace KakigoriTD.Tests.EditMode
             m.AddToBack(2);
             Assert.That(m.RowCount, Is.EqualTo(2), "行幅 1 なら 1 体ごとに改行");
         }
+
+        // ---- AddRow / RemoveRowAt（Phase2 拡張）----
+
+        [Test]
+        public void AddRow_CreatesNewIsolatedRowAtBack()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(99);
+            Assert.That(m.RowCount, Is.EqualTo(1));
+            Assert.That(m.FrontRow, Is.EqualTo(new[] { 99 }));
+        }
+
+        [Test]
+        public void AddRow_AddToBackAfterward_DoesNotFillIsolatedRow()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(99);        // 隔離行（最奥）
+            m.AddToBack(1);     // 新しい行が作られるはず
+            Assert.That(m.RowCount, Is.EqualTo(2), "隔離行と敵行で 2 行");
+            Assert.That(m.RowAt(0), Is.EqualTo(new[] { 99 }), "先頭＝隔離行はそのまま");
+            Assert.That(m.RowAt(1), Is.EqualTo(new[] { 1 }), "後続は新しい行");
+        }
+
+        [Test]
+        public void AddRow_MultipleAllies_EachGetsOwnIsolatedRow()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(10);
+            m.AddRow(20);
+            Assert.That(m.RowCount, Is.EqualTo(2));
+            Assert.That(m.RowAt(0), Is.EqualTo(new[] { 10 }));
+            Assert.That(m.RowAt(1), Is.EqualTo(new[] { 20 }));
+        }
+
+        [Test]
+        public void AddRow_AfterEnemyRow_IsolatedRowIsBack()
+        {
+            // 敵行（3体）→ 隔離行（味方）の順。AddToBack は隔離行をスキップして新しい行に積む。
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1); m.AddToBack(2); m.AddToBack(3); // 行0 満杯
+            m.AddRow(99);                                     // 行1 隔離（味方）
+            m.AddToBack(4);                                   // 行2 新しい敵行
+            Assert.That(m.RowCount, Is.EqualTo(3));
+            Assert.That(m.RowAt(1), Is.EqualTo(new[] { 99 }), "行1 は隔離行のまま");
+            Assert.That(m.RowAt(2), Is.EqualTo(new[] { 4 }), "行2 は新しい敵行");
+        }
+
+        [Test]
+        public void RemoveRowAt_RemovesSpecifiedRow_SubsequentShiftUp()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1); m.AddToBack(2); m.AddToBack(3); // 行0
+            m.AddRow(99);                                     // 行1 隔離
+            m.AddToBack(4);                                   // 行2
+            var removed = m.RemoveRowAt(1);
+            Assert.That(removed, Is.EqualTo(new[] { 99 }));
+            Assert.That(m.RowCount, Is.EqualTo(2));
+            Assert.That(m.RowAt(0), Is.EqualTo(new[] { 1, 2, 3 }));
+            Assert.That(m.RowAt(1), Is.EqualTo(new[] { 4 }), "奥の行が繰り上がる");
+        }
+
+        [Test]
+        public void RemoveRowAt_OutOfRange_ReturnsEmpty_NoChange()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1);
+            var r1 = m.RemoveRowAt(-1);
+            var r2 = m.RemoveRowAt(5);
+            Assert.That(r1, Is.Empty);
+            Assert.That(r2, Is.Empty);
+            Assert.That(m.RowCount, Is.EqualTo(1), "マトリックスは変化しない");
+        }
+
+        [Test]
+        public void RemoveRowAt_IsolatedRow_AfterRemoval_AddToBackFillsNewBack()
+        {
+            // 隔離行を除去した後、AddToBack が通常の行に積めるようになることを確認。
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(99);    // 行0 隔離
+            m.RemoveRowAt(0);
+            m.AddToBack(1);  // 隔離行が消えた後は通常どおり
+            m.AddToBack(2);
+            Assert.That(m.RowCount, Is.EqualTo(1), "1 行に 2 体が積まれる");
+            Assert.That(m.FrontRow, Is.EqualTo(new[] { 1, 2 }));
+        }
+
+        [Test]
+        public void GuardRow_AvalancheScenario_FrontEnemiesRemovedThenGuardIsNext()
+        {
+            // 手前敵行 → ガード行（味方）→ 奥敵行 を組み、
+            // RemoveFrontRow で手前が消え、次の先頭がガード行になる（止められる）。
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1); m.AddToBack(2); m.AddToBack(3); // 行0 手前敵
+            m.AddRow(99);                                     // 行1 ガード（味方）
+            m.AddToBack(4);                                   // 行2 奥敵
+            m.RemoveFrontRow(); // 手前敵行を雪崩で消す
+            Assert.That(m.RowAt(0), Is.EqualTo(new[] { 99 }), "次の先頭はガード行");
+        }
+
+        [Test]
+        public void GuardRow_AfterAllyExpires_BackEnemyShiftsForward()
+        {
+            // ガード行（味方）が RemoveRowAt で自走退場 → 奥の敵が先頭側へ繰り上がる。
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(99);    // 行0 ガード（味方）
+            m.AddToBack(4);  // 行1 奥敵
+            m.RemoveRowAt(0);
+            Assert.That(m.RowCount, Is.EqualTo(1));
+            Assert.That(m.FrontRow, Is.EqualTo(new[] { 4 }), "奥の敵が先頭へ繰り上がる");
+        }
     }
 }
