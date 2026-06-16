@@ -167,7 +167,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly);
                 _channels[id] = ch;
             }
         }
@@ -179,6 +179,16 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<Enemy>();
+        }
+
+        // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
+        private AllyNPC CreateAlly()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+            return go.AddComponent<AllyNPC>();
         }
 
         private Projectile CreateProjectile()

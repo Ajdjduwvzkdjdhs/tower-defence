@@ -105,6 +105,16 @@ namespace KakigoriTD.Core
         }
 
         /// <summary>
+        /// item を含む行のインデックスを返す。見つからなければ -1（自走退場時の行特定に使う）。
+        /// </summary>
+        public int IndexOfRowContaining(T item)
+        {
+            for (int i = 0; i < _rows.Count; i++)
+                if (_rows[i].Contains(item)) return i;
+            return -1;
+        }
+
+        /// <summary>
         /// 全行を消して全要素を返す（Wave 終了時の残敵消去用）。返却後はマトリックスが空。
         /// </summary>
         public IReadOnlyList<T> RemoveAll()
