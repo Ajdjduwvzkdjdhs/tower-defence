@@ -15,6 +15,8 @@
 | 遠隔攻撃 | プロジェクタイル（pooled）／攻撃方式 Strategy は将来用に予約 | ADR-7 |
 | テスト容易性 | 純ロジックを MonoBehaviour から分離 | ADR-8 |
 | 実機シリアル接続 | 自前 SerialPort（別スレッド・双方向）＋ Composite 入力 | ADR-15 |
+| 味方NPC | AllyNPC : Enemy（同一 EnemyMatrix<Enemy> 多態保持＋専用プール・専用行） | ADR-16 |
+| 巻き込みペナルティ | Core PenaltyTally + IGameContext.PenaltyTotal → Scoring.Compute | ADR-17 |
 
 ---
 
@@ -120,6 +122,27 @@
   - 各敵のワールド座標を **現在の行インデックス**（0=砦最寄り … 麓側）から算出し、先頭行消去のたびに全敵を再配置（`ChannelController.RepositionAll`、`EnemyMatrix.RowAt` を追加）。先頭行が消えると後続が 1 つ手前へ繰り上がる（spec どおり）。
   - **画面内行数の上限 `_maxRows`**（既定4・`frontGap`/`rowSpacing` と合わせ最外 row が ortho 視野内に収まる）を設け、満杯の谷には湧かせない（`SpawnEnemy` が null を返し `WaveManager` は次の谷を試す）。敵は常に画面内＝見える位置からのみ攻撃する。
 - **結果**: 「画面外から攻撃される」不具合を解消。MCP 検証: 1谷へ 30 体投入→ rows=4 / enemies=12 / `IsFull`、最外敵 y=4.15（視野±5 内）、超過22体は拒否。通常プレイでも最大距離 2.45 でドリフトなし。ADR-12 の「座標固定/survivor 静止」決定を本 ADR が置換（cap・繰り上げ方針）。雪崩タイミング分離（ADR-12 後半 / `AvalancheClock`）は不変。
+
+## ADR-16: 味方NPC は AllyNPC : Enemy（同一 EnemyMatrix<Enemy> に多態保持＋ally 専用プール・専用行）— Accepted（Phase 2）
+
+- **背景**: spec §8「マトリックスの1行を占有する味方NPC」を Phase 2 で実装。行ロジック（`EnemyMatrix<T>`）と Pool（`ObjectPool<T>`）を再利用し、最小コストで実装したい。
+- **決定**:
+  - `AllyNPC : Enemy`（継承）。`EnemyMatrix<Enemy>` に多態で保持することで、Core の行ロジックを無改修で流用。
+  - 味方は **`EnemyMatrix.AddRow`（隔離行）**で専用行に置き、`AddToBack` では埋められない（ガード行として隔離）。退場は `RemoveRowAt` で中段繰り上げ（奥の敵が解放される）。
+  - `AllyNPC.Update` を override し `allyLifetime` カウントダウン→`OnExpired` 発火で自走退場（無発射は `Projectile=null` で `Fire()` ガードが自動成立）。
+  - 色は `Enemy.Init` で `MaterialPropertyBlock` を per-instance 設定（`sharedMaterial` を汚さずプール再利用で赤⇄青を切り替え）。
+  - `ChannelController` は ally 専用 `ObjectPool<AllyNPC>` を持ち、`OnAllyCaught`（C# event）を持つ。雪崩がガード行に達すると発火、自走退場は無ペナルティ。
+- **結果**: `EnemyMatrix<Enemy>` の型パラメータにより Core は `AllyNPC` を知らず回帰なし。EditMode は `EnemyMatrix<int>` のまま緑。MCP 検証: SpawnAlly→青キューブ出現・ShotsFired=0・OnAllyCaught 発火実証済み。ADR-4（Pool）・ADR-8（純ロジック分離）・ADR-11（MonoBehaviour 状態許容）を踏襲。
+
+## ADR-17: 巻き込みペナルティは Core PenaltyTally + IGameContext.PenaltyTotal で供給（ADR-8/9 を踏襲）— Accepted（Phase 2）
+
+- **背景**: spec §8 の「`allyHitPenalty` 加算」を実現するため、減点合計をスコア算出（`Scoring.Compute`）まで届ける経路が必要。State が外界に直接触れないという ADR-9 の制約のもと、最小変更で実現したい。
+- **決定**:
+  - `PenaltyTally`（Core・純 C#）を新設し `Add(int)` / `Reset()` / `int Total` を持つ。MonoBehaviour 非依存で EditMode 検証可能。
+  - `IGameContext` に `int PenaltyTotal { get; }` を追加（ADR-9 の拡張点）。`GameManager` が `PenaltyTally.Total` を返す。
+  - `WavePlayingState` / `ResultState` のスコア算出を `Scoring.Compute(ctx.FortHp, ctx.PenaltyTotal)` に変更（ADR-5 の Phase 1 で用意した `penalty` 引数を初めて使用）。
+  - `GameManager` が各 `ChannelController.OnAllyCaught` を購読し `_penalty.Add(_allyHitPenalty)`（ADR-3。`OnDestroy` で解除）。
+- **結果**: EditMode で `PenaltyTally` 6本・`StatesTests` +3本（win/lose/penalty=0 回帰）緑。MCP 検証: `PenaltyTotal=0→0→50`（手前ノーペナ→ally巻き込み +50）実証済み。`Scoring.Compute` は不変（Phase 1 で拡張点を用意済み）。ADR-8/9 を覆さず拡張。
 
 ## ADR-15: 実機シリアル接続は自前 SerialPort（別スレッド・双方向）＋ Composite で IsShaving を供給（ADR-6 を拡張）— Accepted
 
