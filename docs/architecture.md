@@ -14,6 +14,7 @@
 | 入力 | Strategy（IInputSource） | ADR-6 |
 | 遠隔攻撃 | プロジェクタイル（pooled）／攻撃方式 Strategy は将来用に予約 | ADR-7 |
 | テスト容易性 | 純ロジックを MonoBehaviour から分離 | ADR-8 |
+| 実機シリアル接続 | 自前 SerialPort（別スレッド・双方向）＋ Composite 入力 | ADR-15 |
 
 ---
 
@@ -119,3 +120,15 @@
   - 各敵のワールド座標を **現在の行インデックス**（0=砦最寄り … 麓側）から算出し、先頭行消去のたびに全敵を再配置（`ChannelController.RepositionAll`、`EnemyMatrix.RowAt` を追加）。先頭行が消えると後続が 1 つ手前へ繰り上がる（spec どおり）。
   - **画面内行数の上限 `_maxRows`**（既定4・`frontGap`/`rowSpacing` と合わせ最外 row が ortho 視野内に収まる）を設け、満杯の谷には湧かせない（`SpawnEnemy` が null を返し `WaveManager` は次の谷を試す）。敵は常に画面内＝見える位置からのみ攻撃する。
 - **結果**: 「画面外から攻撃される」不具合を解消。MCP 検証: 1谷へ 30 体投入→ rows=4 / enemies=12 / `IsFull`、最外敵 y=4.15（視野±5 内）、超過22体は拒否。通常プレイでも最大距離 2.45 でドリフトなし。ADR-12 の「座標固定/survivor 静止」決定を本 ADR が置換（cap・繰り上げ方針）。雪崩タイミング分離（ADR-12 後半 / `AvalancheClock`）は不変。
+
+## ADR-15: 実機シリアル接続は自前 SerialPort（別スレッド・双方向）＋ Composite で IsShaving を供給（ADR-6 を拡張）— Accepted
+
+- **背景**: Phase 1.5（別計画＝`phases.md` の「実機インターフェース接続」）として、物理かき氷機の**ハンドル回転（削り）**を Arduino 経由のシリアルで取得する。ADR-6 の `IInputSource` を実機に差し替える第一歩。XY（谷選択）と決定は本フェーズではキーボード据え置き（シリアルで来るのは実質 `IsShaving` のみ）。外部アセット（Ardity 等）は使わず `System.IO.Ports` で自前実装する（参考: Qiita hoktist 記事）。自前にすることで 3rd-party の `Assembly-CSharp` 参照境界問題を避け、コードを `KakigoriTD.Runtime` 内に収める。
+- **決定**:
+  - `SerialConfigSO`（Data）に `portName`/`baudRate`/`readTimeoutMs`/停止コマンドを置く（ADR-1。macOS は `/dev/tty.usbserial-*`、Windows は `COMx`）。
+  - `SerialHandler`（MB・**双方向 transport**）: `SerialPort` を別スレッドで `ReadLine()` し、受信行をロック付きキューへ積み、メインスレッドの `Update` で `OnDataReceived(string)` を発火（受信スレッドは Unity API に触れない）。`Send(string)` で `WriteLine`（汎用送信。**送信内容・トリガは本フェーズ未定の拡張ポイント**）。`OnDestroy`/`OnApplicationQuit` で `isRunning=false → thread.Join → Close/Dispose`（終了時に任意の停止コマンド送出）。
+  - `SerialInputProtocol`（純 C#・ADR-8）: 受信行 `1`/`0` → 削り bool。無受信 watchdog で `IsShaving=false`（切断時の削りっぱなし防止）。EditMode 検証。
+  - `SerialInputSource`（MB: `IInputSource`）: `OnDataReceived` を購読して protocol へ流し `Update` で `IsShaving` を反映。`ActiveChannel`=-1 / `ConfirmPressed`=false。購読は `OnDestroy` で解除（ADR-3）。
+  - `CompositeInputSource`（純 C#: `IInputSource`）: `ActiveChannel`/`ConfirmPressed`=キーボード、`IsShaving`=キーボード OR シリアル。`GameManager` が `Composite(keyboard, serial)` を配線し、`SerialConfigSO` 未割り当て時はシリアルを生成せずキーボードのみ（実機なしでも全操作可能）。
+  - **Player Setting 変更**: `System.IO.Ports` は .NET Standard では提供されないため、Standalone の API Compatibility Level を **.NET Framework（`NET_Unity_4_8`＝3）** に変更（`apiCompatibilityLevelPerPlatform: {Standalone: 3}`）。既定の `.NET Standard 2.1`（6）では `System.IO.Ports` が `CS0234` になる（Ardity PDF FAQ②・Qiita 記事の前提と同じ）。
+- **結果**: EditMode 累計 **92 本緑**（+`SerialInputProtocol` 11 / +`CompositeInputSource` 5）。Unity-MCP 検証: 未接続ポートで警告のみ・固まらない／`_input` が `CompositeInputSource` で `AvalancheController` に同一注入／Play でキーボード→Composite の `IsShaving` OR を実証／既存キーボード操作は回帰なし。ADR-6/10 を覆さず拡張。実機 XY センサのシリアル化・送信コマンド体系の確定は将来フェーズ。
