@@ -61,6 +61,7 @@ namespace KakigoriTD.Bootstrap
             BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
+            _penalty = new PenaltyTally();
             BuildChannels();
 
             _ice = new IceStock(_iceTotal);
@@ -103,11 +104,12 @@ namespace KakigoriTD.Bootstrap
 
         public void BeginWave(int waveIndex)
         {
-            // wave 0 開始 = 新規プレイ（初回 / リトライ）。砦HP・氷・残敵をリセットする。
+            // wave 0 開始 = 新規プレイ（初回 / リトライ）。砦HP・氷・ペナルティ・残敵をリセットする。
             if (waveIndex == 0)
             {
                 _fort.Initialize(_fortHpMax);
                 _ice.Refill();
+                _penalty.Reset();
                 foreach (var ch in _channels) ch.ClearAll();
                 _ui.ClearResult();
             }
@@ -122,7 +124,7 @@ namespace KakigoriTD.Bootstrap
             foreach (var ch in _channels) ch.ClearAll();
         }
 
-        public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score);
+        public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
 
         // ---- build helpers ---------------------------------------------------
 
@@ -168,9 +170,12 @@ namespace KakigoriTD.Bootstrap
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
                 ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly);
+                ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
         }
+
+        private void OnAllyCaughtHandler() => _penalty.Add(_allyHitPenalty);
 
         private Enemy CreateEnemy()
         {
@@ -377,6 +382,10 @@ namespace KakigoriTD.Bootstrap
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            // OnAllyCaught 購読解除（ADR-3）
+            if (_channels != null)
+                foreach (var ch in _channels)
+                    if (ch != null) ch.OnAllyCaught -= OnAllyCaughtHandler;
         }
     }
 }
