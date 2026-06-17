@@ -145,14 +145,17 @@ EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States pen
 - [ ] Wave3 構成（突撃隊＋変装）が通しで遊べる
 - [ ] ADR-3 トリガー成立時、SOイベントチャネル移行の判断結果を `docs/architecture.md` に記録（移行 or 見送りの理由）
 
-### Status: 🟡 進行中 — マイルストーン B 完了（2026-06-17）
+### Status: 🟡 進行中 — マイルストーン C 完了（2026-06-17）
 
-EditMode **120本緑**（マイルストーン B は SO／アセットのみ＝新規 EditMode テストなし）。
+EditMode **120本緑**（マイルストーン C は Gameplay コード変更＝新規 EditMode テストなし）。
 | Unit | 成果物 | 検証 | 状態 |
 |---|---|---|---|
 | D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑** | ✅ |
 | D2 | `AssaultEnemy.asset`（EnemyTypeSO）＋ Wave3 に追加 | `assets-get-data` で `fireInterval=0.8`・オレンジ tint・projectile 参照確認 | ✅ |
 | D3 | `WaveConfigSO._disguiseType` 追加 ＋ `DisguisedEnemy.asset` ＋ Wave3 全設定 | `assets-get-data` で全値確認・EditMode 120本緑（回帰ゼロ） | ✅ |
+| D4 | 突撃隊 体感検証（コード変更なし） | MCP Play: ShotsFired 比較で 2.5倍（0.8/2.0 理論値）・オレンジ色区別確認 | ✅ |
+| D5 | `Enemy.OnInitialized` フック ＋ `DisguisedEnemy.cs`（青＋tell・発射継続・退場しない） | MCP Play: 青キューブ＋暗色 tell マーカー視認・ShotsFired>0・AllyNPC の挙動回帰なし | ✅ |
+| D6 | `ChannelController` 変装プール＋`SpawnDisguised` ＋ `WaveManager` SpawnSelector 分岐 ＋ `GameManager` 注入 | MCP Play: 赤/オレンジ/青混在・変装退場しない・変装雪崩→PenaltyTotal delta=0 | ✅ |
 
 ---
 

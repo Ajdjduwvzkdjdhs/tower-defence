@@ -1,6 +1,7 @@
 using UnityEngine;
 using KakigoriTD.Core;
 using KakigoriTD.Data;
+using Random = UnityEngine.Random;
 
 namespace KakigoriTD.Gameplay
 {
@@ -59,14 +60,19 @@ namespace KakigoriTD.Gameplay
 
         private void SpawnOne()
         {
-            // AllySpawnChance > 0 かつ今回の抽選で当たった場合は味方を湧かせる。
-            bool tryAlly = _config.AllyType != null && Random.value < _config.AllySpawnChance;
-            if (tryAlly)
+            var kind = SpawnSelector.Select(
+                _config.AllySpawnChance,
+                _config.DisguiseChance,
+                _config.AllyType != null,
+                _config.DisguiseType != null,
+                Random.value);
+
+            switch (kind)
             {
-                SpawnOneAlly();
-                return;
+                case SpawnKind.Disguised: SpawnOneDisguised(); break;
+                case SpawnKind.Ally:      SpawnOneAlly();      break;
+                default:                  SpawnOneEnemy();     break;
             }
-            SpawnOneEnemy();
         }
 
         private void SpawnOneEnemy()
@@ -94,6 +100,20 @@ namespace KakigoriTD.Gameplay
                 var channel = _channels[_nextChannel % _channels.Length];
                 _nextChannel++;
                 if (channel.SpawnAlly(_config.AllyType) != null)
+                {
+                    _spawnedThisWave++;
+                    return;
+                }
+            }
+        }
+
+        private void SpawnOneDisguised()
+        {
+            for (int tries = 0; tries < _channels.Length; tries++)
+            {
+                var channel = _channels[_nextChannel % _channels.Length];
+                _nextChannel++;
+                if (channel.SpawnDisguised(_config.DisguiseType) != null)
                 {
                     _spawnedThisWave++;
                     return;
