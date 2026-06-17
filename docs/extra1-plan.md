@@ -71,7 +71,17 @@
   - `AllyNPC.asset` … 無発射（`factory=null`）のため変更なし。
 - 検証結果（`assets-get-data`）: BasicEnemy=0 / AssaultEnemy=0 / DisguisedEnemy=2.0 を確認。
 
-### マイルストーン B — Issue②: 撃破行の見え方（繰り上がり前進の lerp 化＋雪しぶき）
+### マイルストーン B — Issue②: 撃破行の見え方（繰り上がり前進の lerp 化＋雪しぶき）　✅ 完了（2026-06-17）
+
+> **進捗**: EditMode **120本緑**（回帰なし）。コミット `f54a298`（B1+B2 同一コミット）。
+
+**Unit B1: 繰り上がり前進を滑らかに（湧きはスナップ）** ✅
+- 成果物: `Enemy.SetTarget(pos, snap, speed)` / `MoveTowardTarget()` / `AllyNPC.Update` 明示呼出 / `ChannelController._advanceSpeed [SerializeField]` / `RepositionAll(justSpawned=null)` でスナップ/lerp 分離。
+- 検証: `ApplyAvalanche` 直後にN谷敵が back row 座標（y≈3.25）から front 座標（y=2.70）へゆっくり lerp 前進することをスロー（timeScale=0.05）Play で確認。新規湧きはスナップ（即座に外周配置）。
+
+**Unit B2: 雪しぶきエフェクト `SnowPuff`（プール）＋撃破位置で発生** ✅
+- 成果物: 新規 `SnowPuff.cs`（0.25s 拡大＋輝度フェード → onDone でプール返却） / `ChannelController.Configure` に `Func<SnowPuff> createPuff` 追加 / `ApplyAvalanche` でKill前に `_puffPool.Get().Play(pos, Release)` / `GameManager.CreateSnowPuff`（加算 Unlit 白球）。
+- 検証（MCP Play）: `ApplyAvalanche: killed=3` → `SnowPuff instances (incl. inactive): 3, all active=True`、位置 `(-0.70,2.70,0)` / `(0.70,2.70,0)` / `(0.00,2.70,0)` = 撃破された前列の正確な座標に一致。プール返却後は非アクティブで Instantiate/Destroy なし（ADR-4 維持）。
 
 **Unit B1: 繰り上がり前進を滑らかに（湧きはスナップ）**
 - 成果物:
