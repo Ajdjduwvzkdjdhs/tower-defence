@@ -53,27 +53,23 @@
 
 各ユニットは「完了条件」を満たした時点でコミットして次へ進む。3 マイルストーンは独立だが、Unity 単一インスタンスのため **直列** に進める（memory）。順序の目安は A（小）→ C（UI＋データ）→ B（最も手が入る）。
 
-### マイルストーン A — Issue①: 敵初弾の即時化
+### マイルストーン A — Issue①: 敵初弾の即時化　✅ 完了（2026-06-17）
 
-**Unit A1: `EnemyTypeSO._initialFireDelay` 追加 ＋ `Enemy.Init` 改修**
+> **進捗**: EditMode **120本緑**（回帰なし）。コミット `cc2ab17`（A1）/ `df4ef09`（A2）。
+
+**Unit A1: `EnemyTypeSO._initialFireDelay` 追加 ＋ `Enemy.Init` 改修** ✅
 - 成果物:
   - `EnemyTypeSO` に `[SerializeField] private float _initialFireDelay = 0f;` と `public float InitialFireDelay => _initialFireDelay;` を追加（ADR-1）。
-  - [Enemy.Init](../Assets/Scripts/Gameplay/Enemy.cs#L50) の `_fireTimer = type.FireInterval` を `_fireTimer = type != null ? type.InitialFireDelay : 0f;` に変更。コメント（「最初の発射は FireInterval 秒後」）も更新。
-- 依存: なし
-- 完了条件:
-  - `assets-refresh` でコンパイル通過、既存 EditMode 全緑（回帰）。
-  - MCP(Play): 既定 0 の敵が登場直後（最初の Update フレーム ≒ 即時）に 1 発目を撃つ。`ShotsFired` が湧き直後に 1 になることを `reflection`/ログで確認、`screenshot-game-view` で初動の弾を記録。
+  - [Enemy.Init](../Assets/Scripts/Gameplay/Enemy.cs#L50) の `_fireTimer = type.FireInterval` を `_fireTimer = type != null ? type.InitialFireDelay : 0f;` に変更。コメント更新。
+- 検証結果（MCP Play）: 3秒経過時点で ShotsFired=1〜8（最初フレームで即発射）、Fort HP 1000→775→215。`screenshot-game-view` で弾飛行を視覚確認。
 
-**Unit A2: 敵アセットの初弾値設定 ＋ 種別差の検証**
+**Unit A2: 敵アセットの初弾値設定 ＋ 種別差の検証** ✅
 - 成果物（`assets-modify`）:
-  - `BasicEnemy.asset` … `_initialFireDelay = 0`（即時）。
-  - `AssaultEnemy.asset` … `_initialFireDelay = 0`（即時）。
-  - `DisguisedEnemy.asset` … `_initialFireDelay = 2.0`（**遅延維持**＝発射で即バレさせない。tell で見分ける Phase3 の意図を保持。値は MCP で調整可）。
-  - `AllyNPC.asset` … 無発射（`factory=null`）のため値は無関係（既定 0 のままで可）。
-- 依存: A1
-- 完了条件:
-  - `assets-get-data` で 3 アセットの値を確認。
-  - MCP(Play): 通常敵・突撃隊は登場直後に発射、変装敵は約 2 秒沈黙（その間に tell で識別可能）。両者の差を `screenshot`／`ShotsFired` で確認。
+  - `BasicEnemy.asset` … `_initialFireDelay = 0`（即時・既定値のまま）。
+  - `AssaultEnemy.asset` … `_initialFireDelay = 0`（即時・既定値のまま）。
+  - `DisguisedEnemy.asset` … `_initialFireDelay = 2.0`（**遅延維持**＝発射で即バレさせない）。`_fireInterval=2.0` 据え置き。
+  - `AllyNPC.asset` … 無発射（`factory=null`）のため変更なし。
+- 検証結果（`assets-get-data`）: BasicEnemy=0 / AssaultEnemy=0 / DisguisedEnemy=2.0 を確認。
 
 ### マイルストーン B — Issue②: 撃破行の見え方（繰り上がり前進の lerp 化＋雪しぶき）
 

@@ -160,6 +160,28 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Extra 1 — 手触り調整・不具合修正（フェーズ外）
+
+**ゴール**: Phase 3 完了後に挙がった 3 点の手触り調整・不具合修正。詳細計画は `docs/extra1-plan.md`。ブランチ: `extra1-feel-fixes`。
+
+| # | 課題 | 対処 | 状態 |
+|---|------|------|------|
+| ① | 敵の初弾が遅い（2秒待ちになっていた） | `EnemyTypeSO._initialFireDelay`（既定0）を追加、`Enemy.Init` で初弾タイマを即時化。変装敵は 2.0 秒遅延を維持 | 🟢 完了 |
+| ② | 撃破行の見え方がおかしい（手前が残り外周が消える錯覚） | 繰り上がり前進を速度ベース lerp 化（湧きはスナップ）＋撃破位置に雪しぶき `SnowPuff`（プール） | 🔲 未着手 |
+| ③ | 波の移行を画面中央に | WaveIntro/WaveLull を中央バナー（半透明帯＋波名）。`WaveConfigSO._displayName` 追加 | 🔲 未着手 |
+
+### Status: 🟡 進行中（マイルストーン A 完了）
+
+**マイルストーン A 完了（2026-06-17）** — EditMode **120本緑**（回帰なし）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| A1 | `EnemyTypeSO._initialFireDelay`（既定0）追加 ＋ `Enemy.Init` 改修 | MCP Play: ShotsFired=1〜8（3秒）、Fort HP 急減を screenshot 確認 | ✅ |
+| A2 | BasicEnemy/AssaultEnemy=0、DisguisedEnemy=2.0 に設定 | `assets-get-data` で 3 アセットの値を確認 | ✅ |
+
+**次の作業**: マイルストーン C（Issue③ 中央バナー）→ マイルストーン B（Issue② 撃破見え方）の順に実装。
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン
