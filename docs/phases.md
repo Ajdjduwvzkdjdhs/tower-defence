@@ -129,7 +129,7 @@ EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States pen
 
 ### In scope
 
-- 突撃隊（高 `moveSpeed`／短 `fireInterval`）、変装敵（青＋tell）、Wave3 構成。
+- 突撃隊（短 `fireInterval`＝高発射テンポ、**ADR-18: `moveSpeed` による locomotion は採用しない。「速さ」＝発射テンポの差で体感させる**）、変装敵（青＋tell）、Wave3 構成。
 - 通信が ADR-3 の移行トリガーに達していれば SOイベントチャネルへの移行を検討/実施。
 
 ### Out of scope
@@ -138,14 +138,19 @@ EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States pen
 
 ### 受け入れ基準
 
-- [ ] 突撃隊が `EnemyTypeSO` で定義され、速さ/発射間隔の差が体感できる
+- [ ] 突撃隊が `EnemyTypeSO` で定義され、**発射テンポ（短 `fireInterval`）と見た目（tint）の差が体感できる**（ADR-18）
 - [ ] 変装敵は青（味方色）＋ tell を持ち、`disguiseChance` で出現する
 - [ ] 変装敵を見逃すと退場せず攻撃を継続する／真の味方を撃つとペナルティになる
 - [ ] tell（見た目差）が実装され、注意すれば見分けられる（理不尽でない）
 - [ ] Wave3 構成（突撃隊＋変装）が通しで遊べる
 - [ ] ADR-3 トリガー成立時、SOイベントチャネル移行の判断結果を `docs/architecture.md` に記録（移行 or 見送りの理由）
 
-### Status: ⬜ 未着手
+### Status: 🟡 進行中 — マイルストーン A 完了（2026-06-17）
+
+EditMode **120本緑**（ベースライン 110 ＋ 10）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑**（変装優先・hasXxx=false スキップ・Wave1/2 回帰） | ✅ |
 
 ---
 
