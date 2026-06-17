@@ -46,7 +46,7 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _aimMat;
+        private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat;
         private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
@@ -57,6 +57,7 @@ namespace KakigoriTD.Bootstrap
             _fortMat = MakeUnlit(new Color(0.92f, 0.95f, 1.0f));
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
+            _snowPuffMat = MakeUnlitAdditive(Color.white);
 
             BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
             BuildFort();
@@ -169,7 +170,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -204,6 +205,15 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<DisguisedEnemy>();
+        }
+
+        private SnowPuff CreateSnowPuff()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "SnowPuff"; go.transform.localScale = Vector3.one * 0.5f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _snowPuffMat;
+            return go.AddComponent<SnowPuff>();
         }
 
         private Projectile CreateProjectile()

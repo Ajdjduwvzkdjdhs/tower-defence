@@ -22,6 +22,10 @@ namespace KakigoriTD.Gameplay
         // 生存中のみ発射する。撃破後は false（飛来中の弾には影響しない）。
         private bool _alive;
 
+        // ADR-20: 繰り上がり前進を lerp 化。SetTarget で目標位置を設定し Update で MoveTowards。
+        private Vector3 _targetPos;
+        private float _advanceSpeed;
+
         // per-instance tint: sharedMaterial を汚さずプール再利用で色を切り替える（ADR-16）。
         private Renderer _renderer;
         private MaterialPropertyBlock _mpb;
@@ -51,12 +55,21 @@ namespace KakigoriTD.Gameplay
             _fireTimer = type != null ? type.InitialFireDelay : 0f;
             ShotsFired = 0;
             _alive = true;
+            _targetPos = transform.position;
             if (_renderer != null)
             {
                 _mpb.SetColor("_BaseColor", type != null ? type.Tint : Color.red);
                 _renderer.SetPropertyBlock(_mpb);
             }
             OnInitialized();
+        }
+
+        /// <summary>目標位置を設定する。snap=true のとき即座に移動（湧き・初期配置用）、false のとき lerp（ADR-20）。</summary>
+        public void SetTarget(Vector3 pos, bool snap, float speed = 3.5f)
+        {
+            _targetPos = pos;
+            _advanceSpeed = speed;
+            if (snap) transform.position = pos;
         }
 
         /// <summary>
@@ -67,6 +80,7 @@ namespace KakigoriTD.Gameplay
         protected virtual void Update()
         {
             if (!_alive) return;
+            MoveTowardTarget();
 
             _fireTimer -= Time.deltaTime;
             if (_fireTimer <= 0f)
@@ -75,6 +89,12 @@ namespace KakigoriTD.Gameplay
                 // 取りこぼし分を持ち越す（フレーム落ち時もレートを保つ）。
                 _fireTimer += _type.FireInterval;
             }
+        }
+
+        protected void MoveTowardTarget()
+        {
+            if (_advanceSpeed > 0f)
+                transform.position = Vector3.MoveTowards(transform.position, _targetPos, _advanceSpeed * Time.deltaTime);
         }
 
         private void Fire()

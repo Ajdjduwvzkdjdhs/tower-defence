@@ -30,6 +30,7 @@ namespace KakigoriTD.Gameplay
         protected override void Update()
         {
             if (!IsAlive) return;
+            MoveTowardTarget(); // base.Update は呼ばないため明示的に呼ぶ（ADR-20）
             _lifetimeTimer -= Time.deltaTime;
             if (_lifetimeTimer <= 0f)
             {

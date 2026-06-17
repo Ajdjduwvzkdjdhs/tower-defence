@@ -26,11 +26,13 @@ namespace KakigoriTD.Gameplay
         [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数
+        [SerializeField] private float _advanceSpeed = 3.5f; // 繰り上がり前進速度（lerp、ADR-20）
 
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
         private ObjectPool<AllyNPC> _allyPool;
         private ObjectPool<DisguisedEnemy> _disguisedPool;
+        private ObjectPool<SnowPuff> _puffPool;
         private ProjectileFactory _projectileFactory;
         private Fort _fort;
         private Vector3 _center;
@@ -62,7 +64,8 @@ namespace KakigoriTD.Gameplay
         /// Composition Root から依存を注入して谷を構成する。
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
-            Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised)
+            Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
+            Func<SnowPuff> createPuff)
         {
             ChannelId = channelId;
             _center = center;
@@ -74,6 +77,7 @@ namespace KakigoriTD.Gameplay
             _pool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
             _disguisedPool = new ObjectPool<DisguisedEnemy>(createDisguised);
+            _puffPool = new ObjectPool<SnowPuff>(createPuff);
         }
 
         /// <summary>0:N(+y) / 1:W(-x) / 2:S(-y) / 3:E(+x)。</summary>
@@ -98,7 +102,7 @@ namespace KakigoriTD.Gameplay
             var enemy = _pool.Get();
             enemy.Init(type, _projectileFactory, _fort);
             _matrix.AddToBack(enemy);
-            RepositionAll();
+            RepositionAll(enemy); // 新規湧きはスナップ、既存はlerp
             return enemy;
         }
 
@@ -113,7 +117,7 @@ namespace KakigoriTD.Gameplay
             ally.InitAlly(allyType);
             ally.OnExpired += OnAllyExpired;
             _matrix.AddRow(ally);
-            RepositionAll();
+            RepositionAll(ally); // 新規湧きはスナップ
             return ally;
         }
 
@@ -127,7 +131,7 @@ namespace KakigoriTD.Gameplay
             var disguised = _disguisedPool.Get();
             disguised.Init(type, _projectileFactory, _fort);
             _matrix.AddRow(disguised);
-            RepositionAll();
+            RepositionAll(disguised); // 新規湧きはスナップ
             return disguised;
         }
 
@@ -144,6 +148,10 @@ namespace KakigoriTD.Gameplay
             {
                 var e = killed[i];
                 if (e == null) continue;
+
+                // Kill / Release より前に位置を取得して雪しぶきを発生（ADR-20）
+                _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
+
                 if (e is AllyNPC ally)
                 {
                     // 自走退場ハンドラの二重発火を防ぐ
@@ -212,7 +220,8 @@ namespace KakigoriTD.Gameplay
             return rc == 0 || _matrix.RowAt(rc - 1).Count >= _rowWidth;
         }
 
-        private void RepositionAll()
+        // justSpawned のみスナップ（プール由来の初期 transform からの滑り込みを防ぐ）、他は lerp（ADR-20）。
+        private void RepositionAll(Enemy justSpawned = null)
         {
             for (int row = 0; row < _matrix.RowCount; row++)
             {
@@ -220,7 +229,8 @@ namespace KakigoriTD.Gameplay
                 for (int slot = 0; slot < members.Count; slot++)
                 {
                     var e = members[slot];
-                    if (e != null) e.transform.position = PositionFor(row, slot);
+                    if (e != null)
+                        e.SetTarget(PositionFor(row, slot), snap: e == justSpawned, _advanceSpeed);
                 }
             }
         }
