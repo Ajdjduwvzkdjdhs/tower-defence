@@ -40,14 +40,15 @@ namespace KakigoriTD.Gameplay
 
         /// <summary>
         /// 敵を初期化して稼働させる。プールから取得するたびに呼ぶ。
-        /// 最初の発射は <see cref="EnemyTypeSO.FireInterval"/> 秒後（spec「fireInterval 秒ごとに発射」）。
+        /// 最初の発射は <see cref="EnemyTypeSO.InitialFireDelay"/> 秒後（既定0＝即時）、
+        /// 以後は <see cref="EnemyTypeSO.FireInterval"/> 秒ごと。
         /// </summary>
         public void Init(EnemyTypeSO type, ProjectileFactory factory, Fort target)
         {
             _type = type;
             _factory = factory;
             _target = target;
-            _fireTimer = type != null ? type.FireInterval : 0f;
+            _fireTimer = type != null ? type.InitialFireDelay : 0f;
             ShotsFired = 0;
             _alive = true;
             if (_renderer != null)

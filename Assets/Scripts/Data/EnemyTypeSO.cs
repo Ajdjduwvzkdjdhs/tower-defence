@@ -12,6 +12,7 @@ namespace KakigoriTD.Data
         // 初期値は仕様書 §19 パラメータ・テーブルに準拠。
         [SerializeField] private float _moveSpeed = 1f;
         [SerializeField] private float _fireInterval = 2f;
+        [SerializeField] private float _initialFireDelay = 0f;
         [SerializeField] private ProjectileTypeSO _projectile;
 
         // Phase1 では未使用（define-only）。
@@ -30,6 +31,9 @@ namespace KakigoriTD.Data
 
         /// <summary>弾を発射する間隔（秒）。</summary>
         public float FireInterval => _fireInterval;
+
+        /// <summary>登場から最初の発射までの遅延（秒）。0 で即時（既定）。種別差で変装敵のみ遅延維持可。</summary>
+        public float InitialFireDelay => _initialFireDelay;
 
         /// <summary>この敵が発射する弾の種別。</summary>
         public ProjectileTypeSO Projectile => _projectile;
