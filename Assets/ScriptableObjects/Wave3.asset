@@ -21,3 +21,4 @@ MonoBehaviour:
   _disguiseChance: 0.2
   _allyType: {fileID: 11400000, guid: 34ca00ab6430d4f22a6a9b15b83f2aae, type: 2}
   _disguiseType: {fileID: 11400000, guid: d1e2f3a40089e448cab4cccc0eb6d001, type: 2}
+  _displayName: "\u7A81\u6483\u968A\uFF0B\u5909\u88C5\u6CE2"

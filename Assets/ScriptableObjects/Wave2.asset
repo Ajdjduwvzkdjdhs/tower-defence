@@ -19,3 +19,5 @@ MonoBehaviour:
   _allySpawnChance: 0.25
   _disguiseChance: 0
   _allyType: {fileID: 11400000, guid: 34ca00ab6430d4f22a6a9b15b83f2aae, type: 2}
+  _disguiseType: {fileID: 0}
+  _displayName: "\u672C\u968A\u4FB5\u653B"

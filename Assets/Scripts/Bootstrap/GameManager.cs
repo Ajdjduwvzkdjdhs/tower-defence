@@ -230,26 +230,38 @@ namespace KakigoriTD.Bootstrap
             var cur = _machine.Current;
             if (cur is TitleState)
             {
-                _ui.ClearResult(); // リザルト表示を消してタイトルへ
+                _ui.ClearResult();
+                _ui.ClearBanner();
                 _ui.SetStatus("かき氷タワーディフェンス — [Enter] で開始");
             }
-            else if (cur is WaveIntroState)
+            else if (cur is WaveIntroState intro)
             {
-                _ui.SetStatus("WAVE 開始…");
+                _ui.SetBanner($"Wave {intro.WaveIndex + 1}  ―  {GetWaveDisplayName(intro.WaveIndex)}");
+                _ui.SetStatus("");
             }
             else if (cur is WavePlayingState)
             {
+                _ui.ClearBanner();
                 float remaining = Mathf.Max(0f, GetWaveDuration(_currentWaveIndex) - (Time.time - _waveStartTime));
                 _ui.SetStatus($"Wave {_currentWaveIndex + 1}/{WaveCount}   残り {remaining:F0}s   — W/A/S/D 谷選択 / Space 削り");
             }
-            else if (cur is WaveLullState)
+            else if (cur is WaveLullState lull)
             {
-                _ui.SetStatus($"Wave {_currentWaveIndex + 1} クリア — 次の波へ");
+                _ui.SetBanner($"Wave {lull.WaveIndex + 1}  クリア");
+                _ui.SetStatus("");
             }
             else if (cur is ResultState)
             {
-                _ui.SetStatus(""); // リザルトはオーバーレイ（ShowResult）で表示。背後の Wave 文を消す
+                _ui.ClearBanner();
+                _ui.SetStatus("");
             }
+        }
+
+        private string GetWaveDisplayName(int i)
+        {
+            if (_waveConfigs == null || i < 0 || i >= _waveConfigs.Length) return "";
+            var name = _waveConfigs[i].DisplayName;
+            return string.IsNullOrEmpty(name) ? "" : name;
         }
 
         private GameObject NewChild(string name)

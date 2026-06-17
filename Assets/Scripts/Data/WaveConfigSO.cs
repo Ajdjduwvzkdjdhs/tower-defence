@@ -26,6 +26,9 @@ namespace KakigoriTD.Data
         // Phase3: このウェーブで湧く変装敵の種別（null の場合は変装なし）。
         [SerializeField] private EnemyTypeSO _disguiseType;
 
+        // Extra1-C: 中央バナーに表示する波名（例: 「快感波」「本隊侵攻」）。
+        [SerializeField] private string _displayName;
+
         /// <summary>ウェーブ毎の制限時間（秒）。</summary>
         public float Duration => _duration;
 
@@ -46,5 +49,8 @@ namespace KakigoriTD.Data
 
         /// <summary>このウェーブで湧く変装敵の種別（null なら変装なし）。</summary>
         public EnemyTypeSO DisguiseType => _disguiseType;
+
+        /// <summary>中央バナーに表示する波名（Extra1-C）。</summary>
+        public string DisplayName => _displayName;
     }
 }

@@ -18,6 +18,9 @@ namespace KakigoriTD.Core
             _waveIndex = waveIndex;
         }
 
+        /// <summary>これから始める波のインデックス（0 始まり）。GameManager がバナー文言に使う。</summary>
+        public int WaveIndex => _waveIndex;
+
         public void Enter() => _elapsed = 0f;
 
         public void Tick(float deltaTime)
