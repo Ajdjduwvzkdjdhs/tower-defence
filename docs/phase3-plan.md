@@ -77,12 +77,14 @@
 
 各ユニットは **「完了条件」を満たした時点で次へ進む**。完了条件は EditMode 緑または MCP スクショ（`mcp-guide.md`）で客観確認する。コミットは **ユニット単位**（土台＝`main` から切った `phase3-assault-disguise`／MCP ツーリングは除外）。
 
-> **進捗（2026-06-17）— マイルストーン A 完了 ✅**　EditMode 全 **120 本緑**（ベースライン 110 ＋ 10）。
+> **進捗（2026-06-17）— マイルストーン B 完了 ✅**　EditMode 全 **120 本緑**（マイルストーン B は SO／アセットのみ＝新規 EditMode テストなし）。
 > | Unit | 成果物 | 検証 | 状態 |
 > |---|---|---|---|
 > | D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑**（変装優先・hasXxx=false スキップ・Wave1/2 回帰） | ✅ |
+> | D2 | `AssaultEnemy.asset`（EnemyTypeSO: `fireInterval=0.8` / `tint=オレンジ` / `projectile=BasicProjectile`）＋ `Wave3.enemyPool` に追加 | `assets-get-data` で `fireInterval=0.8`・`tint(r1,g0.5,b0.1)`・`projectile≠null` 確認 | ✅ |
+> | D3 | `WaveConfigSO._disguiseType`（フィールド＋プロパティ追加）＋ `DisguisedEnemy.asset`（`isDisguised=true` / `tint=青` / `projectile=BasicProjectile`）＋ `Wave3` 全設定（`disguiseChance=0.2` / `disguiseType=DisguisedEnemy` / `allySpawnChance=0.15` / `allyType=AllyNPC`） | `assets-get-data` で各値確認・EditMode **120本緑**（回帰ゼロ）| ✅ |
 >
-> 設計判断（確定）: **ADR-18** — 突撃隊は発射テンポ（短 `fireInterval`）＋見た目差（`tint`）のみで表現。`moveSpeed` による locomotion は静止行モデル（ADR-12/14）と相容れないため不採用。`phases.md` 受け入れ基準①を「発射テンポ差」と解釈する旨を明記。EditMode ベースラインは **120 本**（マイルストーン B 以降はこの上に積む）。
+> 設計判断（確定）: **ADR-18** — 突撃隊は発射テンポ（短 `fireInterval`）＋見た目差（`tint`）のみで表現。`moveSpeed` による locomotion は静止行モデル（ADR-12/14）と相容れないため不採用。`phases.md` 受け入れ基準①を「発射テンポ差」と解釈する旨を明記。EditMode ベースラインは **120 本**（マイルストーン C 以降はこの上に積む）。
 
 ### マイルストーン A — Core / 純ロジック（Unity 実行不要・EditMode で完結）
 

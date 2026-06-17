@@ -145,12 +145,14 @@ EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States pen
 - [ ] Wave3 構成（突撃隊＋変装）が通しで遊べる
 - [ ] ADR-3 トリガー成立時、SOイベントチャネル移行の判断結果を `docs/architecture.md` に記録（移行 or 見送りの理由）
 
-### Status: 🟡 進行中 — マイルストーン A 完了（2026-06-17）
+### Status: 🟡 進行中 — マイルストーン B 完了（2026-06-17）
 
-EditMode **120本緑**（ベースライン 110 ＋ 10）。
+EditMode **120本緑**（マイルストーン B は SO／アセットのみ＝新規 EditMode テストなし）。
 | Unit | 成果物 | 検証 | 状態 |
 |---|---|---|---|
-| D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑**（変装優先・hasXxx=false スキップ・Wave1/2 回帰） | ✅ |
+| D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑** | ✅ |
+| D2 | `AssaultEnemy.asset`（EnemyTypeSO）＋ Wave3 に追加 | `assets-get-data` で `fireInterval=0.8`・オレンジ tint・projectile 参照確認 | ✅ |
+| D3 | `WaveConfigSO._disguiseType` 追加 ＋ `DisguisedEnemy.asset` ＋ Wave3 全設定 | `assets-get-data` で全値確認・EditMode 120本緑（回帰ゼロ） | ✅ |
 
 ---
 

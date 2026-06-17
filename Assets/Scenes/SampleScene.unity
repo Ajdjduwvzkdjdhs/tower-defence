@@ -378,6 +378,7 @@ MonoBehaviour:
   _iceTotal: 50
   _waveLull: 5
   _waveIntroDuration: 1.2
+  _allyHitPenalty: 50
 --- !u!4 &1489555324
 Transform:
   m_ObjectHideFlags: 0

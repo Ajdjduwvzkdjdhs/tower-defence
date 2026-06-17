@@ -23,6 +23,9 @@ namespace KakigoriTD.Data
         // Phase2: このウェーブで湧く味方NPC の種別（null の場合は味方なし）。
         [SerializeField] private EnemyTypeSO _allyType;
 
+        // Phase3: このウェーブで湧く変装敵の種別（null の場合は変装なし）。
+        [SerializeField] private EnemyTypeSO _disguiseType;
+
         /// <summary>ウェーブ毎の制限時間（秒）。</summary>
         public float Duration => _duration;
 
@@ -40,5 +43,8 @@ namespace KakigoriTD.Data
 
         /// <summary>このウェーブで湧く味方NPC の種別（null なら味方なし）。</summary>
         public EnemyTypeSO AllyType => _allyType;
+
+        /// <summary>このウェーブで湧く変装敵の種別（null なら変装なし）。</summary>
+        public EnemyTypeSO DisguiseType => _disguiseType;
     }
 }
