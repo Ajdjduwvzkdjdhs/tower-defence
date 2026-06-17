@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.EnemyTypeSO
   _moveSpeed: 1
   _fireInterval: 2
+  _initialFireDelay: 2
   _projectile: {fileID: 11400000, guid: c216f61ffc4f146f79549bc0598a0649, type: 2}
   _isAlly: 0
   _isDisguised: 1
