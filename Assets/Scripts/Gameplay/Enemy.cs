@@ -55,7 +55,13 @@ namespace KakigoriTD.Gameplay
                 _mpb.SetColor("_BaseColor", type != null ? type.Tint : Color.red);
                 _renderer.SetPropertyBlock(_mpb);
             }
+            OnInitialized();
         }
+
+        /// <summary>
+        /// Init 完了後に呼ばれる仮想フック。派生クラス（例: DisguisedEnemy の tell マーカー生成）で使う。
+        /// </summary>
+        protected virtual void OnInitialized() { }
 
         protected virtual void Update()
         {

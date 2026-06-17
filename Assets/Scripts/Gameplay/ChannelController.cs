@@ -30,6 +30,7 @@ namespace KakigoriTD.Gameplay
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
         private ObjectPool<AllyNPC> _allyPool;
+        private ObjectPool<DisguisedEnemy> _disguisedPool;
         private ProjectileFactory _projectileFactory;
         private Fort _fort;
         private Vector3 _center;
@@ -61,7 +62,7 @@ namespace KakigoriTD.Gameplay
         /// Composition Root から依存を注入して谷を構成する。
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
-            Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly)
+            Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised)
         {
             ChannelId = channelId;
             _center = center;
@@ -72,6 +73,7 @@ namespace KakigoriTD.Gameplay
             _matrix = new EnemyMatrix<Enemy>(_rowWidth);
             _pool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
+            _disguisedPool = new ObjectPool<DisguisedEnemy>(createDisguised);
         }
 
         /// <summary>0:N(+y) / 1:W(-x) / 2:S(-y) / 3:E(+x)。</summary>
@@ -116,6 +118,20 @@ namespace KakigoriTD.Gameplay
         }
 
         /// <summary>
+        /// 変装敵を専用行（隔離行）として最奥に1体湧かせる。上限に達していれば null を返す。
+        /// 自走退場しないため OnExpired は購読しない（ADR-19）。
+        /// </summary>
+        public DisguisedEnemy SpawnDisguised(EnemyTypeSO type)
+        {
+            if (IsFull) return null;
+            var disguised = _disguisedPool.Get();
+            disguised.Init(type, _projectileFactory, _fort);
+            _matrix.AddRow(disguised);
+            RepositionAll();
+            return disguised;
+        }
+
+        /// <summary>
         /// 雪崩 1 ヒット = 先頭行（山頂側）を消す。
         /// 行に味方が居た場合は <see cref="OnAllyCaught"/> を発火（巻き込み＝減点）。
         /// </summary>
@@ -135,6 +151,12 @@ namespace KakigoriTD.Gameplay
                     ally.Kill();
                     _allyPool.Release(ally);
                     OnAllyCaught?.Invoke();
+                }
+                else if (e is DisguisedEnemy disguised)
+                {
+                    // 変装敵は AllyNPC ではないので OnAllyCaught を発火しない（無ペナルティ）。
+                    disguised.Kill();
+                    _disguisedPool.Release(disguised);
                 }
                 else
                 {
@@ -160,6 +182,11 @@ namespace KakigoriTD.Gameplay
                     ally.OnExpired -= OnAllyExpired;
                     ally.Kill();
                     _allyPool.Release(ally);
+                }
+                else if (e is DisguisedEnemy disguised)
+                {
+                    disguised.Kill();
+                    _disguisedPool.Release(disguised);
                 }
                 else
                 {

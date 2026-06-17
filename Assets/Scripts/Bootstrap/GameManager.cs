@@ -169,7 +169,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -194,6 +194,16 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<AllyNPC>();
+        }
+
+        // 変装敵: 青 tint は per-instance MPB で付く。tell マーカーは DisguisedEnemy.OnInitialized で生成。
+        private DisguisedEnemy CreateDisguised()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "DisguisedEnemy"; go.transform.localScale = Vector3.one * 0.5f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+            return go.AddComponent<DisguisedEnemy>();
         }
 
         private Projectile CreateProjectile()

@@ -17,6 +17,8 @@
 | 実機シリアル接続 | 自前 SerialPort（別スレッド・双方向）＋ Composite 入力 | ADR-15 |
 | 味方NPC | AllyNPC : Enemy（同一 EnemyMatrix<Enemy> 多態保持＋専用プール・専用行） | ADR-16 |
 | 巻き込みペナルティ | Core PenaltyTally + IGameContext.PenaltyTotal → Scoring.Compute | ADR-17 |
+| 突撃隊 | EnemyTypeSO 差のみ（短 fireInterval + tint）。locomotion 不採用 | ADR-18 |
+| 変装敵 | DisguisedEnemy : Enemy（専用行・tell マーカー・発射継続・退場しない・無ペナ撃破） | ADR-19 |
 
 ---
 
@@ -143,6 +145,36 @@
   - `WavePlayingState` / `ResultState` のスコア算出を `Scoring.Compute(ctx.FortHp, ctx.PenaltyTotal)` に変更（ADR-5 の Phase 1 で用意した `penalty` 引数を初めて使用）。
   - `GameManager` が各 `ChannelController.OnAllyCaught` を購読し `_penalty.Add(_allyHitPenalty)`（ADR-3。`OnDestroy` で解除）。
 - **結果**: EditMode で `PenaltyTally` 6本・`StatesTests` +3本（win/lose/penalty=0 回帰）緑。MCP 検証: `PenaltyTotal=0→0→50`（手前ノーペナ→ally巻き込み +50）実証済み。`Scoring.Compute` は不変（Phase 1 で拡張点を用意済み）。ADR-8/9 を覆さず拡張。
+
+## ADR-18: 突撃隊は EnemyTypeSO パラメータのみで表現（locomotion 不採用）— Accepted（Phase 3）
+
+- **背景**: spec §9 では突撃隊を「速い敵」と定義。実装方針として ①`moveSpeed` による実際の移動（locomotion）か、②`fireInterval` 短縮（発射テンポ）かの2択が生じた。
+- **決定**: 突撃隊は **`EnemyTypeSO` のパラメータ差（短い `fireInterval=0.8` ＋ 識別用 `tint` オレンジ）のみで表現**し、**新規クラスを作らない**。`moveSpeed` による locomotion は不採用。「速さ」＝発射テンポの差として解釈する。
+  - **理由①（行モデルとの非整合）**: 現行の静止行モデル（ADR-12/14：座標は行インデックス基準・雪崩で繰り上げ）では、敵が行の外を自由移動すると「先頭行から削る」深さ制御の核が崩れる。
+  - **理由②（プロトタイプ目的）**: 遠隔攻撃モデルでは「砦に近い＝より危険」が成立しないため locomotion のゲーム的恩恵が薄い。発射テンポの差で「速いプレッシャー」は十分体感できる。
+  - **理由③（実証）**: MCP Play 検証で BasicEnemy avg ShotsFired 24.4 に対し AssaultEnemy 61.8（≈2.5倍）を実測。`fireInterval=0.8/2.0` の理論値と一致。
+- **結果**: 突撃隊は `AssaultEnemy.asset`（EnemyTypeSO）として定義。コード追加ゼロで受け入れ基準①（「速さ＝発射テンポ」と微修正）を充足。`moveSpeed` フィールドは将来の locomotion 要件発生時のために define-only で据え置く（実装時は攻撃方式 Strategy 化／移動サブシステムを別 ADR で検討）。ADR-1（SO）・ADR-11（MonoBehaviour 状態許容）を踏襲。
+
+## ADR-19: 変装敵は DisguisedEnemy : Enemy（専用行＋tell マーカー・発射継続・退場しない）— Accepted（Phase 3）
+
+- **背景**: spec §9 の「青に化けた敵を見破る」緊張を実現するため、「真の味方（AllyNPC）と見た目が似ているが実は撃ち続ける敵」が必要。ペナルティ経路（ADR-17）を改修せずに済む設計が望ましい。
+- **決定**:
+  - `DisguisedEnemy : Enemy`（継承）。同一 `EnemyMatrix<Enemy>` に多態で保持（Core 無改修）。
+  - **擬態行（専用行）**: `ChannelController.SpawnDisguised` が `EnemyMatrix.AddRow`（隔離行）で配置。`AllyNPC` と同じ行占有形式なので視覚的に同じ位置に出る。
+  - **発射継続**: 基底 `Enemy.Update` のまま（`Projectile≠null` で撃つ）。自走退場しない（`AllyNPC` と違い lifetime カウントなし・`OnExpired` 非購読）。
+  - **tell（見た目差）**: `Enemy.OnInitialized()` フック（`protected virtual`）で暗色キューブ（`_tellMarker`）を角に付加。味方は tell なし、変装敵は常に tell あり。注意すれば識別可能＝「理不尽でない」を担保。
+  - **ペナルティ経路**: `ApplyAvalanche` の type check で `e is DisguisedEnemy → _disguisedPool.Release`（`OnAllyCaught` 未発火）。変装撃破＝無ペナルティ、真の味方撃破＝既存 `allyHitPenalty`（ADR-17）を自動成立させる。
+  - **専用プール**: `ChannelController` が `ObjectPool<DisguisedEnemy> _disguisedPool` を持つ。`ClearAll`・`ApplyAvalanche` でプール返却時に `Kill()` して非アクティブ化。
+- **結果**: コード変更は `Enemy.cs`（`OnInitialized` 仮想フック1点追加）・`DisguisedEnemy.cs`（新規）・`ChannelController.cs`（`_disguisedPool`・`SpawnDisguised`・`ApplyAvalanche`/`ClearAll` 分岐追加）・`WaveManager.cs`（`SpawnSelector` 分岐追加）・`GameManager.cs`（`CreateDisguised` デリゲート注入）のみ。`EnemyMatrix<T>`・`PenaltyTally`・`Scoring`・State 群はゼロ変更。ADR-16/17 を踏襲し覆さない。MCP Play 検証: 青キューブ＋tell マーカー視認・ShotsFired>0・変装雪崩→PenaltyTotal delta=0 実証済み。
+
+## ADR-3 移行判断（Phase 3 完了時評価）— 見送り（C# event 継続）
+
+- **評価日**: 2026-06-17（Phase 3 マイルストーン D 完了時点）
+- **ADR-3 の3トリガー評価**:
+  1. **プレハブがシーン参照なしでイベントを発火したい** → 未成立。本プロジェクトはプレハブを使わず `GameManager` のコード生成で全 GameObject を生成（ADR-13）。弾・敵もプール済み GameObject であり独立したプレハブアセットではない。
+  2. **クロスシーン通信が必要** → 未成立。シーンは単一（`MainScene` のみ）。クロスシーン通信の要件は現時点で存在しない。
+  3. **相互参照するシステムが概ね5つを超える** → 未成立。`GameManager` が Composition Root（ADR-5）として全配線を一元管理。システム間の直接相互参照はなく、依存は常に `GameManager` → 各システムの単方向。C# event を購読するのは `GameManager` のみ（`OnAllyCaught`・`Fort.OnHpChanged`）で`OnDestroy` で確実に解除済み。
+- **結論**: **見送り**。3トリガーがいずれも未成立のため、`*EventChannelSO` への移行は行わない。C# event + GameManager 集約の現構成を継続する。移行を再検討するタイミングは、①マルチシーン化、②プレハブ単位のイベント発火、③5システム以上の相互参照が実際に発生した時点とする。
 
 ## ADR-15: 実機シリアル接続は自前 SerialPort（別スレッド・双方向）＋ Composite で IsShaving を供給（ADR-6 を拡張）— Accepted
 
