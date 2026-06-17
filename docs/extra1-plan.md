@@ -110,32 +110,25 @@
   - `assets-refresh` 通過、既存 EditMode 全緑。
   - MCP(Play): 撃破位置に白球が一瞬拡大→フェード→**自動でプール返却**（GameObject 非アクティブ・`Instantiate/Destroy` がホットパスに出ない）。`screenshot-game-view` で「手前の行がそこで弾けて消えた」ことを確認。
 
-### マイルストーン C — Issue③: 波の移行を中央バナーに
+### マイルストーン C — Issue③: 波の移行を中央バナーに　✅ 完了（2026-06-17）
 
-**Unit C1: `WaveConfigSO._displayName` 追加 ＋ 3 アセット設定 ＋ State の WaveIndex 公開**
+> **進捗**: EditMode **120本緑**（回帰なし）。コミット `8be6034`（C1+C2 同一コミット）。
+
+**Unit C1: `WaveConfigSO._displayName` 追加 ＋ 3 アセット設定 ＋ State の WaveIndex 公開** ✅
 - 成果物:
   - `WaveConfigSO` に `[SerializeField] private string _displayName;` と `public string DisplayName => _displayName;` を追加（ADR-1）。
   - アセット設定（`assets-modify`）: `Wave1=快感波` / `Wave2=本隊侵攻` / `Wave3=突撃隊＋変装波`。
-  - `WaveIntroState`・`WaveLullState` に `public int WaveIndex => _waveIndex;` を追加（バナーに正しい波番号/名を出すため。GameManager 側で現在 State から取得する）。
-    - 補足: `WaveIntro` の `_waveIndex` は「これから始める波」、`WaveLull` の `_waveIndex` は「クリアした波」。
-- 依存: なし（A/B と独立）
-- 完了条件:
-  - `assets-get-data` で 3 アセットの `_displayName` を確認。
-  - `assets-refresh` 通過、既存 EditMode 全緑（getter 追加に伴う回帰確認。必要なら `WaveIndex` の軽い EditMode テストを 1〜2 本追加）。
+  - `WaveIntroState`・`WaveLullState` に `public int WaveIndex => _waveIndex;` を追加。
+- 検証結果（`assets-modify` ＋ EditMode）: 3 アセットの値設定確認。EditMode 120本緑（回帰なし）。
 
-**Unit C2: `UIManager` 中央バナー描画 ＋ `GameManager` 配線**
+**Unit C2: `UIManager` 中央バナー描画 ＋ `GameManager` 配線** ✅
 - 成果物:
-  - `UIManager` にバナー状態を追加: `private string _banner = "";`、`public void SetBanner(string text)`、`public void ClearBanner()`。
-  - [UIManager.OnGUI](../Assets/Scripts/UI/UIManager.cs#L67-L121): `_banner` が非空のとき、**画面中央に半透明黒帯＋中央寄せ大文字**で描画（リザルトボックスと同系のスタイル＝[既存実装](../Assets/Scripts/UI/UIManager.cs#L98-L120)を踏襲）。リザルト表示中はバナーを出さない（二重表示回避）。フェードなし。
-  - [GameManager.UpdateStatusUI](../Assets/Scripts/Bootstrap/GameManager.cs#L218-L243):
-    - `cur is WaveIntroState intro` → `SetBanner($"Wave {intro.WaveIndex + 1} ― {GetWaveDisplayName(intro.WaveIndex)}")`、上部 `_status` は空。
-    - `cur is WaveLullState lull` → `SetBanner($"Wave {lull.WaveIndex + 1} クリア")`。
-    - `WavePlaying`/`Title`/`Result` → `ClearBanner()`（戦闘中は上部HUDのみ、リザルトはオーバーレイのまま）。
-    - 私有補助 `private string GetWaveDisplayName(int i)` … `_waveConfigs[i].DisplayName`（範囲外/空は番号のみにフォールバック）。
-- 依存: C1
-- 完了条件:
-  - `assets-refresh` 通過、既存 EditMode 全緑。
-  - MCP(Play, パターンC/D): WaveIntro で中央に「Wave n ― 波名」、WaveLull で「Wave n クリア」が帯表示され、WavePlaying に入ると消えて上部HUD（残り秒・操作ヒント）のみになる。Title/Result で二重表示しない。各状態を `screenshot-game-view` で 1 枚ずつ記録。
+  - `UIManager`: `_banner` + `SetBanner(text)` / `ClearBanner()` + `OnGUI` で中央帯描画（リザルト表示中は非表示）。
+  - `GameManager.UpdateStatusUI`: WaveIntro → `SetBanner("Wave n ― 波名")`、WaveLull → `SetBanner("Wave n クリア")`、WavePlaying/Title/Result → `ClearBanner()`。`GetWaveDisplayName(int i)` 補助メソッドを追加。
+- 検証結果（MCP Play）:
+  - WaveIntro: 中央に「Wave 1 ― 快感波」帯表示、上部ステータス空 ✅
+  - WaveLull: 中央に「Wave 1 クリア」帯表示 ✅
+  - WavePlaying: バナー消去・上部 HUD（「Wave 1/3 残り 24s — W/A/S/D…」）のみ ✅
 
 ## 4. クリティカルパス / 実装順
 

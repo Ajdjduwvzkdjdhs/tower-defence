@@ -168,9 +168,9 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 |---|------|------|------|
 | ① | 敵の初弾が遅い（2秒待ちになっていた） | `EnemyTypeSO._initialFireDelay`（既定0）を追加、`Enemy.Init` で初弾タイマを即時化。変装敵は 2.0 秒遅延を維持 | 🟢 完了 |
 | ② | 撃破行の見え方がおかしい（手前が残り外周が消える錯覚） | 繰り上がり前進を速度ベース lerp 化（湧きはスナップ）＋撃破位置に雪しぶき `SnowPuff`（プール） | 🟢 完了 |
-| ③ | 波の移行を画面中央に | WaveIntro/WaveLull を中央バナー（半透明帯＋波名）。`WaveConfigSO._displayName` 追加 | 🔲 未着手 |
+| ③ | 波の移行を画面中央に | WaveIntro/WaveLull を中央バナー（半透明帯＋波名）。`WaveConfigSO._displayName` 追加 | 🟢 完了 |
 
-### Status: 🟡 進行中（マイルストーン A・B 完了）
+### Status: 🟢 完了（マイルストーン A・B・C すべて達成）
 
 **マイルストーン A 完了（2026-06-17）** — EditMode **120本緑**（回帰なし）。
 | Unit | 成果物 | 検証 | 状態 |
@@ -184,7 +184,11 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 | B1 | `Enemy.SetTarget/MoveTowardTarget`（lerp）・`AllyNPC.Update` 明示呼出・`ChannelController._advanceSpeed`・`RepositionAll(justSpawned)` | MCP Play: ApplyAvalanche 後 SnowPuff 3体が active=True で撃破位置に出現、ゲーム継続 | ✅ |
 | B2 | 新規 `SnowPuff`（ObjectPool）・`ChannelController.Configure` に `createPuff` 追加・`ApplyAvalanche` で puff 発生・`GameManager.CreateSnowPuff` | MCP Play: killed=3 → SnowPuff 3体 active=True、pos=撃破座標に一致（`(-0.70,2.70)` / `(0.70,2.70)` / `(0.00,2.70)`） | ✅ |
 
-**次の作業**: マイルストーン C（Issue③ 中央バナー）を実装。
+**マイルストーン C 完了（2026-06-17）** — EditMode **120本緑**（回帰なし）。コミット `8be6034`。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| C1 | `WaveConfigSO._displayName` 追加 ＋ Wave1=快感波/Wave2=本隊侵攻/Wave3=突撃隊＋変装波 設定 ＋ State の `WaveIndex` 公開 | `assets-modify` で 3 アセット値確認。EditMode 120本緑（回帰なし） | ✅ |
+| C2 | `UIManager` 中央バナー描画（`SetBanner`/`ClearBanner`/`OnGUI`）＋ `GameManager.UpdateStatusUI` 配線 ＋ `GetWaveDisplayName` 補助 | MCP Play: WaveIntro「Wave 1 ― 快感波」・WaveLull「Wave 1 クリア」帯表示・WavePlaying でバナー消去・上部 HUD のみを screenshot 確認 | ✅ |
 
 ---
 
