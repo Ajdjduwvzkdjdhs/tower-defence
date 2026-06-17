@@ -22,6 +22,9 @@ namespace KakigoriTD.Data
         // 赤＝敵 / 青＝味方・変装（見た目の色分け）。
         [SerializeField] private Color _tint = Color.red;
 
+        // Phase2: 味方NPC が自走退場するまでの秒数（仕様書 §19: 既定6秒）。
+        [SerializeField] private float _allyLifetime = 6f;
+
         /// <summary>移動速度。突撃隊は速い。</summary>
         public float MoveSpeed => _moveSpeed;
 
@@ -39,5 +42,8 @@ namespace KakigoriTD.Data
 
         /// <summary>見た目の色（赤＝敵 / 青＝味方・変装）。</summary>
         public Color Tint => _tint;
+
+        /// <summary>味方NPC が自走退場するまでの秒数（Phase2 用）。</summary>
+        public float AllyLifetime => _allyLifetime;
     }
 }

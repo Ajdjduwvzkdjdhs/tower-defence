@@ -99,14 +99,27 @@
 
 ### 受け入れ基準
 
-- [ ] 青の味方NPCが `WaveConfigSO.allySpawnChance` で出現し、`allyLifetime` 秒で自走退場する
-- [ ] 味方が居る行に雪崩が達すると巻き込み、`ScoreManager` に `allyHitPenalty` が加算（減点）される
-- [ ] 味方の**手前の敵**は手前で削りを止めれば**ノーペナルティで撃破**できる（深さ制御）
-- [ ] 味方の**奥の敵**は味方退場後に撃破できる（恒久ロックされない＝一方的に撃たれ続けない）
-- [ ] Wave2 構成（敵＋味方混在）が `WaveConfigSO` で定義され、通しで遊べる
-- [ ] EditMode テスト緑: 味方ガード下の深さ制御、ペナルティ加算ロジック
+- [x] 青の味方NPCが `WaveConfigSO.allySpawnChance` で出現し、`allyLifetime` 秒で自走退場する
+- [x] 味方が居る行に雪崩が達すると巻き込み、`ScoreManager` に `allyHitPenalty` が加算（減点）される
+- [x] 味方の**手前の敵**は手前で削りを止めれば**ノーペナルティで撃破**できる（深さ制御）
+- [x] 味方の**奥の敵**は味方退場後に撃破できる（恒久ロックされない＝一方的に撃たれ続けない）
+- [x] Wave2 構成（敵＋味方混在）が `WaveConfigSO` で定義され、通しで遊べる
+- [x] EditMode テスト緑: 味方ガード下の深さ制御、ペナルティ加算ロジック
 
-### Status: ⬜ 未着手
+### Status: 🟢 マイルストーン C/D 完了（2026-06-16）— Phase 2 全受け入れ基準充足
+
+EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States penalty 3）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| P1 | `PenaltyTally`（Core） | PenaltyTallyTests **6本緑** | ✅ |
+| P2 | `EnemyMatrix<T>` 拡張（`AddRow`/`RemoveRowAt`・隔離行） | EnemyMatrixTests **9本追加＝21本緑**（ガード行シナリオ含む） | ✅ |
+| P3 | `IGameContext.PenaltyTotal` ＋ `WavePlayingState` スコア配線 | StatesTests **3本追加緑**（win/lose ペナルティ・回帰） | ✅ |
+| P4 | `EnemyTypeSO.AllyLifetime` / `WaveConfigSO.AllyType` / `AllyNPC.asset` / `Wave2.asset` 味方混在 | MCP assets-get-data 全値確認 | ✅ |
+| P5 | `Enemy.Update` virtual + per-instance tint + `AllyNPC` 自走退場 | MCP Play: 青キューブ・IsAlive/ShotsFired=0 確認 | ✅ |
+| P6 | `ChannelController` 味方対応（SpawnAlly/OnAllyCaught/自走退場ハンドラ） | MCP Play: caught=0→1（手前ノーペナ/巻き込み）・奥e2解放 | ✅ |
+| P7 | `WaveManager` 味方湧き分岐（AllySpawnChance） | MCP Play: 40回で AllyNPC≈20%（期待値25%） | ✅ |
+| P8 | `GameManager` penalty 配線 + UIManager ペナルティ表示 | MCP Play: PenaltyTotal 0→0→50（手前ノーペナ/巻き込み+50） | ✅ |
+| P9 | Wave2 通し統合検証 | MCP Play: 4谷に敵＋味方混在・ガード行構造・ShotsFired=0 確認 | ✅ |
 
 ---
 

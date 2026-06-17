@@ -32,7 +32,7 @@ namespace KakigoriTD.Core
             if (_ctx.IsFortDestroyed)
             {
                 _ctx.ClearRemainingEnemies();
-                _machine.Change(new ResultState(_machine, _ctx, isWin: false, Scoring.Compute(_ctx.FortHp)));
+                _machine.Change(new ResultState(_machine, _ctx, isWin: false, Scoring.Compute(_ctx.FortHp, _ctx.PenaltyTotal)));
                 return;
             }
 
@@ -43,7 +43,7 @@ namespace KakigoriTD.Core
 
             bool isFinalWave = _waveIndex >= _ctx.WaveCount - 1;
             if (isFinalWave)
-                _machine.Change(new ResultState(_machine, _ctx, isWin: true, Scoring.Compute(_ctx.FortHp)));
+                _machine.Change(new ResultState(_machine, _ctx, isWin: true, Scoring.Compute(_ctx.FortHp, _ctx.PenaltyTotal)));
             else
                 _machine.Change(new WaveLullState(_machine, _ctx, _waveIndex));
         }

@@ -18,6 +18,8 @@ namespace KakigoriTD.Tests.EditMode
             public bool IsStartRequested { get; set; }
             public bool IsRetryRequested { get; set; }
 
+            public int PenaltyTotal { get; set; }
+
             public readonly List<int> BegunWaves = new List<int>();
             public int ClearCount;
             public bool? ResultIsWin;
@@ -198,6 +200,39 @@ namespace KakigoriTD.Tests.EditMode
             fsm.Change(new ResultState(fsm, ctx, isWin: false, score: 0));
             fsm.Tick(0.016f);
             Assert.That(fsm.Current, Is.TypeOf<TitleState>());
+        }
+
+        // ---- Phase2: PenaltyTotal がスコアに反映される ----
+
+        [Test]
+        public void WavePlaying_WinScore_WithPenalty_SubtractsPenalty()
+        {
+            var ctx = new FakeContext { WaveDuration = 1f, WaveCount = 1, FortHp = 640, PenaltyTotal = 100 };
+            var fsm = new GameStateMachine();
+            fsm.Change(new WavePlayingState(fsm, ctx, 0));
+            fsm.Tick(1.5f);
+            Assert.That(ctx.ResultScore, Is.EqualTo(540), "640 − 100 = 540");
+        }
+
+        [Test]
+        public void WavePlaying_LoseScore_WithPenalty_ClampsToZero()
+        {
+            var ctx = new FakeContext { IsFortDestroyed = true, FortHp = 0, PenaltyTotal = 150 };
+            var fsm = new GameStateMachine();
+            fsm.Change(new WavePlayingState(fsm, ctx, 0));
+            fsm.Tick(0.016f);
+            Assert.That(ctx.ResultScore, Is.EqualTo(0), "HP0 − penalty は 0 に丸める");
+        }
+
+        [Test]
+        public void WavePlaying_NoPenalty_BehaviorUnchangedFromPhase1()
+        {
+            // PenaltyTotal=0（既定）なら Phase1 と同じスコアになる（回帰確認）。
+            var ctx = new FakeContext { WaveDuration = 1f, WaveCount = 1, FortHp = 873, PenaltyTotal = 0 };
+            var fsm = new GameStateMachine();
+            fsm.Change(new WavePlayingState(fsm, ctx, 0));
+            fsm.Tick(1f);
+            Assert.That(ctx.ResultScore, Is.EqualTo(873));
         }
 
         // ---- 通し（統合）----

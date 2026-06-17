@@ -30,8 +30,10 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _iceTotal = 50f;
         [SerializeField] private float _waveLull = 5f;
         [SerializeField] private float _waveIntroDuration = 1.2f;
+        [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
 
         private Fort _fort;
+        private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
         private ChannelController[] _channels;
         private IceStock _ice;
@@ -59,6 +61,7 @@ namespace KakigoriTD.Bootstrap
             BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
+            _penalty = new PenaltyTally();
             BuildChannels();
 
             _ice = new IceStock(_iceTotal);
@@ -95,16 +98,18 @@ namespace KakigoriTD.Bootstrap
         public float WaveIntroDuration => _waveIntroDuration;
         public bool IsFortDestroyed => _fort.IsDestroyed;
         public int FortHp => _fort.CurrentHp;
+        public int PenaltyTotal => _penalty?.Total ?? 0; // Phase2(Unit P8)で _penalty を生成・配線
         public bool IsStartRequested => _input.ConfirmPressed;
         public bool IsRetryRequested => _input.ConfirmPressed;
 
         public void BeginWave(int waveIndex)
         {
-            // wave 0 開始 = 新規プレイ（初回 / リトライ）。砦HP・氷・残敵をリセットする。
+            // wave 0 開始 = 新規プレイ（初回 / リトライ）。砦HP・氷・ペナルティ・残敵をリセットする。
             if (waveIndex == 0)
             {
                 _fort.Initialize(_fortHpMax);
                 _ice.Refill();
+                _penalty.Reset();
                 foreach (var ch in _channels) ch.ClearAll();
                 _ui.ClearResult();
             }
@@ -119,7 +124,7 @@ namespace KakigoriTD.Bootstrap
             foreach (var ch in _channels) ch.ClearAll();
         }
 
-        public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score);
+        public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
 
         // ---- build helpers ---------------------------------------------------
 
@@ -164,10 +169,13 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly);
+                ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
         }
+
+        private void OnAllyCaughtHandler() => _penalty.Add(_allyHitPenalty);
 
         private Enemy CreateEnemy()
         {
@@ -176,6 +184,16 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<Enemy>();
+        }
+
+        // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
+        private AllyNPC CreateAlly()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+            return go.AddComponent<AllyNPC>();
         }
 
         private Projectile CreateProjectile()
@@ -364,6 +382,10 @@ namespace KakigoriTD.Bootstrap
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            // OnAllyCaught 購読解除（ADR-3）
+            if (_channels != null)
+                foreach (var ch in _channels)
+                    if (ch != null) ch.OnAllyCaught -= OnAllyCaughtHandler;
         }
     }
 }

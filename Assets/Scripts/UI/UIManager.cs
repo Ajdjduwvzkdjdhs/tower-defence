@@ -25,6 +25,7 @@ namespace KakigoriTD.UI
         private bool _resultShown;
         private bool _resultWin;
         private int _resultScore;
+        private int _resultPenalty;
 
         /// <summary>砦・氷・雪崩制御を注入し、砦HP イベントを購読する。</summary>
         public void Configure(Fort fort, IceStock ice, AvalancheController avalanche)
@@ -51,12 +52,13 @@ namespace KakigoriTD.UI
         /// <summary>上部ステータス（Title / Wave n 残り秒 / Lull など）。GameManager が毎フレーム設定。</summary>
         public void SetStatus(string status) => _status = status;
 
-        /// <summary>リザルトを表示する。</summary>
-        public void ShowResult(bool isWin, int score)
+        /// <summary>リザルトを表示する。penalty は減点合計（0 なら非表示）。</summary>
+        public void ShowResult(bool isWin, int score, int penalty = 0)
         {
             _resultShown = true;
             _resultWin = isWin;
             _resultScore = score;
+            _resultPenalty = penalty;
         }
 
         /// <summary>リザルト表示を消す（再挑戦時）。</summary>
@@ -104,7 +106,15 @@ namespace KakigoriTD.UI
                 GUI.contentColor = _resultWin ? new Color(1f, 0.9f, 0.3f) : new Color(1f, 0.5f, 0.5f);
                 GUI.Label(new Rect(box.x, box.y + 18, box.width, 40), _resultWin ? "YOU WIN!" : "FORT DESTROYED");
                 GUI.contentColor = Color.white;
-                GUI.Label(new Rect(box.x, box.y + 62, box.width, 28), $"Score（残り砦HP）: {_resultScore}");
+                if (_resultPenalty > 0)
+                {
+                    int fortHp = _resultScore + _resultPenalty;
+                    GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), $"砦HP {fortHp}  −  ペナルティ {_resultPenalty}  =  スコア {_resultScore}");
+                }
+                else
+                {
+                    GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), $"スコア（残り砦HP）: {_resultScore}");
+                }
                 GUI.Label(new Rect(box.x, box.y + 92, box.width, 28), "[Enter] で再挑戦");
                 GUI.skin.label.alignment = prev;
             }
