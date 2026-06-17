@@ -138,16 +138,16 @@ EditMode **110本緑**（+18: PenaltyTally 6 / EnemyMatrix 拡張 9 / States pen
 
 ### 受け入れ基準
 
-- [ ] 突撃隊が `EnemyTypeSO` で定義され、**発射テンポ（短 `fireInterval`）と見た目（tint）の差が体感できる**（ADR-18）
-- [ ] 変装敵は青（味方色）＋ tell を持ち、`disguiseChance` で出現する
-- [ ] 変装敵を見逃すと退場せず攻撃を継続する／真の味方を撃つとペナルティになる
-- [ ] tell（見た目差）が実装され、注意すれば見分けられる（理不尽でない）
-- [ ] Wave3 構成（突撃隊＋変装）が通しで遊べる
-- [ ] ADR-3 トリガー成立時、SOイベントチャネル移行の判断結果を `docs/architecture.md` に記録（移行 or 見送りの理由）
+- [x] 突撃隊が `EnemyTypeSO` で定義され、**発射テンポ（短 `fireInterval`）と見た目（tint）の差が体感できる**（ADR-18）
+- [x] 変装敵は青（味方色）＋ tell を持ち、`disguiseChance` で出現する
+- [x] 変装敵を見逃すと退場せず攻撃を継続する／真の味方を撃つとペナルティになる
+- [x] tell（見た目差）が実装され、注意すれば見分けられる（理不尽でない）
+- [x] Wave3 構成（突撃隊＋変装）が通しで遊べる
+- [x] ADR-3 トリガー成立時、SOイベントチャネル移行の判断結果を `docs/architecture.md` に記録（移行 or 見送りの理由）
 
-### Status: 🟡 進行中 — マイルストーン C 完了（2026-06-17）
+### Status: 🟢 Phase 3 完了 — マイルストーン D 達成（2026-06-17）
 
-EditMode **120本緑**（マイルストーン C は Gameplay コード変更＝新規 EditMode テストなし）。
+EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入力=`IInputSource` 経由を維持。ADR-18/19 + ADR-3 移行判断を `architecture.md` に記録。
 | Unit | 成果物 | 検証 | 状態 |
 |---|---|---|---|
 | D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑** | ✅ |
@@ -156,6 +156,7 @@ EditMode **120本緑**（マイルストーン C は Gameplay コード変更＝
 | D4 | 突撃隊 体感検証（コード変更なし） | MCP Play: ShotsFired 比較で 2.5倍（0.8/2.0 理論値）・オレンジ色区別確認 | ✅ |
 | D5 | `Enemy.OnInitialized` フック ＋ `DisguisedEnemy.cs`（青＋tell・発射継続・退場しない） | MCP Play: 青キューブ＋暗色 tell マーカー視認・ShotsFired>0・AllyNPC の挙動回帰なし | ✅ |
 | D6 | `ChannelController` 変装プール＋`SpawnDisguised` ＋ `WaveManager` SpawnSelector 分岐 ＋ `GameManager` 注入 | MCP Play: 赤/オレンジ/青混在・変装退場しない・変装雪崩→PenaltyTotal delta=0 | ✅ |
+| D7 | `architecture.md` ADR-18/ADR-19/ADR-3 移行判断記録 ＋ Wave3 通し統合検証 | EditMode **120本緑**（回帰ゼロ）。MCP Play: ①赤/オレンジ/青＋tell マーカー混在スクショ確認 ②変装雪崩 PenaltyDelta=0（PASS）③真味方雪崩 PenaltyDelta=50（PASS）。Singleton/IInputSource 経路維持。ADR-3 見送り記録 | ✅ |
 
 ---
 

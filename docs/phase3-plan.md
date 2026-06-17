@@ -77,7 +77,7 @@
 
 各ユニットは **「完了条件」を満たした時点で次へ進む**。完了条件は EditMode 緑または MCP スクショ（`mcp-guide.md`）で客観確認する。コミットは **ユニット単位**（土台＝`main` から切った `phase3-assault-disguise`／MCP ツーリングは除外）。
 
-> **進捗（2026-06-17）— マイルストーン C 完了 ✅**　EditMode 全 **120 本緑**（マイルストーン C は Gameplay/Bootstrap コード変更＝新規 EditMode テストなし）。
+> **進捗（2026-06-17）— マイルストーン D 完了 ✅　Phase 3 全受け入れ基準充足**　EditMode 全 **120 本緑**（回帰ゼロ）。
 > | Unit | 成果物 | 検証 | 状態 |
 > |---|---|---|---|
 > | D1 | `SpawnSelector`（Core）＋ `SpawnKind` enum | SpawnSelectorTests **10本緑**（変装優先・hasXxx=false スキップ・Wave1/2 回帰） | ✅ |
@@ -86,9 +86,9 @@
 > | D4 | 突撃隊の体感検証（コード変更なし）| MCP Play: AssaultEnemy avg ShotsFired 61.8 / Basic 24.4 = **2.5倍** （fireInterval 0.8/2.0 の理論値と一致）・オレンジ色で区別確認 | ✅ |
 > | D5 | `Enemy.OnInitialized()` 仮想フック追加 ＋ `DisguisedEnemy : Enemy`（青＋tell マーカー・発射継続・退場しない） | MCP Play: 青キューブに暗色 tell マーカー（孤立スクショで確認）・ShotsFired=11〜21・IsAlive=True | ✅ |
 > | D6 | `ChannelController` 変装対応（`_disguisedPool`・`SpawnDisguised`）＋ `WaveManager` SpawnSelector 分岐 ＋ `GameManager` `createDisguised` 注入 | MCP Play: ①赤/オレンジ/青混在出現 ②disguised=0→ShotsFired継続（退場しない）③変装雪崩→PenaltyTotal **delta=0**（無ペナルティ）| ✅ |
+> | D7 | `architecture.md` ADR-18/ADR-19/ADR-3 移行判断記録 ＋ Wave3 通し統合検証 | EditMode **120本緑**。MCP Play: 赤/オレンジ/青＋tell マーカー混在スクショ確認・変装雪崩 PenaltyDelta=0 PASS・真味方雪崩 PenaltyDelta=50 PASS。Singleton=GameManager のみ・IInputSource 経路維持。ADR-3 見送り記録 | ✅ |
 >
-> 設計判断（確定）: **ADR-18** — 突撃隊は発射テンポ（短 `fireInterval`）＋見た目差（`tint`）のみで表現。`moveSpeed` による locomotion は静止行モデル（ADR-12/14）と相容れないため不採用。EditMode ベースラインは **120 本**（マイルストーン D 以降はこの上に積む）。
-> **ADR-19（暫定）** — 変装敵は `DisguisedEnemy : Enemy`。`Init` の `OnInitialized` フックで tell マーカー（暗色キューブ、親角の手前に配置）生成。`AllyNPC` とは別の `_disguisedPool` に返却。ペナルティ経路は `AllyNPC` チェックの外（自動無ペナルティ）。最終 ADR 文書化はマイルストーン D で行う。
+> 設計判断（確定）: **ADR-18** — 突撃隊は発射テンポ（短 `fireInterval`）＋見た目差（`tint`）のみで表現。**ADR-19** — 変装敵は `DisguisedEnemy : Enemy`。tell マーカー（暗色キューブ）で識別可能。ペナルティ経路は `AllyNPC` チェックの外（自動無ペナルティ）。**ADR-3 移行判断** — 3トリガーいずれも未成立（単一シーン・プレハブ未使用・GameManager 集約）→ 見送り。`architecture.md` に記録済み。EditMode ベースラインは **120 本**（Phase 3 完了確定値）。
 
 ### マイルストーン A — Core / 純ロジック（Unity 実行不要・EditMode で完結）
 
