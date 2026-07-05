@@ -192,6 +192,45 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 4 — 3D表現化（世界の3D透視化）　【⚪ 計画中】
+
+**ゴール**: 俯瞰の平面マップ表現（山＝手続き Quad・正射影・全obj z≈0）を、造形済み Terrain（`kakigori-3d-t` の `New Terrain 3.asset`）を用いた **3D 透視表現** へ置き換える。ゲームロジック（Core・雪崩・生成）は不変のまま「3D の雪山に隊列が並ぶ」見た目にする。**アクターはプリミティブ継続（案Y）**。詳細計画は `docs/phase4(3D).md`、設計判断は **ADR-21**。
+
+### In scope
+
+- Terrain 移植（山）、透視カメラ、Directional Light ＋ lit Terrain マテリアル、雪テクスチャ（新規・簡易）、`ChannelController.PositionFor`/`DirectionFor` の **XZ＋高さサンプル**対応（高さサンプラを `GameManager` が注入）、敵の**入場アニメ**（Option A・既存 `SetTarget` lerp 流用）、アクターは Unlit プリミティブ継続。
+
+### Out of scope（やらない）
+
+- 敵/ボス/弾/砦の**3Dモデル制作**、雪崩/粉雪の**本格 VFX**、サウンド、移植元の土色 ADG レイヤー流用（雪化のため不使用）、バランス調整、`Projectile` の放物線化（直進のまま／将来の任意拡張）。
+
+### 受け入れ基準
+
+- [ ] **EditMode 全120本緑を維持**（Core 無改修・回帰ゼロの証明）
+- [ ] MCP `screenshot-game-view` で **Terrain 3 の雪山が透視表示**され、光と影で立体に見える
+- [ ] 敵が **4方向の麓から斜面上に**（浮かず沈まず）湧き、隊列を組む
+- [ ] 雪崩入力で**先頭行が消える**挙動が斜面上でも従来どおり（Core 不変の実証）
+- [ ] **Option A**：敵が麓側から隊列位置へ歩いて接近する
+- [ ] 弾着弾 → 砦HP減、スコア、Result 等、**既存 Wave1 通し**が 3D 表示下でも成立
+- [ ] **物理不使用を維持**（コライダー不使用・高さは `TerrainData.GetInterpolatedHeight`）
+- [ ] Singleton は `GameManager` のみ・入力は `IInputSource` 経由を維持（配線変更のみ）
+- [ ] 変更を `docs/architecture.md` **ADR-21** に記録（着手時に Proposed → Accepted 化）
+
+### Status: 🟡 マイルストーン A 完了（2026-07-06）— 世界の器（Terrain＋カメラ＋ライト）
+
+`docs/phase4(3D).md` 参照。EditMode **120本緑**（Core 無改修・回帰ゼロ）。ブランチ `phase4-3d-presentation`。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| （前提）| URP **2D→3D レンダラ切替**：3d-t の `PC_RPAsset`/`PC_Renderer`/`SampleSceneProfile` を `Assets/Settings/` に流用し既定パイプラインを切替（ADR-21 着手メモ） | `currentRenderPipeline=PC_RPAsset`・`renderer[0]=UniversalRendererData` を確認 | ✅ |
+| U1 | `New Terrain 3.asset` 移植（`Assets/Terrain/`）＋ `size (120,160,120)`＋山頂を原点＋雪 TerrainLayer(`SnowWhite.png`)＋`SnowTerrain.mat`(URP Terrain/Lit)＋`TerrainCollider` 除去（物理なし） | MCP screenshot：雪山が表示（`drawInstanced=false`/SSAO 無効でマゼンタ・暗沈を解消） | ✅ |
+| U2 | Main Camera を透視＋俯角、Directional Light 追加、環境光（雪の反射）設定 | MCP screenshot：**光と影で立体の 3D 雪山**を確認。EditMode 120本緑 | ✅ |
+
+**把握フェーズの補正**: 移植元の再利用資産は Terrain だけでなく **URP 3D パイプライン一式**も流用（demo は 2D Renderer だった）。`New Terrain 3` は「広い平面の一角に造形された compact な山」で、平地に見えたのは誤読（描画で山を確認）。詳細は ADR-21 着手メモ。
+
+**残（マイルストーン B〜）**: `GameManager.BuildMountain` の手続き Quad 撤去、`PositionFor`/`DirectionFor` の XZ＋高さサンプル化（高さサンプラ注入）、敵の斜面湧き・入場、Wave1 通し、`size` 最終スケール確定。
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン
