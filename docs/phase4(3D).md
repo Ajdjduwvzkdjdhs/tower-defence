@@ -113,3 +113,11 @@ Aim インジケータの斜面対応（谷ハイライトを XZ／斜面へ）�
 - **Terrain**: `New Terrain 3` は「広い平面の隅に造形された compact な山」（当初フラットと誤読 → 描画で山を確認）。`size` を **(120,160,120)** に縮小、山頂を原点に配置。雪は白 TerrainLayer＋URP Terrain/Lit。周囲平面は麓の雪原として残置。
 - **描画 gotcha**: `Terrain.drawInstanced=false`（instanced バリアント未コンパイルでマゼンタ化を回避）、PC_Renderer 同梱の SSAO 無効化、環境光強め。
 - **U3/U4 への申し送り**: 5 章の「Terrain 実サイズ／向き」は size=(120,160,120)・山頂原点で暫定確定。高さサンプラ (u,v) 変換は size と terrain 原点（山頂を原点に置いた分のオフセット）を突き合わせる。`GameManager.BuildMountain` の Quad はマイルストーン B で撤去。
+
+## 7. 着手メモ（マイルストーン B 完了・2026-07-06）
+
+- **U3**: `GameManager.HeightAt(x,z)=_terrain.SampleHeight` を `ChannelController.Configure` に注入（`Func<float,float,float>`・物理なし）。`_terrain` は `[SerializeField]`（シーン Terrain(Snow)）。`BuildMountain` Quad 撤去、砦を山頂（HeightAt(0,0)≈5.4）へ。
+- **U4**: `DirectionFor`（N=+z/W=-x/S=-z/E=+x）・`_perpDir=(z,0,-x)`・`PositionFor` に Y=高さサンプル。Core・雪崩・生成・EditMode（120本）は無改修。
+- **スケール確定**: size=(120,…) では山 footprint 半径≈2 でプレイフィールド（2.7〜4.35）が平地に落ちた → 実測して **size=(316.8,160.4,316.8)**（footprint 半径≈7）へ拡大。斜面高さ r=2.7→2.28 / 4.35→0.88、山頂 5.4。5 章「Terrain 実サイズ」はこれで確定。
+- **検証（MCP Play）**: 4谷×9体＝全36体が斜面上（y=1.03〜4.24）、砦=山頂、`ApplyAvalanche` で先頭行 killed=3・rows 3→2。弾着弾で砦HP減も確認。
+- **C/D への申し送り**: Aim インジケータは XY 前提のままで斜面と不整合（U6 で XZ／斜面対応）。カメラは暫定（山頂俯瞰）。入場アニメ（Option A）は U5。

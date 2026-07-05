@@ -216,7 +216,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 - [ ] Singleton は `GameManager` のみ・入力は `IInputSource` 経由を維持（配線変更のみ）
 - [ ] 変更を `docs/architecture.md` **ADR-21** に記録（着手時に Proposed → Accepted 化）
 
-### Status: 🟡 マイルストーン A 完了（2026-07-06）— 世界の器（Terrain＋カメラ＋ライト）
+### Status: 🟡 マイルストーン A・B 完了（2026-07-06）— 世界の器＋空間の核（斜面配置）
 
 `docs/phase4(3D).md` 参照。EditMode **120本緑**（Core 無改修・回帰ゼロ）。ブランチ `phase4-3d-presentation`。
 | Unit | 成果物 | 検証 | 状態 |
@@ -224,10 +224,12 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 | （前提）| URP **2D→3D レンダラ切替**：3d-t の `PC_RPAsset`/`PC_Renderer`/`SampleSceneProfile` を `Assets/Settings/` に流用し既定パイプラインを切替（ADR-21 着手メモ） | `currentRenderPipeline=PC_RPAsset`・`renderer[0]=UniversalRendererData` を確認 | ✅ |
 | U1 | `New Terrain 3.asset` 移植（`Assets/Terrain/`）＋ `size (120,160,120)`＋山頂を原点＋雪 TerrainLayer(`SnowWhite.png`)＋`SnowTerrain.mat`(URP Terrain/Lit)＋`TerrainCollider` 除去（物理なし） | MCP screenshot：雪山が表示（`drawInstanced=false`/SSAO 無効でマゼンタ・暗沈を解消） | ✅ |
 | U2 | Main Camera を透視＋俯角、Directional Light 追加、環境光（雪の反射）設定 | MCP screenshot：**光と影で立体の 3D 雪山**を確認。EditMode 120本緑 | ✅ |
+| U3 | `GameManager.HeightAt`（`Terrain.SampleHeight`・物理なし）＋ `ChannelController.Configure` に高さサンプラ注入。`BuildMountain` Quad 撤去、砦を山頂へ | サンプル値＝Terrain 高さ一致（山頂 5.4）を script で確認 | ✅ |
+| U4 | `DirectionFor`/`_perpDir`/`PositionFor` を XZ＋高さへ（Core・雪崩・生成は無改修）。`size` を (316.8,160.4,316.8) にフィット | MCP Play：全36体が斜面上（y=1.03〜4.24）／`ApplyAvalanche` で先頭行 killed=3・rows 3→2／EditMode 120本緑 | ✅ |
 
-**把握フェーズの補正**: 移植元の再利用資産は Terrain だけでなく **URP 3D パイプライン一式**も流用（demo は 2D Renderer だった）。`New Terrain 3` は「広い平面の一角に造形された compact な山」で、平地に見えたのは誤読（描画で山を確認）。詳細は ADR-21 着手メモ。
+**把握フェーズの補正**: 移植元の再利用資産は Terrain だけでなく **URP 3D パイプライン一式**も流用（demo は 2D Renderer だった）。`New Terrain 3` は「広い平面の一角に造形された compact な山」で、平地に見えたのは誤読（描画で山を確認）。山の footprint が小さいため `TerrainData.size` を (316.8,160.4,316.8) に拡大しプレイフィールドを斜面へ乗せた。詳細は ADR-21 着手メモ。
 
-**残（マイルストーン B〜）**: `GameManager.BuildMountain` の手続き Quad 撤去、`PositionFor`/`DirectionFor` の XZ＋高さサンプル化（高さサンプラ注入）、敵の斜面湧き・入場、Wave1 通し、`size` 最終スケール確定。
+**残（マイルストーン C/D）**: 敵の入場アニメ（Option A・U5）、Aim インジケータの斜面対応・カメラ/雪マテリアル仕上げ（U6）、Wave1〜3 通し、ADR-21 Accepted 化。
 
 ---
 

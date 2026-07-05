@@ -221,4 +221,11 @@
 - **雪マテリアル**: 白 TerrainLayer（`SnowWhite.png`）＋ `Universal Render Pipeline/Terrain/Lit` マテリアル（`SnowTerrain.mat`）。移植元の土色 ADG レイヤーは不使用（ADR-21 どおり）。
 - **物理不使用**: `Terrain.CreateTerrainGameObject` 生成後に `TerrainCollider` を除去（高さは将来 `GetInterpolatedHeight` サンプル＝マイルストーン B、ADR-11 と整合）。
 - **描画 gotcha（2 点）**: ① `Terrain.drawInstanced=true` は instanced 用シェーダバリアント未コンパイルで**マゼンタ化** → `false`。② PC_Renderer 同梱の **SSAO を無効化**（雪面が暗く沈むため）。環境光を強めに（雪の反射光）設定して雪山が白く立体に見えることを screenshot で確認。
-- **残タスク（マイルストーン B 以降）**: `GameManager.BuildMountain` の手続き Quad はまだ残置（Play 時のみ生成・edit モード検証には無影響）。Terrain 高さサンプラ注入と併せてマイルストーン B で撤去。`TerrainData.size` の最終スケール（プレイフィールド radius への写像）もマイルストーン B で確定。
+### 着手メモ（マイルストーン B 完了・2026-07-06）— 空間の核（斜面配置）
+
+- **空間基底 XY→XZ**: `ChannelController.DirectionFor` を XZ（N=+z / W=-x / S=-z / E=+x）、`_perpDir=(outward.z,0,-outward.x)`、`PositionFor` は along/across を XZ で置き **Y=高さサンプラ** で斜面に乗せる。`RepositionAll`/`SetTarget`/`MoveTowards`（ADR-20）・雪崩・生成は**無改修**で 3D 化。
+- **高さサンプラ注入（U3）**: `GameManager.HeightAt(x,z) = _terrain.transform.position.y + _terrain.SampleHeight((x,0,z))`（`SampleHeight`＝`GetInterpolatedHeight` の world 版・コライダー/Raycast 不使用＝物理なし維持）。`ChannelController.Configure(..., Func<float,float,float> heightAt)` に注入（ADR-5 の `Func<T>` 注入に倣う）。`_terrain` は `GameManager` の `[SerializeField]`（シーンの Terrain(Snow) を割当）。未割当なら y=0 フォールバック。
+- **砦を山頂へ**: `BuildFort` で `position=(0, HeightAt(0,0), 0)`（＝山頂 y≈5.4）。`BuildMountain` の手続き Quad は撤去（山は Terrain）。
+- **スケール確定**: 当初 size=(120,160,120) では山の footprint 半径が約2ユニットしかなく、プレイフィールド（`_frontGap`2.7〜最奥4.35）が山を越えて平地（y≈0）に落ちた。footprint を実測（正規化半径≈0.022）し、**size=(316.8,160.4,316.8)**（footprint 半径≈7・山頂 y≈5.4）へ拡大、山頂を原点に配置（terrain pos≈(-16.1,0,-16.7)）。斜面高さ: r=2.7→2.28 / 3.5→1.55 / 4.35→0.88。ADR-14 同様「方針不変・数値のみ」。
+- **検証（MCP Play）**: ①4谷に敵9体ずつ→**全36体が斜面上**（y=1.03〜4.24・平地ゼロ）、砦=山頂(5.40) ②`ApplyAvalanche`（S谷）で **killed=3 / rows 3→2** ＝先頭行（山頂側）消去＋繰り上げが斜面上で成立（Core 無改修）③弾着弾で砦HP減（3D 下でも戦闘成立）。EditMode **120本緑**。
+- **残（マイルストーン C/D）**: 入場アニメ（Option A・U5）、Aim インジケータの斜面対応（現状 XY 前提で不整合・U6）、カメラ/雪マテリアル仕上げ、Wave1〜3 通し、アクター斜面向き。ADR-21 Accepted 化は U6。

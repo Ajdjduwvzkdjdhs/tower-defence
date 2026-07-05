@@ -25,6 +25,9 @@ namespace KakigoriTD.Bootstrap
         [Header("シリアル（実機ハンドル接続。未割り当てならキーボードのみで動作）")]
         [SerializeField] private SerialConfigSO _serialConfig;
 
+        [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
+        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
+
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
         [SerializeField] private float _iceTotal = 50f;
@@ -59,7 +62,7 @@ namespace KakigoriTD.Bootstrap
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
 
-            BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
+            // 山は Terrain（シーン配置・ADR-21）。手続き Quad は廃止。
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
             _penalty = new PenaltyTally();
@@ -150,12 +153,21 @@ namespace KakigoriTD.Bootstrap
             return new CompositeInputSource(keyboard, serial);
         }
 
+        // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
+        // Terrain 未割り当て時は 0（平面フォールバック）。
+        private float HeightAt(float x, float z)
+        {
+            if (_terrain == null) return 0f;
+            return _terrain.transform.position.y + _terrain.SampleHeight(new Vector3(x, 0f, z));
+        }
+
         private void BuildFort()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = "Fort";
             go.transform.SetParent(transform);
             go.transform.localScale = new Vector3(1.3f, 1.3f, 1f);
+            go.transform.position = new Vector3(0f, HeightAt(0f, 0f), 0f); // 山頂に据える（ADR-21）
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _fortMat;
             _fort = go.AddComponent<Fort>();
@@ -170,7 +182,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, HeightAt);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -282,78 +294,6 @@ namespace KakigoriTD.Bootstrap
             var m = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             m.SetColor("_BaseColor", c);
             return m;
-        }
-
-        // 山を俯瞰した背景。中央=頂上（砦）から外へ広がる「緑の同心円（弓道の的状）」、
-        // 一番外側の円より外は茶色い地面（＝麓）。敵はこの一番外側の円の外＝地面に湧く。
-        // 全オブジェクトより奥(z)に置く大きな板ポリゴンに、手続き生成したテクスチャを貼る。
-        private void BuildMountain()
-        {
-            var tex = GenerateMountainTexture(512);
-            var mat = MakeUnlit(Color.white);
-            mat.SetTexture("_BaseMap", tex);
-
-            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = "Mountain";
-            go.transform.SetParent(transform);
-            go.transform.position = new Vector3(0f, 0f, 3f); // 最奥
-            go.transform.localScale = new Vector3(20f, 12f, 1f); // 画面全体を覆う
-            DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        }
-
-        private static Texture2D GenerateMountainTexture(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            // 緑の山＝中央(頂上)から外へ向かう同心円バンド。一番外側の円(mountainR)より外は茶色い地面。
-            Color summit   = new Color(0.60f, 0.82f, 0.46f); // 頂上（明るい緑）
-            Color midSlope = new Color(0.38f, 0.64f, 0.32f); // 中腹
-            Color lowSlope = new Color(0.24f, 0.48f, 0.24f); // 麓側の山肌（濃い緑）
-            Color ground   = new Color(0.42f, 0.30f, 0.18f); // 地面（茶色）＝麓。敵はここに湧く
-            Color ringLine = new Color(0.15f, 0.32f, 0.17f); // 円の輪郭線（濃い緑）
-            const float worldW = 20f, worldH = 12f;
-            const float mountainR = 2.2f;  // 一番外側の円＝山の縁（これより外は地面）
-            const float edgeBlend = 0.16f; // 山→地面のなじませ幅
-            // 同心円のバンド境界（内側→外側）。ここに輪郭線を引いて「的」状に見せる。
-            float[] bands = { 0.85f, 1.55f, mountainR };
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float wx = ((x + 0.5f) / size - 0.5f) * worldW;
-                    float wy = ((y + 0.5f) / size - 0.5f) * worldH;
-                    float r = Mathf.Sqrt(wx * wx + wy * wy);
-
-                    Color c;
-                    if (r >= mountainR + edgeBlend)
-                    {
-                        c = ground; // 一番外側の円の外＝麓の地面
-                    }
-                    else
-                    {
-                        // バンドで山肌の緑を決める（同心円＝的の見た目）。
-                        Color mountain = r < bands[0] ? summit : (r < bands[1] ? midSlope : lowSlope);
-                        // 縁は地面へなじませる。
-                        if (r > mountainR - edgeBlend)
-                        {
-                            float t = Mathf.Clamp01((r - (mountainR - edgeBlend)) / (2f * edgeBlend));
-                            mountain = Color.Lerp(mountain, ground, t);
-                        }
-                        c = mountain;
-                        // バンド境界に円の輪郭線。
-                        for (int i = 0; i < bands.Length; i++)
-                        {
-                            if (Mathf.Abs(r - bands[i]) < 0.035f) { c = Color.Lerp(c, ringLine, 0.6f); break; }
-                        }
-                    }
-
-                    c.a = 1f;
-                    tex.SetPixel(x, y, c);
-                }
-            }
-            tex.Apply();
-            return tex;
         }
 
         // 加算合成の Unlit（照準レーン用）。暗い背景に「光る帯」として乗り、濁らず明るく見える。

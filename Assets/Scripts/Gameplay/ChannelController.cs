@@ -38,6 +38,7 @@ namespace KakigoriTD.Gameplay
         private Vector3 _center;
         private Vector3 _outwardDir;
         private Vector3 _perpDir;
+        private Func<float, float, float> _heightAt; // (x,z)→world Y（斜面サンプラ・ADR-21）
 
         /// <summary>谷ID（0:N / 1:W / 2:S / 3:E）。</summary>
         public int ChannelId { get; private set; }
@@ -65,14 +66,16 @@ namespace KakigoriTD.Gameplay
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
             Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
-            Func<SnowPuff> createPuff)
+            Func<SnowPuff> createPuff, Func<float, float, float> heightAt = null)
         {
             ChannelId = channelId;
             _center = center;
             _projectileFactory = projectileFactory;
             _fort = fort;
+            _heightAt = heightAt;
             _outwardDir = DirectionFor(channelId);
-            _perpDir = new Vector3(_outwardDir.y, -_outwardDir.x, 0f);
+            // XZ 平面での外向きに直交する水平ベクトル（ADR-21：空間基底を XY→XZ）
+            _perpDir = new Vector3(_outwardDir.z, 0f, -_outwardDir.x);
             _matrix = new EnemyMatrix<Enemy>(_rowWidth);
             _pool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
@@ -80,16 +83,16 @@ namespace KakigoriTD.Gameplay
             _puffPool = new ObjectPool<SnowPuff>(createPuff);
         }
 
-        /// <summary>0:N(+y) / 1:W(-x) / 2:S(-y) / 3:E(+x)。</summary>
+        /// <summary>放射状4方向（XZ 平面・ADR-21）。0:N(+z) / 1:W(-x) / 2:S(-z) / 3:E(+x)。</summary>
         public static Vector3 DirectionFor(int channelId)
         {
             switch (channelId)
             {
-                case 0: return Vector3.up;
-                case 1: return Vector3.left;
-                case 2: return Vector3.down;
-                case 3: return Vector3.right;
-                default: return Vector3.up;
+                case 0: return new Vector3(0f, 0f, 1f);  // N = +z
+                case 1: return new Vector3(-1f, 0f, 0f); // W = -x
+                case 2: return new Vector3(0f, 0f, -1f); // S = -z
+                case 3: return new Vector3(1f, 0f, 0f);  // E = +x
+                default: return new Vector3(0f, 0f, 1f);
             }
         }
 
@@ -239,7 +242,9 @@ namespace KakigoriTD.Gameplay
         {
             float along = _frontGap + row * _rowSpacing;
             float across = (slot - (_rowWidth - 1) * 0.5f) * _slotSpacing;
-            return _center + _outwardDir * along + _perpDir * across;
+            Vector3 p = _center + _outwardDir * along + _perpDir * across; // XZ 平面（y=0）
+            p.y = _heightAt != null ? _heightAt(p.x, p.z) : 0f;            // 斜面に乗せる（ADR-21）
+            return p;
         }
     }
 }
