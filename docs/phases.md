@@ -192,6 +192,49 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 4 — 3D表現化（世界の3D透視化）　【🟢 完了】
+
+**ゴール**: 俯瞰の平面マップ表現（山＝手続き Quad・正射影・全obj z≈0）を、造形済み Terrain（`kakigori-3d-t` の `New Terrain 3.asset`）を用いた **3D 透視表現** へ置き換える。ゲームロジック（Core・雪崩・生成）は不変のまま「3D の雪山に隊列が並ぶ」見た目にする。**アクターはプリミティブ継続（案Y）**。詳細計画は `docs/phase4(3D).md`、設計判断は **ADR-21**。
+
+### In scope
+
+- Terrain 移植（山）、透視カメラ、Directional Light ＋ lit Terrain マテリアル、雪テクスチャ（新規・簡易）、`ChannelController.PositionFor`/`DirectionFor` の **XZ＋高さサンプル**対応（高さサンプラを `GameManager` が注入）、敵の**入場アニメ**（Option A・既存 `SetTarget` lerp 流用）、アクターは Unlit プリミティブ継続。
+
+### Out of scope（やらない）
+
+- 敵/ボス/弾/砦の**3Dモデル制作**、雪崩/粉雪の**本格 VFX**、サウンド、移植元の土色 ADG レイヤー流用（雪化のため不使用）、バランス調整、`Projectile` の放物線化（直進のまま／将来の任意拡張）。
+
+### 受け入れ基準
+
+- [x] **EditMode 全120本緑を維持**（Core 無改修・回帰ゼロの証明）
+- [x] MCP `screenshot-game-view` で **Terrain 3 の雪山が透視表示**され、光と影で立体に見える
+- [x] 敵が **4方向の麓から斜面上に**（浮かず沈まず）湧き、隊列を組む
+- [x] 雪崩入力で**先頭行が消える**挙動が斜面上でも従来どおり（Core 不変の実証）
+- [x] **Option A**：敵が麓側から隊列位置へ歩いて接近する
+- [x] 弾着弾 → 砦HP減、スコア、Result 等、**既存 Wave1 通し**が 3D 表示下でも成立
+- [x] **物理不使用を維持**（コライダー不使用・高さは `TerrainData.GetInterpolatedHeight`）
+- [x] Singleton は `GameManager` のみ・入力は `IInputSource` 経由を維持（配線変更のみ）
+- [x] 変更を `docs/architecture.md` **ADR-21** に記録（Proposed → **Accepted** 化）
+
+### Status: 🟢 Phase 4 完了（2026-07-06）— マイルストーン A・B・C・D 達成。受け入れ基準すべて充足。ADR-21 Accepted。
+
+`docs/phase4(3D).md` 参照。EditMode **120本緑**（Core 無改修・回帰ゼロ）。ブランチ `phase4-3d-presentation`。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| （前提）| URP **2D→3D レンダラ切替**：3d-t の `PC_RPAsset`/`PC_Renderer`/`SampleSceneProfile` を `Assets/Settings/` に流用し既定パイプラインを切替（ADR-21 着手メモ） | `currentRenderPipeline=PC_RPAsset`・`renderer[0]=UniversalRendererData` を確認 | ✅ |
+| U1 | `New Terrain 3.asset` 移植（`Assets/Terrain/`）＋ `size (120,160,120)`＋山頂を原点＋雪 TerrainLayer(`SnowWhite.png`)＋`SnowTerrain.mat`(URP Terrain/Lit)＋`TerrainCollider` 除去（物理なし） | MCP screenshot：雪山が表示（`drawInstanced=false`/SSAO 無効でマゼンタ・暗沈を解消） | ✅ |
+| U2 | Main Camera を透視＋俯角、Directional Light 追加、環境光（雪の反射）設定 | MCP screenshot：**光と影で立体の 3D 雪山**を確認。EditMode 120本緑 | ✅ |
+| U3 | `GameManager.HeightAt`（`Terrain.SampleHeight`・物理なし）＋ `ChannelController.Configure` に高さサンプラ注入。`BuildMountain` Quad 撤去、砦を山頂へ | サンプル値＝Terrain 高さ一致（山頂 5.4）を script で確認 | ✅ |
+| U4 | `DirectionFor`/`_perpDir`/`PositionFor` を XZ＋高さへ（Core・雪崩・生成は無改修）。`size` を (316.8,160.4,316.8) にフィット | MCP Play：全36体が斜面上（y=1.03〜4.24）／`ApplyAvalanche` で先頭行 killed=3・rows 3→2／EditMode 120本緑 | ✅ |
+| U5 | 敵の入場（Option A）：`ChannelController._entranceGap`＋`RepositionAll` 新規湧き分岐（入場位置へ snap→スロットへ lerp）＋`PositionFor` に along オフセット引数。3 spawn 経路（Enemy/Ally/Disguised）に統一適用。gameplay locomotion ではない（ADR-18 整合） | MCP Play：北谷1体が湧き直後 alongOutward=4.20（麓側・y=0.83）→ スロット 2.70（y=2.55）へ歩いて整列／南谷6体 `ApplyAvalanche` killed=3・rows 2→1（雪崩/繰り上がり回帰なし）／EditMode 120本緑 | ✅ |
+| U6 | Aim インジケータの斜面対応（`GameManager.UpdateAimIndicator` を XZ＋高さサンプル方式に・`LookRotation(法線,laneDir)`・法線へ0.35浮かせ・`_Cull=Off`）＋Wave 通し＋ADR-21 Accepted 化 | MCP Play（ConfirmPressed 注入で通し駆動）：Title→Wave→4谷斜面湧き＋発射→弾着弾で砦HP 1000→0→Lull→次Wave→Result(FORT DESTROYED・スコア0)→retry。Aim レーンが S 斜面に沿って表示。物理不使用/Singleton/IInputSource 維持。EditMode 120本緑 | ✅ |
+
+**把握フェーズの補正**: 移植元の再利用資産は Terrain だけでなく **URP 3D パイプライン一式**も流用（demo は 2D Renderer だった）。`New Terrain 3` は「広い平面の一角に造形された compact な山」で、平地に見えたのは誤読（描画で山を確認）。山の footprint が小さいため `TerrainData.size` を (316.8,160.4,316.8) に拡大しプレイフィールドを斜面へ乗せた。詳細は ADR-21 着手メモ。
+
+**スコープ外（意図的に未実施・後続フェーズ）**: アクターの3Dモデル化・本格 VFX・サウンド・弾の放物線化（Phase 4 Out of scope）。アクターの斜面向き（任意）も見送り＝プリミティブが斜面バンプに一部埋もれる箇所があるが視認可能で、モデル化フェーズで解消する範疇。雪マテリアルは白 lit のまま（立体視認は十分）。
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン

@@ -19,6 +19,8 @@
 | 巻き込みペナルティ | Core PenaltyTally + IGameContext.PenaltyTotal → Scoring.Compute | ADR-17 |
 | 突撃隊 | EnemyTypeSO 差のみ（短 fireInterval + tint）。locomotion 不採用 | ADR-18 |
 | 変装敵 | DisguisedEnemy : Enemy（専用行・tell マーカー・発射継続・退場しない・無ペナ撃破） | ADR-19 |
+| 撃破プレゼン | 繰り上がりを速度ベース lerp＋撃破位置に雪しぶき puff（見せ方のみ・純ロジック不変） | ADR-20 |
+| 3D表現 | URP 2D→3D レンダラ切替＋Terrain移植＋透視カメラ＋斜面 PositionFor＋lit（描画のみ・Core 不変） | ADR-21 |
 
 ---
 
@@ -187,3 +189,57 @@
   - `CompositeInputSource`（純 C#: `IInputSource`）: `ActiveChannel`/`ConfirmPressed`=キーボード、`IsShaving`=キーボード OR シリアル。`GameManager` が `Composite(keyboard, serial)` を配線し、`SerialConfigSO` 未割り当て時はシリアルを生成せずキーボードのみ（実機なしでも全操作可能）。
   - **Player Setting 変更**: `System.IO.Ports` は .NET Standard では提供されないため、Standalone の API Compatibility Level を **.NET Framework（`NET_Unity_4_8`＝3）** に変更（`apiCompatibilityLevelPerPlatform: {Standalone: 3}`）。既定の `.NET Standard 2.1`（6）では `System.IO.Ports` が `CS0234` になる（Ardity PDF FAQ②・Qiita 記事の前提と同じ）。
 - **結果**: EditMode 累計 **92 本緑**（+`SerialInputProtocol` 11 / +`CompositeInputSource` 5）。Unity-MCP 検証: 未接続ポートで警告のみ・固まらない／`_input` が `CompositeInputSource` で `AvalancheController` に同一注入／Play でキーボード→Composite の `IsShaving` OR を実証／既存キーボード操作は回帰なし。ADR-6/10 を覆さず拡張。実機 XY センサのシリアル化・送信コマンド体系の確定は将来フェーズ。
+
+## ADR-20: 撃破プレゼンテーション — 繰り上がり前進を速度ベース lerp 化＋撃破位置に雪しぶき puff（見せ方のみ・純ロジック不変）— Accepted（Extra 1）
+
+- **背景**: 複数行のとき、雪崩で先頭行（砦寄り）を消すと `ChannelController.RepositionAll` が生き残りを内側へ**瞬間移動**させ、「手前が即埋まって外周が消えた」錯覚が出る（Extra 1 課題②）。spec の「先頭行が消える → 後続が繰り上がる」手触りを、純ロジック（`EnemyMatrix`/`AvalancheClock`）とそのテストを変えずに、**見せ方だけ**で改善したい。
+- **決定**:
+  - **繰り上がり前進を速度ベース lerp 化**: `Enemy` に目標位置 `_targetPos` と `SetTarget(pos, snap, speed)` / 共通 `MoveTowardTarget()`（`Vector3.MoveTowards`）を追加し、`Update` 冒頭（発射処理の前）で目標へ寄せる。`AllyNPC.Update` は `base.Update` を呼ばないため冒頭で明示呼出（`DisguisedEnemy` は `Enemy.Update` 継承で自動）。
+  - **前進と湧きの分離**: `RepositionAll` は `SetTarget(PositionFor(...), snap:false)`（lerp）、新規湧き・初期配置（`SpawnEnemy`/`SpawnAlly`/`SpawnDisguised` の当該個体）は `snap:true`（プール由来の砦寄り初期 transform からの滑り込み防止）。前進速度は `ChannelController._advanceSpeed`（`[SerializeField]`・ADR-1）。
+  - **撃破位置に雪しぶき puff**: 新規 `SnowPuff`（Gameplay・プール）。`ApplyAvalanche` が Kill/Release の**前**に位置を取得し `_puffPool.Get().Play(pos, Release)`（0.25s 拡大＋フェード → `onDone` でプール返却）。`GameManager.CreateSnowPuff`（加算/半透明 Unlit の白球）を `ChannelController.Configure` に `Func<SnowPuff> createPuff` として注入（ADR-4/5）。
+- **不変（覆さない）**: `EnemyMatrix`/`AvalancheClock` の純ロジックと EditMode テストは不変（**見せ方のみの変更**）。ADR-4（プール）／ADR-8（純ロジック分離）／ADR-11 を踏襲。ADR-12/14（座標＝行インデックス基準・雪崩で繰り上げ）を覆さず、その「繰り上げ」の**描画**を lerp 化するもの。
+- **結果**: EditMode **120本緑**（回帰なし）。Unity-MCP Play 検証: `ApplyAvalanche` 直後に生き残りが back 座標 → front 座標へ lerp 前進（新規湧きはスナップ）、`killed=3` で `SnowPuff` 3体が撃破座標（`(-0.70,2.70)`/`(0.70,2.70)`/`(0.00,2.70)`）に一致・プール返却で `Instantiate/Destroy` なし。Extra 1 マイルストーン B（コミット `f54a298`）。
+
+## ADR-21: 表現層を3D透視化する（描画のみ・Core の座標非依存性を利用／ADR-13「美術は後続」を具体化）— Accepted（Phase 4）
+
+- **背景**: 見栄え向上のため、俯瞰の平面マップ表現（山＝手続き生成 Quad、全 GameObject を z≈0 に置く正射影）を、造形済み Terrain（別プロジェクト `kakigori-3d-t` の `New Terrain 3.asset`）を用いた **3D 透視表現** に置き換えたい。移植元 `kakigori-3d-t` に再利用可能な資産は実質この Terrain 1 つのみ（アクターは全て Unity プリミティブ＝独自3Dモデル/VFX/雪テクスチャは存在しない）。Core（`EnemyMatrix`/各種 Clock/State/Pool/`Scoring`）と雪崩の行消去・生成パイプラインは不変に保つ（ADR-8/9/11/12/14 を覆さない）。アクターの見た目はプリミティブ継続（案Y／モデル制作は後続）。
+- **決定**:
+  - **空間基底を XY 平面 → XZ 平面へ**。`ChannelController.DirectionFor` と `_perpDir` を XZ（N=+z / S=-z / E=+x / W=-x）に変更。`PositionFor` は従来の放射状 `along`/`across` を XZ で算出し、**高さ Y は Terrain からサンプル**する。Terrain 依存を Gameplay に持ち込まないため、`GameManager` が高さサンプラ `Func<float,float,float>`（(x,z)→y、内部で `TerrainData.GetInterpolatedHeight`）を `ChannelController.Configure` に注入する（ADR-5 の Composition Root・既存の `Func<T>` 注入に倣う）。**コライダー不使用＝物理なしを維持**（ADR-11 の非物理判定と整合）。→ 行列・雪崩・移動（`SetTarget`/`MoveTowards`）・弾（`Projectile.MoveTowards`）は無改修で 3D 化する。
+  - **山 = Terrain 移植**。`GameManager.BuildMountain` の手続き Quad を廃し、`New Terrain 3.asset` から Terrain を配置。移植元の土色 ADG レイヤーは使わず、**雪用の簡易マテリアル/レイヤーを新規**に当てる（雪テクスチャは Phase 4 の新規制作物）。
+  - **カメラを透視化**。MainScene のカメラを俯瞰正射影 → 山を斜め上から見る透視に再設定。
+  - **ライティング導入**。Directional Light ＋ Terrain は lit マテリアル。**アクターは Unlit プリミティブのまま可**（案Y・視認性優先）。「2D の Unlit / ライト無し」は平面マップ限定の選択で、3D 透視化に伴い補う。
+  - **敵の入場（Option A）**: `SpawnEnemy` で敵を隊列スロットより麓側（下り斜面）に置き、`PositionFor(backRow,slot)` へ `snap:false` で歩かせる。既存の `_advanceSpeed`/`SetTarget` lerp を流用する **cosmetic な reposition** であり、gameplay の locomotion（行の外を自由移動）ではない＝**ADR-18（locomotion 不採用）と整合**する。
+- **不変（覆さない）**: Core（`EnemyMatrix`/Clock/State/Pool/`Scoring`）・`IGameContext`・入力（`IInputSource`）・`Projectile` のロジック・EditMode テスト・雪崩の先頭行消去。物理不使用（コライダーなし・高さは API サンプル）。ADR-8/9/11/12/14/18 を踏襲し、ADR-13 の「見た目は後続」を具体化する。
+- **結果（想定）**: 縫い目 3 点（`PositionFor`＋カメラ＋ライティング）＋ Terrain 移植のみで 3D 雪山を実現。受け入れ基準は `phases.md` Phase 4／詳細計画は `docs/phase4(3D).md`。着手時に Unity-MCP 視覚検証で確認し **Accepted** 化する。
+
+### 着手メモ（マイルストーン A 完了・2026-07-06）— 前提補正と縫い目追加
+
+把握フェーズの想定と実機で食い違った点を記録する（ADR-21 本文は Proposed のまま。Accepted 化は空間の核＝`PositionFor` の XZ＋高さサンプル実装後＝マイルストーン D）。
+
+- **縫い目は 3 点 → 4 点（描画パイプラインを追加）**: demo は URP **2D Renderer**（`Renderer2D` ＋ Global Light 2D ＋ 正射影）構成で、この renderer では Directional Light が 3D ジオメトリを照らさない。Phase 4 の「透視＋ライティング」には **3D Forward レンダラ**が前提。移植元 `kakigori-3d-t` の URP 3D 設定（`PC_RPAsset`＝`UniversalRenderPipelineAsset` ＋ `PC_Renderer`＝`UniversalRendererData` ＋ `SampleSceneProfile`＝VolumeProfile）を `Assets/Settings/` に流用し、`GraphicsSettings.defaultRenderPipeline` と全 Quality レベルの `customRenderPipeline` を PC_RPAsset へ切替。UI（IMGUI）・EditMode は影響なし。→ **ADR-21 の「再利用可能資産は Terrain 1 つのみ」を補正**：Terrain に加え **URP 3D パイプライン一式**も 3d-t から流用する。
+- **Terrain の実態**: `New Terrain 3.asset` は「広い平面キャンバスの一角（footprint 約 13%・隅寄り）に造形された compact な山」。正規化高さ max≈0.034・mean≈0 という数値は“平坦”ではなく“広い平地＋小さい山”を意味する（当初フラットと誤読 → 描画で山を確認）。`TerrainData.size` を (1000,600,1000) → **(120,160,120)** に縮小し、**山頂を world 原点**（＝砦／頂上）に合わせて配置。周囲の平面はそのまま「麓の雪原」として残す。
+- **雪マテリアル**: 白 TerrainLayer（`SnowWhite.png`）＋ `Universal Render Pipeline/Terrain/Lit` マテリアル（`SnowTerrain.mat`）。移植元の土色 ADG レイヤーは不使用（ADR-21 どおり）。
+- **物理不使用**: `Terrain.CreateTerrainGameObject` 生成後に `TerrainCollider` を除去（高さは将来 `GetInterpolatedHeight` サンプル＝マイルストーン B、ADR-11 と整合）。
+- **描画 gotcha（2 点）**: ① `Terrain.drawInstanced=true` は instanced 用シェーダバリアント未コンパイルで**マゼンタ化** → `false`。② PC_Renderer 同梱の **SSAO を無効化**（雪面が暗く沈むため）。環境光を強めに（雪の反射光）設定して雪山が白く立体に見えることを screenshot で確認。
+### 着手メモ（マイルストーン B 完了・2026-07-06）— 空間の核（斜面配置）
+
+- **空間基底 XY→XZ**: `ChannelController.DirectionFor` を XZ（N=+z / W=-x / S=-z / E=+x）、`_perpDir=(outward.z,0,-outward.x)`、`PositionFor` は along/across を XZ で置き **Y=高さサンプラ** で斜面に乗せる。`RepositionAll`/`SetTarget`/`MoveTowards`（ADR-20）・雪崩・生成は**無改修**で 3D 化。
+- **高さサンプラ注入（U3）**: `GameManager.HeightAt(x,z) = _terrain.transform.position.y + _terrain.SampleHeight((x,0,z))`（`SampleHeight`＝`GetInterpolatedHeight` の world 版・コライダー/Raycast 不使用＝物理なし維持）。`ChannelController.Configure(..., Func<float,float,float> heightAt)` に注入（ADR-5 の `Func<T>` 注入に倣う）。`_terrain` は `GameManager` の `[SerializeField]`（シーンの Terrain(Snow) を割当）。未割当なら y=0 フォールバック。
+- **砦を山頂へ**: `BuildFort` で `position=(0, HeightAt(0,0), 0)`（＝山頂 y≈5.4）。`BuildMountain` の手続き Quad は撤去（山は Terrain）。
+- **スケール確定**: 当初 size=(120,160,120) では山の footprint 半径が約2ユニットしかなく、プレイフィールド（`_frontGap`2.7〜最奥4.35）が山を越えて平地（y≈0）に落ちた。footprint を実測（正規化半径≈0.022）し、**size=(316.8,160.4,316.8)**（footprint 半径≈7・山頂 y≈5.4）へ拡大、山頂を原点に配置（terrain pos≈(-16.1,0,-16.7)）。斜面高さ: r=2.7→2.28 / 3.5→1.55 / 4.35→0.88。ADR-14 同様「方針不変・数値のみ」。
+- **検証（MCP Play）**: ①4谷に敵9体ずつ→**全36体が斜面上**（y=1.03〜4.24・平地ゼロ）、砦=山頂(5.40) ②`ApplyAvalanche`（S谷）で **killed=3 / rows 3→2** ＝先頭行（山頂側）消去＋繰り上げが斜面上で成立（Core 無改修）③弾着弾で砦HP減（3D 下でも戦闘成立）。EditMode **120本緑**。
+- **残（マイルストーン C/D）**: 入場アニメ（Option A・U5）、Aim インジケータの斜面対応（現状 XY 前提で不整合・U6）、カメラ/雪マテリアル仕上げ、Wave1〜3 通し、アクター斜面向き。ADR-21 Accepted 化は U6。
+
+### 着手メモ（マイルストーン C 完了・2026-07-06）— 敵の入場（Option A）
+
+- **U5**: `ChannelController` に `_entranceGap`（=1.5）を追加。`RepositionAll(justSpawned)` の新規湧き分岐を「入場位置（スロットより麓側＝下り斜面外側）へ `snap:true` → スロットへ `snap:false`」の2段に変更し、既存 `SetTarget`/`_advanceSpeed` lerp（ADR-20）で麓側から歩かせる。`PositionFor(row, slot, extraAlong=0)` に along オフセット引数を追加。
+- **1 箇所で統一**: 3 spawn 経路（`SpawnEnemy`/`SpawnAlly`/`SpawnDisguised`）はすべて `RepositionAll(justSpawned)` を通るため basic/味方/変装すべてに入場が適用される。cosmetic reposition であり gameplay locomotion ではない＝**ADR-18 と整合**。Core・雪崩・生成・`Enemy.Update` は無改修。
+- **検証（MCP Play）**: 北谷1体が湧き直後 `alongOutward=4.20`（=slot 2.7＋entranceGap 1.5・麓側 y=0.83）→ 数百ms 後 `alongOutward=2.70`（=slot・y=2.55＝斜面を登って整列）を実測。南谷6体 `ApplyAvalanche` killed=3・rows 2→1（雪崩/繰り上がり回帰なし）。EditMode **120本緑**。
+
+### 着手メモ（マイルストーン D 完了・2026-07-06）— 仕上げ＋Wave 通し＝ADR-21 Accepted 化
+
+- **U6 / Aim インジケータの斜面対応**: 従来 XY 平面の Quad（`dir*2.9 + z=0.6`・Z軸回転）だったのを、外向き(XZ)に沿って砦寄り端（along 2.0）→麓側端（along 5.5）の 2 点を `HeightAt` でサンプルし、その傾き（laneDir）に沿って寝かせる方式へ変更。`Quaternion.LookRotation(斜面法線, laneDir)`（+Z=法線＝面をカメラへ／+Y=レーン方向＝長さ）、scale=(幅2.0, 3D長さ, 1)。単一平面帯なので凸斜面のバンプに食い込む → 法線方向へ 0.35 浮かせ、`_Cull=Off`（両面）で向きに依らず表示。物理不使用維持（`SampleHeight` のみ、コライダーなし）。
+- **検証（MCP Play・ConfirmPressed 注入で通し駆動）**: Title→(Enter)→WaveIntro→WavePlaying へ遷移。**4谷が斜面上に湧き**（y=2.3〜3.8）、各敵が `fireInterval` で発射（totalShots 増）、**弾が山頂の砦へ着弾し HP 1000→…→0**。Wave 終了→Lull→次 Wave の遷移も 3D 下で成立。砦破壊で **ResultState（FORT DESTROYED・スコア=残り砦HP=0）**、`ConfirmPressed` で再挑戦→`BeginWave(0)` で HP リセット→再び WavePlaying（retry ループ実証）。Aim レーンが S 斜面に沿って（`pos=(0,2.89,-3.79)`・euler pitch≈-47°・長さ 4.81）表示、削り中は加算量UP で明るく。
+- **物理不使用・Singleton=GameManager・入力=IInputSource を維持**（配線変更なし。検証時のみ reflection で fake `IInputSource` を注入したが、製品コードは無改修）。EditMode **120本緑**（Core 無改修・回帰ゼロ）。
+- **スコープ外（未実施・意図的）**: アクターの3Dモデル化・本格 VFX・サウンド・弾の放物線化（`phases.md` Out of scope）。アクターの斜面向き（任意）も見送り。プリミティブが斜面バンプに半分埋もれる箇所があるが視認可能で、モデル化フェーズで解消する範疇。雪マテリアルは白 lit のまま（十分に立体視認可）。
+- **結論**: 縫い目（`PositionFor`＋カメラ＋ライティング＋URP 3D パイプライン）＋ Terrain 移植＋Aim 斜面対応で 3D 雪山を実現。`phases.md` Phase 4 受け入れ基準を総達成したため **本 ADR を Proposed→Accepted 化**。

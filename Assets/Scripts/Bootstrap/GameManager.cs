@@ -25,6 +25,9 @@ namespace KakigoriTD.Bootstrap
         [Header("シリアル（実機ハンドル接続。未割り当てならキーボードのみで動作）")]
         [SerializeField] private SerialConfigSO _serialConfig;
 
+        [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
+        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
+
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
         [SerializeField] private float _iceTotal = 50f;
@@ -59,7 +62,7 @@ namespace KakigoriTD.Bootstrap
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
 
-            BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
+            // 山は Terrain（シーン配置・ADR-21）。手続き Quad は廃止。
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
             _penalty = new PenaltyTally();
@@ -150,12 +153,21 @@ namespace KakigoriTD.Bootstrap
             return new CompositeInputSource(keyboard, serial);
         }
 
+        // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
+        // Terrain 未割り当て時は 0（平面フォールバック）。
+        private float HeightAt(float x, float z)
+        {
+            if (_terrain == null) return 0f;
+            return _terrain.transform.position.y + _terrain.SampleHeight(new Vector3(x, 0f, z));
+        }
+
         private void BuildFort()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = "Fort";
             go.transform.SetParent(transform);
             go.transform.localScale = new Vector3(1.3f, 1.3f, 1f);
+            go.transform.position = new Vector3(0f, HeightAt(0f, 0f), 0f); // 山頂に据える（ADR-21）
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _fortMat;
             _fort = go.AddComponent<Fort>();
@@ -170,7 +182,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, HeightAt);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -284,78 +296,6 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
-        // 山を俯瞰した背景。中央=頂上（砦）から外へ広がる「緑の同心円（弓道の的状）」、
-        // 一番外側の円より外は茶色い地面（＝麓）。敵はこの一番外側の円の外＝地面に湧く。
-        // 全オブジェクトより奥(z)に置く大きな板ポリゴンに、手続き生成したテクスチャを貼る。
-        private void BuildMountain()
-        {
-            var tex = GenerateMountainTexture(512);
-            var mat = MakeUnlit(Color.white);
-            mat.SetTexture("_BaseMap", tex);
-
-            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = "Mountain";
-            go.transform.SetParent(transform);
-            go.transform.position = new Vector3(0f, 0f, 3f); // 最奥
-            go.transform.localScale = new Vector3(20f, 12f, 1f); // 画面全体を覆う
-            DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        }
-
-        private static Texture2D GenerateMountainTexture(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            // 緑の山＝中央(頂上)から外へ向かう同心円バンド。一番外側の円(mountainR)より外は茶色い地面。
-            Color summit   = new Color(0.60f, 0.82f, 0.46f); // 頂上（明るい緑）
-            Color midSlope = new Color(0.38f, 0.64f, 0.32f); // 中腹
-            Color lowSlope = new Color(0.24f, 0.48f, 0.24f); // 麓側の山肌（濃い緑）
-            Color ground   = new Color(0.42f, 0.30f, 0.18f); // 地面（茶色）＝麓。敵はここに湧く
-            Color ringLine = new Color(0.15f, 0.32f, 0.17f); // 円の輪郭線（濃い緑）
-            const float worldW = 20f, worldH = 12f;
-            const float mountainR = 2.2f;  // 一番外側の円＝山の縁（これより外は地面）
-            const float edgeBlend = 0.16f; // 山→地面のなじませ幅
-            // 同心円のバンド境界（内側→外側）。ここに輪郭線を引いて「的」状に見せる。
-            float[] bands = { 0.85f, 1.55f, mountainR };
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float wx = ((x + 0.5f) / size - 0.5f) * worldW;
-                    float wy = ((y + 0.5f) / size - 0.5f) * worldH;
-                    float r = Mathf.Sqrt(wx * wx + wy * wy);
-
-                    Color c;
-                    if (r >= mountainR + edgeBlend)
-                    {
-                        c = ground; // 一番外側の円の外＝麓の地面
-                    }
-                    else
-                    {
-                        // バンドで山肌の緑を決める（同心円＝的の見た目）。
-                        Color mountain = r < bands[0] ? summit : (r < bands[1] ? midSlope : lowSlope);
-                        // 縁は地面へなじませる。
-                        if (r > mountainR - edgeBlend)
-                        {
-                            float t = Mathf.Clamp01((r - (mountainR - edgeBlend)) / (2f * edgeBlend));
-                            mountain = Color.Lerp(mountain, ground, t);
-                        }
-                        c = mountain;
-                        // バンド境界に円の輪郭線。
-                        for (int i = 0; i < bands.Length; i++)
-                        {
-                            if (Mathf.Abs(r - bands[i]) < 0.035f) { c = Color.Lerp(c, ringLine, 0.6f); break; }
-                        }
-                    }
-
-                    c.a = 1f;
-                    tex.SetPixel(x, y, c);
-                }
-            }
-            tex.Apply();
-            return tex;
-        }
-
         // 加算合成の Unlit（照準レーン用）。暗い背景に「光る帯」として乗り、濁らず明るく見える。
         // 色 RGB がそのまま加算量（アルファは無視）。
         private static Material MakeUnlitAdditive(Color c)
@@ -371,15 +311,20 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
-        // 照準中の谷を示す半透明レーン（砦付近→麓へ伸びる帯）。敵より奥(z)に置き敵を隠さない。
+        // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
+        private const float AimNearAlong = 2.0f; // 砦寄り端（先頭行 2.7 の少し内側）
+        private const float AimFarAlong = 5.5f;  // 麓側端（入場位置 ~5.85 の手前）
+        private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
+
+        // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。
         private void BuildAimIndicator()
         {
             _aimMat = MakeUnlitAdditive(new Color(0.30f, 0.26f, 0.05f, 1f));
+            // 斜面に寝かせると向きにより表裏が変わるため両面表示（カリング無効）。
+            _aimMat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             go.name = "AimIndicator";
             go.transform.SetParent(transform);
-            // ローカル +Y を「外向き」に合わせる前提で、幅2.2 × 長さ4.4 の帯。
-            go.transform.localScale = new Vector3(2.2f, 4.4f, 1f);
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _aimMat;
             _aimIndicator = go;
@@ -395,14 +340,25 @@ namespace KakigoriTD.Bootstrap
                 return;
             }
 
-            Vector3 dir = ChannelController.DirectionFor(ch);
-            // 砦付近(≈0.8)から麓(≈5.0)までを覆う帯。z=0.6 で敵(z=0)より奥に置く。
-            // Z軸回転のみ（XY平面・法線は -Z のままカメラを向く。FromToRotation だと S/E/W で
-            // 法線が反転して裏面カリングされ見えなくなるため）。ローカル +Y を dir に向ける。
-            float angleDeg = Mathf.Atan2(-dir.x, dir.y) * Mathf.Rad2Deg;
-            _aimIndicator.transform.SetPositionAndRotation(
-                dir * 2.9f + new Vector3(0f, 0f, 0.6f),
-                Quaternion.Euler(0f, 0f, angleDeg));
+            // 外向き(XZ)に沿って砦寄り端→麓側端の 2 点を斜面高さでサンプルし、その傾きに沿って寝かせる。
+            Vector3 dir = ChannelController.DirectionFor(ch); // XZ, y=0
+            Vector3 nearP = dir * AimNearAlong; nearP.y = HeightAt(nearP.x, nearP.z);
+            Vector3 farP = dir * AimFarAlong; farP.y = HeightAt(farP.x, farP.z);
+
+            Vector3 laneDir = farP - nearP;
+            float length = laneDir.magnitude;
+            if (length < 1e-4f) { laneDir = dir; length = AimFarAlong - AimNearAlong; }
+            else laneDir /= length;
+
+            // 斜面法線（レーン方向に直交し上向き）: 帯を斜面に沿って寝かせつつ面をカメラ側へ向ける。
+            Vector3 side = Vector3.Cross(Vector3.up, laneDir).normalized;
+            Vector3 normal = Vector3.Cross(laneDir, side).normalized;
+            // 単一の平面帯なので凸な斜面のバンプに食い込む。法線方向に少し浮かせて食い込みを抑える。
+            Vector3 mid = (nearP + farP) * 0.5f + normal * 0.35f;
+
+            // ローカル +Z=法線（面をカメラへ）、+Y=レーン方向（長さ）、+X=幅。
+            _aimIndicator.transform.SetPositionAndRotation(mid, Quaternion.LookRotation(normal, laneDir));
+            _aimIndicator.transform.localScale = new Vector3(AimWidth, length, 1f);
             if (!_aimIndicator.activeSelf) _aimIndicator.SetActive(true);
 
             // 削り中はより明るく（加算量UP）。RGB がそのまま加算される。

@@ -27,6 +27,7 @@ namespace KakigoriTD.Gameplay
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数
         [SerializeField] private float _advanceSpeed = 3.5f; // 繰り上がり前進速度（lerp、ADR-20）
+        [SerializeField] private float _entranceGap = 1.5f;  // 入場時に隊列スロットより麓側へ置くオフセット（Option A・ADR-21/U5）
 
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
@@ -38,6 +39,7 @@ namespace KakigoriTD.Gameplay
         private Vector3 _center;
         private Vector3 _outwardDir;
         private Vector3 _perpDir;
+        private Func<float, float, float> _heightAt; // (x,z)→world Y（斜面サンプラ・ADR-21）
 
         /// <summary>谷ID（0:N / 1:W / 2:S / 3:E）。</summary>
         public int ChannelId { get; private set; }
@@ -65,14 +67,16 @@ namespace KakigoriTD.Gameplay
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
             Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
-            Func<SnowPuff> createPuff)
+            Func<SnowPuff> createPuff, Func<float, float, float> heightAt = null)
         {
             ChannelId = channelId;
             _center = center;
             _projectileFactory = projectileFactory;
             _fort = fort;
+            _heightAt = heightAt;
             _outwardDir = DirectionFor(channelId);
-            _perpDir = new Vector3(_outwardDir.y, -_outwardDir.x, 0f);
+            // XZ 平面での外向きに直交する水平ベクトル（ADR-21：空間基底を XY→XZ）
+            _perpDir = new Vector3(_outwardDir.z, 0f, -_outwardDir.x);
             _matrix = new EnemyMatrix<Enemy>(_rowWidth);
             _pool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
@@ -80,16 +84,16 @@ namespace KakigoriTD.Gameplay
             _puffPool = new ObjectPool<SnowPuff>(createPuff);
         }
 
-        /// <summary>0:N(+y) / 1:W(-x) / 2:S(-y) / 3:E(+x)。</summary>
+        /// <summary>放射状4方向（XZ 平面・ADR-21）。0:N(+z) / 1:W(-x) / 2:S(-z) / 3:E(+x)。</summary>
         public static Vector3 DirectionFor(int channelId)
         {
             switch (channelId)
             {
-                case 0: return Vector3.up;
-                case 1: return Vector3.left;
-                case 2: return Vector3.down;
-                case 3: return Vector3.right;
-                default: return Vector3.up;
+                case 0: return new Vector3(0f, 0f, 1f);  // N = +z
+                case 1: return new Vector3(-1f, 0f, 0f); // W = -x
+                case 2: return new Vector3(0f, 0f, -1f); // S = -z
+                case 3: return new Vector3(1f, 0f, 0f);  // E = +x
+                default: return new Vector3(0f, 0f, 1f);
             }
         }
 
@@ -220,7 +224,8 @@ namespace KakigoriTD.Gameplay
             return rc == 0 || _matrix.RowAt(rc - 1).Count >= _rowWidth;
         }
 
-        // justSpawned のみスナップ（プール由来の初期 transform からの滑り込みを防ぐ）、他は lerp（ADR-20）。
+        // 新規湧き(justSpawned)は入場位置（麓側の外・下り斜面）へスナップしてから隊列スロットへ lerp（Option A・ADR-21/U5）。
+        // 既存の敵は繰り上がりを lerp（ADR-20）。
         private void RepositionAll(Enemy justSpawned = null)
         {
             for (int row = 0; row < _matrix.RowCount; row++)
@@ -229,17 +234,28 @@ namespace KakigoriTD.Gameplay
                 for (int slot = 0; slot < members.Count; slot++)
                 {
                     var e = members[slot];
-                    if (e != null)
-                        e.SetTarget(PositionFor(row, slot), snap: e == justSpawned, _advanceSpeed);
+                    if (e == null) continue;
+                    if (e == justSpawned)
+                    {
+                        // 入場（Option A）: 麓側の外に置き、スロットへ歩かせる（gameplay locomotion ではない）。
+                        e.SetTarget(PositionFor(row, slot, _entranceGap), snap: true, _advanceSpeed);
+                        e.SetTarget(PositionFor(row, slot), snap: false, _advanceSpeed);
+                    }
+                    else
+                    {
+                        e.SetTarget(PositionFor(row, slot), snap: false, _advanceSpeed);
+                    }
                 }
             }
         }
 
-        private Vector3 PositionFor(int row, int slot)
+        private Vector3 PositionFor(int row, int slot, float extraAlong = 0f)
         {
-            float along = _frontGap + row * _rowSpacing;
+            float along = _frontGap + row * _rowSpacing + extraAlong;
             float across = (slot - (_rowWidth - 1) * 0.5f) * _slotSpacing;
-            return _center + _outwardDir * along + _perpDir * across;
+            Vector3 p = _center + _outwardDir * along + _perpDir * across; // XZ 平面（y=0）
+            p.y = _heightAt != null ? _heightAt(p.x, p.z) : 0f;            // 斜面に乗せる（ADR-21）
+            return p;
         }
     }
 }
