@@ -216,7 +216,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 - [ ] Singleton は `GameManager` のみ・入力は `IInputSource` 経由を維持（配線変更のみ）
 - [ ] 変更を `docs/architecture.md` **ADR-21** に記録（着手時に Proposed → Accepted 化）
 
-### Status: 🟡 マイルストーン A・B 完了（2026-07-06）— 世界の器＋空間の核（斜面配置）
+### Status: 🟡 マイルストーン A・B・C 完了（2026-07-06）— 世界の器＋空間の核＋手触り（入場アニメ）
 
 `docs/phase4(3D).md` 参照。EditMode **120本緑**（Core 無改修・回帰ゼロ）。ブランチ `phase4-3d-presentation`。
 | Unit | 成果物 | 検証 | 状態 |
@@ -226,10 +226,11 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 | U2 | Main Camera を透視＋俯角、Directional Light 追加、環境光（雪の反射）設定 | MCP screenshot：**光と影で立体の 3D 雪山**を確認。EditMode 120本緑 | ✅ |
 | U3 | `GameManager.HeightAt`（`Terrain.SampleHeight`・物理なし）＋ `ChannelController.Configure` に高さサンプラ注入。`BuildMountain` Quad 撤去、砦を山頂へ | サンプル値＝Terrain 高さ一致（山頂 5.4）を script で確認 | ✅ |
 | U4 | `DirectionFor`/`_perpDir`/`PositionFor` を XZ＋高さへ（Core・雪崩・生成は無改修）。`size` を (316.8,160.4,316.8) にフィット | MCP Play：全36体が斜面上（y=1.03〜4.24）／`ApplyAvalanche` で先頭行 killed=3・rows 3→2／EditMode 120本緑 | ✅ |
+| U5 | 敵の入場（Option A）：`ChannelController._entranceGap`＋`RepositionAll` 新規湧き分岐（入場位置へ snap→スロットへ lerp）＋`PositionFor` に along オフセット引数。3 spawn 経路（Enemy/Ally/Disguised）に統一適用。gameplay locomotion ではない（ADR-18 整合） | MCP Play：北谷1体が湧き直後 alongOutward=4.20（麓側・y=0.83）→ スロット 2.70（y=2.55）へ歩いて整列／南谷6体 `ApplyAvalanche` killed=3・rows 2→1（雪崩/繰り上がり回帰なし）／EditMode 120本緑 | ✅ |
 
 **把握フェーズの補正**: 移植元の再利用資産は Terrain だけでなく **URP 3D パイプライン一式**も流用（demo は 2D Renderer だった）。`New Terrain 3` は「広い平面の一角に造形された compact な山」で、平地に見えたのは誤読（描画で山を確認）。山の footprint が小さいため `TerrainData.size` を (316.8,160.4,316.8) に拡大しプレイフィールドを斜面へ乗せた。詳細は ADR-21 着手メモ。
 
-**残（マイルストーン C/D）**: 敵の入場アニメ（Option A・U5）、Aim インジケータの斜面対応・カメラ/雪マテリアル仕上げ（U6）、Wave1〜3 通し、ADR-21 Accepted 化。
+**残（マイルストーン D）**: Aim インジケータの斜面対応・カメラ/雪マテリアル仕上げ・（任意）アクター斜面向き（U6）、Wave1〜3 通し、ADR-21 Accepted 化。
 
 ---
 

@@ -27,6 +27,7 @@ namespace KakigoriTD.Gameplay
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数
         [SerializeField] private float _advanceSpeed = 3.5f; // 繰り上がり前進速度（lerp、ADR-20）
+        [SerializeField] private float _entranceGap = 1.5f;  // 入場時に隊列スロットより麓側へ置くオフセット（Option A・ADR-21/U5）
 
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
@@ -223,7 +224,8 @@ namespace KakigoriTD.Gameplay
             return rc == 0 || _matrix.RowAt(rc - 1).Count >= _rowWidth;
         }
 
-        // justSpawned のみスナップ（プール由来の初期 transform からの滑り込みを防ぐ）、他は lerp（ADR-20）。
+        // 新規湧き(justSpawned)は入場位置（麓側の外・下り斜面）へスナップしてから隊列スロットへ lerp（Option A・ADR-21/U5）。
+        // 既存の敵は繰り上がりを lerp（ADR-20）。
         private void RepositionAll(Enemy justSpawned = null)
         {
             for (int row = 0; row < _matrix.RowCount; row++)
@@ -232,15 +234,24 @@ namespace KakigoriTD.Gameplay
                 for (int slot = 0; slot < members.Count; slot++)
                 {
                     var e = members[slot];
-                    if (e != null)
-                        e.SetTarget(PositionFor(row, slot), snap: e == justSpawned, _advanceSpeed);
+                    if (e == null) continue;
+                    if (e == justSpawned)
+                    {
+                        // 入場（Option A）: 麓側の外に置き、スロットへ歩かせる（gameplay locomotion ではない）。
+                        e.SetTarget(PositionFor(row, slot, _entranceGap), snap: true, _advanceSpeed);
+                        e.SetTarget(PositionFor(row, slot), snap: false, _advanceSpeed);
+                    }
+                    else
+                    {
+                        e.SetTarget(PositionFor(row, slot), snap: false, _advanceSpeed);
+                    }
                 }
             }
         }
 
-        private Vector3 PositionFor(int row, int slot)
+        private Vector3 PositionFor(int row, int slot, float extraAlong = 0f)
         {
-            float along = _frontGap + row * _rowSpacing;
+            float along = _frontGap + row * _rowSpacing + extraAlong;
             float across = (slot - (_rowWidth - 1) * 0.5f) * _slotSpacing;
             Vector3 p = _center + _outwardDir * along + _perpDir * across; // XZ 平面（y=0）
             p.y = _heightAt != null ? _heightAt(p.x, p.z) : 0f;            // 斜面に乗せる（ADR-21）

@@ -121,3 +121,10 @@ Aim インジケータの斜面対応（谷ハイライトを XZ／斜面へ）�
 - **スケール確定**: size=(120,…) では山 footprint 半径≈2 でプレイフィールド（2.7〜4.35）が平地に落ちた → 実測して **size=(316.8,160.4,316.8)**（footprint 半径≈7）へ拡大。斜面高さ r=2.7→2.28 / 4.35→0.88、山頂 5.4。5 章「Terrain 実サイズ」はこれで確定。
 - **検証（MCP Play）**: 4谷×9体＝全36体が斜面上（y=1.03〜4.24）、砦=山頂、`ApplyAvalanche` で先頭行 killed=3・rows 3→2。弾着弾で砦HP減も確認。
 - **C/D への申し送り**: Aim インジケータは XY 前提のままで斜面と不整合（U6 で XZ／斜面対応）。カメラは暫定（山頂俯瞰）。入場アニメ（Option A）は U5。
+
+## 8. 着手メモ（マイルストーン C 完了・2026-07-06）
+
+- **U5（Option A 入場）**: `ChannelController` に `[SerializeField] _entranceGap=1.5`（隊列スロットより麓側＝下り斜面外側へのオフセット）を追加。`RepositionAll(justSpawned)` の新規湧き分岐を「入場位置へ `snap:true` → スロットへ `snap:false`」の2段に変更し、既存の `SetTarget`/`_advanceSpeed` lerp（ADR-20）で麓側から歩かせる。`PositionFor(row, slot, extraAlong=0)` に along オフセット引数を追加（入場＝`_entranceGap`）。3 spawn 経路（`SpawnEnemy`/`SpawnAlly`/`SpawnDisguised`）は全て `RepositionAll(justSpawned)` を通るので**1 箇所の変更で統一適用**（basic/ally/変装すべて麓側から入場）。gameplay locomotion ではない cosmetic reposition ＝ **ADR-18 と整合**。
+- **不変**: Core（`EnemyMatrix`/Clock/State/Pool/`Scoring`）・雪崩・生成・`Enemy.Update` は無改修。既存の繰り上がり（`RepositionAll()` 無引数）は従来どおり lerp。
+- **検証（MCP Play）**: ①北谷に1体湧き → 湧き直後 `alongOutward=4.20`（=slot 2.7＋entranceGap 1.5・y=0.83＝麓側の低い位置）→ 数百ms 後 `alongOutward=2.70`（=slot・y=2.55＝斜面を登って整列）を実測＝**麓側から隊列位置へ歩いて接近**。②南谷に6体（2行）→ `ApplyAvalanche` killed=3・rows 2→1・count 6→3＝**雪崩/繰り上がり回帰なし**。③screenshot で斜面上の survivor 3体を確認。EditMode **120本緑**（回帰ゼロ）。
+- **D への申し送り**: 残 U6＝Aim インジケータの斜面対応（XY 前提で不整合）、カメラ/雪マテリアル仕上げ、（任意）アクター斜面向き、Wave1〜3 通し、ADR-21 Proposed→Accepted 化。
