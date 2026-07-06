@@ -21,6 +21,7 @@
 | 変装敵 | DisguisedEnemy : Enemy（専用行・tell マーカー・発射継続・退場しない・無ペナ撃破） | ADR-19 |
 | 撃破プレゼン | 繰り上がりを速度ベース lerp＋撃破位置に雪しぶき puff（見せ方のみ・純ロジック不変） | ADR-20 |
 | 3D表現 | URP 2D→3D レンダラ切替＋Terrain移植＋透視カメラ＋斜面 PositionFor＋lit（描画のみ・Core 不変） | ADR-21 |
+| 敵の登場・静止位置 | 隊列を麓へ（_frontGap 数値のみ）＋入場を絶対半径 _entranceRadius から専用速度で歩かせる（cosmetic・Core 不変） | ADR-22 |
 
 ---
 
@@ -243,3 +244,15 @@
 - **物理不使用・Singleton=GameManager・入力=IInputSource を維持**（配線変更なし。検証時のみ reflection で fake `IInputSource` を注入したが、製品コードは無改修）。EditMode **120本緑**（Core 無改修・回帰ゼロ）。
 - **スコープ外（未実施・意図的）**: アクターの3Dモデル化・本格 VFX・サウンド・弾の放物線化（`phases.md` Out of scope）。アクターの斜面向き（任意）も見送り。プリミティブが斜面バンプに半分埋もれる箇所があるが視認可能で、モデル化フェーズで解消する範疇。雪マテリアルは白 lit のまま（十分に立体視認可）。
 - **結論**: 縫い目（`PositionFor`＋カメラ＋ライティング＋URP 3D パイプライン）＋ Terrain 移植＋Aim 斜面対応で 3D 雪山を実現。`phases.md` Phase 4 受け入れ基準を総達成したため **本 ADR を Proposed→Accepted 化**。
+
+## ADR-22: 敵の登場・静止位置の再設計 — 隊列を麓へ（数値のみ）＋入場を絶対半径ラインから専用速度で歩かせる（cosmetic・ADR-14/18/20/21 を踏襲）— Accepted（Phase 4.5）
+
+- **背景**: Phase 4 の俯瞰カメラ化（`phase4(3D).md` §10）後、プレイ体験として「敵が**山からかなり遠い平地（カメラ縁）に登場**し、そこから**山の麓まで歩いて接近して静止し攻撃**する」表現にしたい。Phase 4 時点の敵は麓のすぐ外（`_entranceGap=1.5`・ADR-21/U5 Option A）から斜面**中腹**（`_frontGap=2.7`・along 2.7〜4.35）へ登って整列していた。ゲーム性・数値・Core（`EnemyMatrix`/雪崩/生成/`Projectile`）は Phase 4 のまま不変に保ち、**隊列と入場のワールド座標のみ**を変える。
+- **決定**:
+  - **静止位置を麓へ（数値のみ・ADR-14 前例「方針不変・数値のみ」）**: `ChannelController._frontGap` 2.7→**5.0**（`_rowSpacing 0.55`/`_maxRows 4` 据え置き）。隊列は along 5.0〜6.65＝斜面基部（麓）に静止。座標＝行インデックス基準・cap（ADR-14）は不変。
+  - **入場を絶対半径ラインから（案B）**: `_entranceGap`（各スロットからの相対オフセット）を廃し、新規 `_entranceRadius`（＝谷ごとに同一の絶対半径・カメラ縁の遠方ライン）を追加。`RepositionAll` の新規湧き分岐を「谷方向の `_entranceRadius`（スロットの across を保持）へ `snap:true` → スロットへ `snap:false`」に変更。全敵が**同一の遠方アークから一斉登場**する。`PositionFor`/`EntrancePositionFor`/`PointAt` に整理。
+  - **入場速度を独立**: 新規 `_entranceSpeed`（＝入場の lerp 速度）。雪崩後の繰り上がり（ADR-20 `_advanceSpeed`）は据え置き＝入場を速くしても繰り上がり演出を巻き添えにしない。
+  - **カメラのズームアウト**: 遠方入場ライン（r≈10）＋麓の隊列は俯瞰カメラ(y=20)の N/S 可視半径（±8〜9）に収まらないため、Main Camera を **y=27・z=0（対称化）**へズームアウト（トップダウン構図・fov46 は不変）。N/S 可視半径 ±11.46 を確保。
+  - **cosmetic reposition であり gameplay locomotion ではない**（行の外を自由移動しない・入場後は行モデルに収まる）＝**ADR-18（locomotion 不採用）と整合**。ADR-21/U5 Option A を「絶対半径ライン＋専用速度」に発展させたもの。
+- **不変（覆さない）**: Core（`EnemyMatrix`/Clock/State/Pool/`Scoring`）・雪崩の先頭行消去・繰り上げ（ADR-14/20）・生成・`Enemy.Update`・`Projectile`・入力（`IInputSource`）・EditMode テスト。物理不使用（コライダーなし・高さは `Terrain.SampleHeight` サンプル・ADR-11/21）。ADR-14/18/20/21 を踏襲。
+- **結果**: EditMode **120本緑**（Core 無改修・回帰ゼロ）。MCP Play 検証: ①4谷とも敵が **radial 10.02（カメラ縁の平地・y=0）に一斉登場** ②`_entranceSpeed` で **radial 5.05（麓の隊列スロット）へ歩いて静止**（screenshot: 遠方登場→麓クラスタ）③発射・弾着弾で砦HP減（遠方からでも戦闘成立）④`ApplyAvalanche` killed=3・rows 3→2（雪崩/繰り上がり回帰なし）。カメラ y=27 で N/S 可視 ±11.46。Phase 4.5 マイルストーン A（`_frontGap`）＋B（`_entranceRadius`/`_entranceSpeed`/カメラ）。
