@@ -312,8 +312,8 @@ namespace KakigoriTD.Bootstrap
         }
 
         // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
-        private const float AimNearAlong = 2.0f; // 砦寄り端（先頭行 2.7 の少し内側）
-        private const float AimFarAlong = 5.5f;  // 麓側端（入場位置 ~5.85 の手前）
+        private const float AimNearAlong = 3.5f; // 砦寄り端（麓の先頭行 5.0 の手前・Phase4.5）
+        private const float AimFarAlong = 7.0f;  // 麓側端（最奥行 6.65 の少し外・Phase4.5）
         private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
 
         // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。

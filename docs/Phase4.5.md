@@ -124,3 +124,11 @@
 - **ChannelController（案B・ADR-22）**: `_entranceGap` 廃止 → 新規 `_entranceRadius=10`（絶対半径・カメラ縁）＋`_entranceSpeed=6`（入場専用速度）。`RepositionAll` 新規湧き分岐を「`EntrancePositionFor(slot)`（across 保持で絶対半径 r=10）へ snap → `PositionFor(row,slot)` へ `_entranceSpeed` で歩行」に変更。`PositionFor`/`EntrancePositionFor`/`PointAt` に整理（`extraAlong` 撤去）。3 spawn 経路（Enemy/Ally/Disguised）は全て `RepositionAll(justSpawned)` を通るので 1 箇所で統一適用。
 - **検証（MCP Play）**: ①4谷とも新規湧きが **radial 10.02（カメラ縁の平地・y=0）に一斉登場**（実測）②`_entranceSpeed` で **radial 5.05（麓の row0 スロット）へ歩いて静止**（実測・screenshot で遠方登場→麓クラスタを確認）③発射・弾着弾で砦HP減（遠方位置からでも戦闘成立・HP 1000→40 を観測）④`ApplyAvalanche`(N) killed=3・rows 3→2（雪崩/繰り上がり回帰なし）。**EditMode 120本緑**（回帰ゼロ）。
 - **D（U4）への申し送り**: Aim インジケータの along レンジ（現 2.0→5.5）は旧隊列前提＝麓の新隊列（5.0〜6.65）を覆わないので U4 で延長。Wave1〜3 通し（`ConfirmPressed` 注入）で最終確認。`_entranceSpeed=6`/`_entranceRadius=10` は手触りで微調整余地。
+
+## 12. 着手メモ（マイルストーン C / U4 完了・2026-07-07）＝Phase 4.5 完了
+
+- **Aim インジケータ整合**: `GameManager` の `AimNearAlong` 2.0→**3.5**・`AimFarAlong` 5.5→**7.0**（`AimWidth 2.0` 据え置き）。レーンが麓の新隊列（along 5.0〜6.65）を覆い、midpoint≈5.25＝先頭行付近に来る。斜面サンプル方式（`LookRotation(法線,laneDir)`・法線へ0.35浮かせ・`_Cull=Off`）は ADR-21/U6 のまま。
+- **Wave 通し検証（MCP Play・fake `IInputSource` を reflection 注入）**: Title→(Confirm)→**WavePlayingState**（HUD「Wave 1/3」・氷ドレイン・N谷ハイライト）。①4谷とも敵が遠方(r≈10)から湧き麓(r≈5〜6.65)へ歩いて静止し発射②**Aim レーン（tan）が N谷の麓隊列帯に沿って表示**、削り中は明るく（screenshot 確認）③弾着弾で砦HP 1000→…→**0 → ResultState**④`Confirm` 再挑戦→`BeginWave(0)`→HP リセット→**再 WavePlaying**（retry ループ実証）。**EditMode 120本緑**（回帰ゼロ）。
+- **Wave 進行ロジックは無改修**: Wave1→Lull→Wave2→Wave3→Win の遷移は本フェーズ未変更（State/`WaveManager` にゼロ変更）＝EditMode `StatesTests`（120本に含む）＋Phase 4（ADR-21 D）で実証済み。本検証では Lose→Result→retry をライブで再確認。
+- **物理不使用・Singleton=GameManager・入力=IInputSource を維持**（製品コードは無改修。検証時のみ reflection で fake input 注入）。
+- **完了判定**: §7 受け入れ基準を総達成 → `architecture.md` **ADR-22 を Accepted 化**（U3 で追記済み）。Phase 4.5 完了。手触り微調整（`_entranceSpeed`/`_entranceRadius`/Aim レンジ）は今後プレイテストで随時。
