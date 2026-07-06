@@ -61,3 +61,11 @@ Wave 通し（fake `IInputSource` 注入）で「遠方入場→麓到達→**�
 
 - **ADR**: `Enemy` の発射条件に「在位置」制約を加えるのは ADR-7（発射）・ADR-22（入場）を踏襲した挙動の明確化。軽量な **ADR-23（発射は所定スロット到達後のみ＝入場・繰り上がりの移動中は発射しない）** を追記（ADR-11 の「戦闘アクターの状態は MonoBehaviour」に整合、Core 不変）。
 - **スコープ外**: バランス数値調整・初弾の間（`InitialFireDelay`）の演出調整・アクター3Dモデル化・VFX・サウンド・弾の放物線化。本計画は「入場中に撃たない」挙動修正に限定する。
+
+## 8. 着手メモ（マイルストーン A・B 完了・2026-07-07）＝Phase 4.6 完了
+
+- **A1（発射ゲート）**: `Enemy` に `IsInPosition`（`(transform.position - _targetPos).sqrMagnitude <= 0.0004`）を追加し、`Update` の発射ブロック（`_fireTimer` 減算＋`Fire()`）の前に `if (!IsInPosition) return;` を挿入。移動中はタイマ凍結＝初弾は到達後。`SetTarget`/`MoveTowardTarget`（ADR-20）不変。`DisguisedEnemy` は基底 `Update` 継承で自動適用、`AllyNPC` は `Update` override＋無発射で影響なし。**Core・`Projectile` 無改修**。
+- **A1 検証（MCP Play・単体）**: `_entranceSpeed` を一時的に遅く（reflection）して入場を実測 — radial **10.02→8.37→5.82 で `ShotsFired=0`**（歩行中ゼロ発射）、radial **5.05 到達で `ShotsFired>0`**（発射開始）。screenshot で入場中の敵が平地に弾なしで立ち、到達済みの敵のみ砦へ弾を放つのを確認。EditMode **120本緑**。
+- **B1 検証（Wave 通し・fake `IInputSource` 注入）**: Title→(Confirm)→**Wave1 WavePlaying**（砦HP 1000→700→… 減＝到達後に発射し着弾）→**WaveLull「Wave 1 クリア」**（波遷移・砦生存 HP 275）→…→**ResultState**（砦HP0）→Confirm 再挑戦→**WavePlaying**（HP≈1000 リセット）。retry ループ実証。EditMode **120本緑**。
+- **balance 補足**: 本修正で入場中に撃たなくなる分、単位時間の被弾がわずかに減る（＝正しい挙動）。4.5 検証では砦が Wave1 で死亡したが、本修正後は Wave1 生存→Lull 遷移する場面も観測（意図した挙動差・数値調整はスコープ外）。
+- **完了判定**: §6 受け入れ基準を総達成 → `architecture.md` **ADR-23 Accepted**、`phases.md` に Phase 4.6 節追加。Phase 4.6 完了。

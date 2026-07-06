@@ -22,6 +22,7 @@
 | 撃破プレゼン | 繰り上がりを速度ベース lerp＋撃破位置に雪しぶき puff（見せ方のみ・純ロジック不変） | ADR-20 |
 | 3D表現 | URP 2D→3D レンダラ切替＋Terrain移植＋透視カメラ＋斜面 PositionFor＋lit（描画のみ・Core 不変） | ADR-21 |
 | 敵の登場・静止位置 | 隊列を麓へ（_frontGap 数値のみ）＋入場を絶対半径 _entranceRadius から専用速度で歩かせる（cosmetic・Core 不変） | ADR-22 |
+| 発射タイミング | 敵は所定スロット到達後のみ発射（入場・繰り上がりの移動中は発射しない・IsInPosition ゲート） | ADR-23 |
 
 ---
 
@@ -256,3 +257,14 @@
   - **cosmetic reposition であり gameplay locomotion ではない**（行の外を自由移動しない・入場後は行モデルに収まる）＝**ADR-18（locomotion 不採用）と整合**。ADR-21/U5 Option A を「絶対半径ライン＋専用速度」に発展させたもの。
 - **不変（覆さない）**: Core（`EnemyMatrix`/Clock/State/Pool/`Scoring`）・雪崩の先頭行消去・繰り上げ（ADR-14/20）・生成・`Enemy.Update`・`Projectile`・入力（`IInputSource`）・EditMode テスト。物理不使用（コライダーなし・高さは `Terrain.SampleHeight` サンプル・ADR-11/21）。ADR-14/18/20/21 を踏襲。
 - **結果**: EditMode **120本緑**（Core 無改修・回帰ゼロ）。MCP Play 検証: ①4谷とも敵が **radial 10.02（カメラ縁の平地・y=0）に一斉登場** ②`_entranceSpeed` で **radial 5.05（麓の隊列スロット）へ歩いて静止**（screenshot: 遠方登場→麓クラスタ）③発射・弾着弾で砦HP減（遠方からでも戦闘成立）④`ApplyAvalanche` killed=3・rows 3→2（雪崩/繰り上がり回帰なし）。カメラ y=27 で N/S 可視 ±11.46。Phase 4.5 マイルストーン A（`_frontGap`）＋B（`_entranceRadius`/`_entranceSpeed`/カメラ）。
+
+## ADR-23: 発射は所定スロット到達後のみ（入場・繰り上がりの移動中は発射しない）— Accepted（Phase 4.6）
+
+- **背景**: Phase 4.5（ADR-22）で入場開始が絶対半径 r≈10（カメラ縁）へ大きく外に出た結果、`Enemy.Update` が**移動中かどうかに関係なく**毎フレーム発射していた既存挙動が顕在化。敵が入場歩行中に `transform.position`（移動中の現在位置）から弾を撃つため、**敵と弾が同時に移動**し、敵が砦方向へ歩く速度の関係で**敵が自分の弾を追い越す**不自然さが出た（プレイ報告）。
+- **決定**:
+  - `Enemy` に**在位置判定** `IsInPosition`（`(transform.position - _targetPos).sqrMagnitude <= ε²`、ε=0.02）を追加。`Update` の発射ブロックを **`IsInPosition` が true のときのみ**実行し、移動中は `_fireTimer` を進めない（凍結）。→ 初弾は**スロット到達後**に `InitialFireDelay` から計時される。
+  - `SetTarget`/`MoveTowardTarget`（ADR-20）は不変。`Vector3.MoveTowards` は目標到達で座標が一致するため ε 判定で確実に検出。
+  - **1 箇所で統一**: `DisguisedEnemy` は基底 `Enemy.Update` 継承で自動適用。`AllyNPC` は `Update` を override し発射しないため影響なし。**入場（ADR-22）と繰り上がり（ADR-20）の両方の移動中**に発射停止し、到達で再開する（同一ゲートで成立・追加コード不要）。
+- **不変（覆さない）**: Core（`EnemyMatrix`/Clock/State/`Scoring`）・雪崩・生成・`Projectile`・`ProjectileFactory`・入力・カメラ・座標系・EditMode テスト。物理不使用維持。ADR-7（発射）・ADR-11（戦闘アクターの状態は MonoBehaviour）・ADR-22（入場）を踏襲した挙動の明確化。
+- **balance 補足（スコープ外）**: 入場中に撃たなくなる分、単位時間あたりの被弾がわずかに減る（＝正しい挙動）。数値調整は行わない。MCP Play では本修正後 Wave1 で砦が生存（HP 275）→Lull 遷移する場面も観測されたが、これは意図した挙動差であり balance 調整の対象外。
+- **結果**: EditMode **120本緑**（Core・`Projectile` 無改修・回帰ゼロ）。MCP Play 検証（単体の入場を実測）: 敵が radial 10.02→8.37→5.82 の**歩行中は `ShotsFired=0`**、radial 5.05（麓スロット）**到達後に発射開始**（`ShotsFired>0`）。到達後は静止して撃つため弾を追い越さない。Wave 通し（fake `IInputSource` 注入）: Title→Wave1（砦HP減＝到達後発射）→WaveLull「Wave 1 クリア」→…→ResultState→Confirm 再挑戦→WavePlaying（HP リセット）。Phase 4.6。

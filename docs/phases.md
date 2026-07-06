@@ -271,6 +271,39 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 4.6 — 発射タイミングの修正（所定位置到達後に発射）／別計画　【🟢 完了】
+
+**ゴール**: Phase 4.5 後の不具合修正。敵が**入場中（麓へ歩行中）に発射**し、敵と弾が同時移動・敵が自分の弾を追い越す不自然さを解消。敵は**所定の隊列スロット（麓）に到達して静止してから**発射するよう変更。詳細計画は `docs/Phase4.6.md`、設計判断は **ADR-23**。ブランチ `phase4-6-fire-timing`。
+
+### In scope
+
+- `Enemy` の発射ゲート（在位置判定 `IsInPosition` で移動中は発射抑制）。Core・`Projectile`・生成・カメラ・座標系は無改修。
+
+### Out of scope（やらない）
+
+- バランス数値調整・初弾の間（`InitialFireDelay`）の演出調整・アクター3Dモデル化・VFX・サウンド・弾の放物線化。
+
+### 受け入れ基準
+
+- [x] **入場中の敵は発射しない**（麓のスロットに到達するまで `ShotsFired=0`）
+- [x] **麓到達後に発射を開始**し、弾は静止した敵の位置から生成される
+- [x] 敵が自分の弾を**追い越さない**（到達後は静止して撃つ）
+- [x] 雪崩後の繰り上がり移動中も発射せず、到達で再開（同一ゲート）
+- [x] 既存 Wave 通し（発射・砦HP減・雪崩・Result・retry）が成立
+- [x] Singleton=GameManager・入力=IInputSource・物理不使用を維持
+- [x] **EditMode 全120本緑**（Core・`Projectile` 無改修・回帰ゼロ）
+- [x] 変更を `docs/architecture.md` **ADR-23** に記録（Accepted）
+
+### Status: 🟢 Phase 4.6 完了（2026-07-07）— マイルストーン A・B 達成。受け入れ基準すべて充足。ADR-23 Accepted。
+
+`docs/Phase4.6.md` 参照。EditMode **120本緑**（Core・`Projectile` 無改修・回帰ゼロ）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| A1 | `Enemy.IsInPosition`（`_targetPos` 距離）＋`Update` の発射を在位置時のみゲート（`DisguisedEnemy` は基底継承で自動適用・`AllyNPC` は無発射） | MCP Play: 単体入場を実測—radial 10.02→8.37→5.82 で `ShotsFired=0`、radial 5.05 到達で `ShotsFired>0`・screenshot で歩行中の敵が平地に弾なし・EditMode 120本緑 | ✅ |
+| B1 | Wave 通し回帰＋ADR-23＋docs | MCP Play（fake input 注入）: Title→Wave1 WavePlaying（砦HP減＝到達後発射）→WaveLull「Wave 1 クリア」→…→ResultState→Confirm 再挑戦→WavePlaying（HP リセット）・EditMode 120本緑 | ✅ |
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン
