@@ -311,15 +311,20 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
-        // 照準中の谷を示す半透明レーン（砦付近→麓へ伸びる帯）。敵より奥(z)に置き敵を隠さない。
+        // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
+        private const float AimNearAlong = 2.0f; // 砦寄り端（先頭行 2.7 の少し内側）
+        private const float AimFarAlong = 5.5f;  // 麓側端（入場位置 ~5.85 の手前）
+        private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
+
+        // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。
         private void BuildAimIndicator()
         {
             _aimMat = MakeUnlitAdditive(new Color(0.30f, 0.26f, 0.05f, 1f));
+            // 斜面に寝かせると向きにより表裏が変わるため両面表示（カリング無効）。
+            _aimMat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             go.name = "AimIndicator";
             go.transform.SetParent(transform);
-            // ローカル +Y を「外向き」に合わせる前提で、幅2.2 × 長さ4.4 の帯。
-            go.transform.localScale = new Vector3(2.2f, 4.4f, 1f);
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _aimMat;
             _aimIndicator = go;
@@ -335,14 +340,25 @@ namespace KakigoriTD.Bootstrap
                 return;
             }
 
-            Vector3 dir = ChannelController.DirectionFor(ch);
-            // 砦付近(≈0.8)から麓(≈5.0)までを覆う帯。z=0.6 で敵(z=0)より奥に置く。
-            // Z軸回転のみ（XY平面・法線は -Z のままカメラを向く。FromToRotation だと S/E/W で
-            // 法線が反転して裏面カリングされ見えなくなるため）。ローカル +Y を dir に向ける。
-            float angleDeg = Mathf.Atan2(-dir.x, dir.y) * Mathf.Rad2Deg;
-            _aimIndicator.transform.SetPositionAndRotation(
-                dir * 2.9f + new Vector3(0f, 0f, 0.6f),
-                Quaternion.Euler(0f, 0f, angleDeg));
+            // 外向き(XZ)に沿って砦寄り端→麓側端の 2 点を斜面高さでサンプルし、その傾きに沿って寝かせる。
+            Vector3 dir = ChannelController.DirectionFor(ch); // XZ, y=0
+            Vector3 nearP = dir * AimNearAlong; nearP.y = HeightAt(nearP.x, nearP.z);
+            Vector3 farP = dir * AimFarAlong; farP.y = HeightAt(farP.x, farP.z);
+
+            Vector3 laneDir = farP - nearP;
+            float length = laneDir.magnitude;
+            if (length < 1e-4f) { laneDir = dir; length = AimFarAlong - AimNearAlong; }
+            else laneDir /= length;
+
+            // 斜面法線（レーン方向に直交し上向き）: 帯を斜面に沿って寝かせつつ面をカメラ側へ向ける。
+            Vector3 side = Vector3.Cross(Vector3.up, laneDir).normalized;
+            Vector3 normal = Vector3.Cross(laneDir, side).normalized;
+            // 単一の平面帯なので凸な斜面のバンプに食い込む。法線方向に少し浮かせて食い込みを抑える。
+            Vector3 mid = (nearP + farP) * 0.5f + normal * 0.35f;
+
+            // ローカル +Z=法線（面をカメラへ）、+Y=レーン方向（長さ）、+X=幅。
+            _aimIndicator.transform.SetPositionAndRotation(mid, Quaternion.LookRotation(normal, laneDir));
+            _aimIndicator.transform.localScale = new Vector3(AimWidth, length, 1f);
             if (!_aimIndicator.activeSelf) _aimIndicator.SetActive(true);
 
             // 削り中はより明るく（加算量UP）。RGB がそのまま加算される。

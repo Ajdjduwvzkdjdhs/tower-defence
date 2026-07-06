@@ -200,7 +200,7 @@
 - **不変（覆さない）**: `EnemyMatrix`/`AvalancheClock` の純ロジックと EditMode テストは不変（**見せ方のみの変更**）。ADR-4（プール）／ADR-8（純ロジック分離）／ADR-11 を踏襲。ADR-12/14（座標＝行インデックス基準・雪崩で繰り上げ）を覆さず、その「繰り上げ」の**描画**を lerp 化するもの。
 - **結果**: EditMode **120本緑**（回帰なし）。Unity-MCP Play 検証: `ApplyAvalanche` 直後に生き残りが back 座標 → front 座標へ lerp 前進（新規湧きはスナップ）、`killed=3` で `SnowPuff` 3体が撃破座標（`(-0.70,2.70)`/`(0.70,2.70)`/`(0.00,2.70)`）に一致・プール返却で `Instantiate/Destroy` なし。Extra 1 マイルストーン B（コミット `f54a298`）。
 
-## ADR-21: 表現層を3D透視化する（描画のみ・Core の座標非依存性を利用／ADR-13「美術は後続」を具体化）— Proposed（Phase 4）
+## ADR-21: 表現層を3D透視化する（描画のみ・Core の座標非依存性を利用／ADR-13「美術は後続」を具体化）— Accepted（Phase 4）
 
 - **背景**: 見栄え向上のため、俯瞰の平面マップ表現（山＝手続き生成 Quad、全 GameObject を z≈0 に置く正射影）を、造形済み Terrain（別プロジェクト `kakigori-3d-t` の `New Terrain 3.asset`）を用いた **3D 透視表現** に置き換えたい。移植元 `kakigori-3d-t` に再利用可能な資産は実質この Terrain 1 つのみ（アクターは全て Unity プリミティブ＝独自3Dモデル/VFX/雪テクスチャは存在しない）。Core（`EnemyMatrix`/各種 Clock/State/Pool/`Scoring`）と雪崩の行消去・生成パイプラインは不変に保つ（ADR-8/9/11/12/14 を覆さない）。アクターの見た目はプリミティブ継続（案Y／モデル制作は後続）。
 - **決定**:
@@ -229,3 +229,17 @@
 - **スケール確定**: 当初 size=(120,160,120) では山の footprint 半径が約2ユニットしかなく、プレイフィールド（`_frontGap`2.7〜最奥4.35）が山を越えて平地（y≈0）に落ちた。footprint を実測（正規化半径≈0.022）し、**size=(316.8,160.4,316.8)**（footprint 半径≈7・山頂 y≈5.4）へ拡大、山頂を原点に配置（terrain pos≈(-16.1,0,-16.7)）。斜面高さ: r=2.7→2.28 / 3.5→1.55 / 4.35→0.88。ADR-14 同様「方針不変・数値のみ」。
 - **検証（MCP Play）**: ①4谷に敵9体ずつ→**全36体が斜面上**（y=1.03〜4.24・平地ゼロ）、砦=山頂(5.40) ②`ApplyAvalanche`（S谷）で **killed=3 / rows 3→2** ＝先頭行（山頂側）消去＋繰り上げが斜面上で成立（Core 無改修）③弾着弾で砦HP減（3D 下でも戦闘成立）。EditMode **120本緑**。
 - **残（マイルストーン C/D）**: 入場アニメ（Option A・U5）、Aim インジケータの斜面対応（現状 XY 前提で不整合・U6）、カメラ/雪マテリアル仕上げ、Wave1〜3 通し、アクター斜面向き。ADR-21 Accepted 化は U6。
+
+### 着手メモ（マイルストーン C 完了・2026-07-06）— 敵の入場（Option A）
+
+- **U5**: `ChannelController` に `_entranceGap`（=1.5）を追加。`RepositionAll(justSpawned)` の新規湧き分岐を「入場位置（スロットより麓側＝下り斜面外側）へ `snap:true` → スロットへ `snap:false`」の2段に変更し、既存 `SetTarget`/`_advanceSpeed` lerp（ADR-20）で麓側から歩かせる。`PositionFor(row, slot, extraAlong=0)` に along オフセット引数を追加。
+- **1 箇所で統一**: 3 spawn 経路（`SpawnEnemy`/`SpawnAlly`/`SpawnDisguised`）はすべて `RepositionAll(justSpawned)` を通るため basic/味方/変装すべてに入場が適用される。cosmetic reposition であり gameplay locomotion ではない＝**ADR-18 と整合**。Core・雪崩・生成・`Enemy.Update` は無改修。
+- **検証（MCP Play）**: 北谷1体が湧き直後 `alongOutward=4.20`（=slot 2.7＋entranceGap 1.5・麓側 y=0.83）→ 数百ms 後 `alongOutward=2.70`（=slot・y=2.55＝斜面を登って整列）を実測。南谷6体 `ApplyAvalanche` killed=3・rows 2→1（雪崩/繰り上がり回帰なし）。EditMode **120本緑**。
+
+### 着手メモ（マイルストーン D 完了・2026-07-06）— 仕上げ＋Wave 通し＝ADR-21 Accepted 化
+
+- **U6 / Aim インジケータの斜面対応**: 従来 XY 平面の Quad（`dir*2.9 + z=0.6`・Z軸回転）だったのを、外向き(XZ)に沿って砦寄り端（along 2.0）→麓側端（along 5.5）の 2 点を `HeightAt` でサンプルし、その傾き（laneDir）に沿って寝かせる方式へ変更。`Quaternion.LookRotation(斜面法線, laneDir)`（+Z=法線＝面をカメラへ／+Y=レーン方向＝長さ）、scale=(幅2.0, 3D長さ, 1)。単一平面帯なので凸斜面のバンプに食い込む → 法線方向へ 0.35 浮かせ、`_Cull=Off`（両面）で向きに依らず表示。物理不使用維持（`SampleHeight` のみ、コライダーなし）。
+- **検証（MCP Play・ConfirmPressed 注入で通し駆動）**: Title→(Enter)→WaveIntro→WavePlaying へ遷移。**4谷が斜面上に湧き**（y=2.3〜3.8）、各敵が `fireInterval` で発射（totalShots 増）、**弾が山頂の砦へ着弾し HP 1000→…→0**。Wave 終了→Lull→次 Wave の遷移も 3D 下で成立。砦破壊で **ResultState（FORT DESTROYED・スコア=残り砦HP=0）**、`ConfirmPressed` で再挑戦→`BeginWave(0)` で HP リセット→再び WavePlaying（retry ループ実証）。Aim レーンが S 斜面に沿って（`pos=(0,2.89,-3.79)`・euler pitch≈-47°・長さ 4.81）表示、削り中は加算量UP で明るく。
+- **物理不使用・Singleton=GameManager・入力=IInputSource を維持**（配線変更なし。検証時のみ reflection で fake `IInputSource` を注入したが、製品コードは無改修）。EditMode **120本緑**（Core 無改修・回帰ゼロ）。
+- **スコープ外（未実施・意図的）**: アクターの3Dモデル化・本格 VFX・サウンド・弾の放物線化（`phases.md` Out of scope）。アクターの斜面向き（任意）も見送り。プリミティブが斜面バンプに半分埋もれる箇所があるが視認可能で、モデル化フェーズで解消する範疇。雪マテリアルは白 lit のまま（十分に立体視認可）。
+- **結論**: 縫い目（`PositionFor`＋カメラ＋ライティング＋URP 3D パイプライン）＋ Terrain 移植＋Aim 斜面対応で 3D 雪山を実現。`phases.md` Phase 4 受け入れ基準を総達成したため **本 ADR を Proposed→Accepted 化**。

@@ -128,3 +128,10 @@ Aim インジケータの斜面対応（谷ハイライトを XZ／斜面へ）�
 - **不変**: Core（`EnemyMatrix`/Clock/State/Pool/`Scoring`）・雪崩・生成・`Enemy.Update` は無改修。既存の繰り上がり（`RepositionAll()` 無引数）は従来どおり lerp。
 - **検証（MCP Play）**: ①北谷に1体湧き → 湧き直後 `alongOutward=4.20`（=slot 2.7＋entranceGap 1.5・y=0.83＝麓側の低い位置）→ 数百ms 後 `alongOutward=2.70`（=slot・y=2.55＝斜面を登って整列）を実測＝**麓側から隊列位置へ歩いて接近**。②南谷に6体（2行）→ `ApplyAvalanche` killed=3・rows 2→1・count 6→3＝**雪崩/繰り上がり回帰なし**。③screenshot で斜面上の survivor 3体を確認。EditMode **120本緑**（回帰ゼロ）。
 - **D への申し送り**: 残 U6＝Aim インジケータの斜面対応（XY 前提で不整合）、カメラ/雪マテリアル仕上げ、（任意）アクター斜面向き、Wave1〜3 通し、ADR-21 Proposed→Accepted 化。
+
+## 9. 着手メモ（マイルストーン D 完了・2026-07-06）＝Phase 4 完了
+
+- **U6 / Aim インジケータの斜面対応**: `GameManager.UpdateAimIndicator` を XY 平面前提（`dir*2.9 + z=0.6`・Z軸回転）から XZ＋高さ方式へ改修。外向き(XZ)に沿って砦寄り端 `along=2.0`→麓側端 `along=5.5` の 2 点を `HeightAt` でサンプルし、その傾き（laneDir）に沿ってレーンを寝かせる。`Quaternion.LookRotation(斜面法線, laneDir)`（+Z=法線＝面をカメラへ／+Y=レーン方向）、scale=(幅2.0, 2 点間の3D距離, 1)。単一平面帯ゆえ凸斜面のバンプに食い込むため **法線方向へ 0.35 浮かせ**、`_aimMat._Cull=Off`（両面）で向きに依らず表示。物理不使用維持（`SampleHeight` のみ）。
+- **検証（MCP Play・ConfirmPressed 注入で通し駆動）**: ①Title→(Enter)→WaveIntro→WavePlaying 遷移 ②4谷が斜面上に湧き（y=2.3〜3.8）・発射（totalShots 増）・**弾が山頂の砦へ着弾し HP 1000→0** ③Wave 終了→Lull→次 Wave 遷移 ④砦破壊で **ResultState（FORT DESTROYED・スコア=残HP=0）**・`ConfirmPressed` で再挑戦→`BeginWave(0)` リセット→再 WavePlaying（retry ループ）⑤Aim レーンが S 斜面に沿って表示（`pos=(0,2.89,-3.79)`・pitch≈-47°・長さ4.81）、削り中は明るく。EditMode **120本緑**（回帰ゼロ）。
+- **スコープ外（意図的に未実施）**: アクター3Dモデル化・本格VFX・サウンド・弾の放物線化・アクター斜面向き（任意）。プリミティブが斜面バンプに一部埋もれるが視認可能（モデル化フェーズで解消）。雪マテリアルは白 lit のまま（立体視認は十分）。
+- **完了判定**: `phases.md` Phase 4 受け入れ基準を総達成 → `architecture.md` **ADR-21 を Accepted 化**。Phase 4 完了。
