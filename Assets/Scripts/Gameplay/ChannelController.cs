@@ -19,9 +19,10 @@ namespace KakigoriTD.Gameplay
     public class ChannelController : MonoBehaviour
     {
         [Header("配置（砦中心からの外向き）")]
-        // 先頭行(index0)は山の一番外側の円(r≈2.2)より外＝麓の茶色い地面に置く。
-        // 最奥行(index3)でも画面内: 2.7 + 3*0.55 = 4.35（敵半幅0.25 → y±4.6 < カメラ視野±5）。
-        [SerializeField] private float _frontGap = 2.7f;    // 先頭行(index0)の砦中心からの距離（山の外）
+        // Phase4.5: 隊列を山の麓（斜面基部）に静止させる。先頭行(index0)=山頂寄り(up-slope)、後続は麓の平地側。
+        // 先頭 r=5.0(y≈0.39) 〜 最奥 r=5.0+3*0.55=6.65(y≈0)。俯瞰カメラ(y=20/fov46)の N谷可視半径≈8.0 内。
+        // 斜面高さ実測: r=5→0.39 / r=6→0.06 / r=6.5→0.01 / r≥7→0（斜面が平地に着く＝麓は r≈6.5）。
+        [SerializeField] private float _frontGap = 5.0f;    // 先頭行(index0)の砦中心からの距離（＝麓・斜面基部）
         [SerializeField] private float _rowSpacing = 0.55f; // 行間（奥行き方向）
         [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
