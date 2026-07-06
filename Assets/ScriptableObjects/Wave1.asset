@@ -18,3 +18,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 5e18ce3d0089e448cab4cccc0eb609a7, type: 2}
   _allySpawnChance: 0
   _disguiseChance: 0
+  _allyType: {fileID: 0}
+  _disguiseType: {fileID: 0}
+  _displayName: "\u5FEB\u611F\u6CE2"

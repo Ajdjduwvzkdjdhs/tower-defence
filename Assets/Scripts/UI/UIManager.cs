@@ -22,6 +22,7 @@ namespace KakigoriTD.UI
 
         private int _hp, _maxHp;
         private string _status = "";
+        private string _banner = "";
         private bool _resultShown;
         private bool _resultWin;
         private int _resultScore;
@@ -51,6 +52,12 @@ namespace KakigoriTD.UI
 
         /// <summary>上部ステータス（Title / Wave n 残り秒 / Lull など）。GameManager が毎フレーム設定。</summary>
         public void SetStatus(string status) => _status = status;
+
+        /// <summary>画面中央の遷移バナーを設定する（WaveIntro / WaveLull で使用）。</summary>
+        public void SetBanner(string text) => _banner = text;
+
+        /// <summary>中央バナーを消す（戦闘中・タイトル・リザルト）。</summary>
+        public void ClearBanner() => _banner = "";
 
         /// <summary>リザルトを表示する。penalty は減点合計（0 なら非表示）。</summary>
         public void ShowResult(bool isWin, int score, int penalty = 0)
@@ -93,6 +100,26 @@ namespace KakigoriTD.UI
             }
             bool shaving = _avalanche != null && _avalanche.IsAvalanching;
             if (shaving) GUI.Label(new Rect(232, 100, 200, 22), "▼ 削り中（雪崩）");
+
+            // 中央バナー（WaveIntro / WaveLull。リザルト表示中は非表示）
+            if (!string.IsNullOrEmpty(_banner) && !_resultShown)
+            {
+                float bw = Screen.width * 0.7f;
+                float bh = 72f;
+                var bannerBox = new Rect((Screen.width - bw) * 0.5f, Screen.height * 0.5f - bh * 0.5f, bw, bh);
+                GUI.color = new Color(0f, 0f, 0f, 0.6f);
+                GUI.DrawTexture(bannerBox, Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                var prevAlign = GUI.skin.label.alignment;
+                var prevSize = GUI.skin.label.fontSize;
+                GUI.skin.label.alignment = TextAnchor.MiddleCenter;
+                GUI.skin.label.fontSize = 28;
+                GUI.contentColor = new Color(1f, 0.95f, 0.75f);
+                GUI.Label(bannerBox, _banner);
+                GUI.contentColor = Color.white;
+                GUI.skin.label.alignment = prevAlign;
+                GUI.skin.label.fontSize = prevSize;
+            }
 
             // リザルト
             if (_resultShown)

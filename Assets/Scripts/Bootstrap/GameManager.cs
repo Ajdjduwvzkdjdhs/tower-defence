@@ -46,7 +46,7 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _aimMat;
+        private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat;
         private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
@@ -57,6 +57,7 @@ namespace KakigoriTD.Bootstrap
             _fortMat = MakeUnlit(new Color(0.92f, 0.95f, 1.0f));
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
+            _snowPuffMat = MakeUnlitAdditive(Color.white);
 
             BuildMountain(); // 雪山の俯瞰背景（頂上=中央 → 麓=外周）。敵が麓に居ることを伝える
             BuildFort();
@@ -169,7 +170,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -206,6 +207,15 @@ namespace KakigoriTD.Bootstrap
             return go.AddComponent<DisguisedEnemy>();
         }
 
+        private SnowPuff CreateSnowPuff()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "SnowPuff"; go.transform.localScale = Vector3.one * 0.5f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _snowPuffMat;
+            return go.AddComponent<SnowPuff>();
+        }
+
         private Projectile CreateProjectile()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -220,26 +230,38 @@ namespace KakigoriTD.Bootstrap
             var cur = _machine.Current;
             if (cur is TitleState)
             {
-                _ui.ClearResult(); // リザルト表示を消してタイトルへ
+                _ui.ClearResult();
+                _ui.ClearBanner();
                 _ui.SetStatus("かき氷タワーディフェンス — [Enter] で開始");
             }
-            else if (cur is WaveIntroState)
+            else if (cur is WaveIntroState intro)
             {
-                _ui.SetStatus("WAVE 開始…");
+                _ui.SetBanner($"Wave {intro.WaveIndex + 1}  ―  {GetWaveDisplayName(intro.WaveIndex)}");
+                _ui.SetStatus("");
             }
             else if (cur is WavePlayingState)
             {
+                _ui.ClearBanner();
                 float remaining = Mathf.Max(0f, GetWaveDuration(_currentWaveIndex) - (Time.time - _waveStartTime));
                 _ui.SetStatus($"Wave {_currentWaveIndex + 1}/{WaveCount}   残り {remaining:F0}s   — W/A/S/D 谷選択 / Space 削り");
             }
-            else if (cur is WaveLullState)
+            else if (cur is WaveLullState lull)
             {
-                _ui.SetStatus($"Wave {_currentWaveIndex + 1} クリア — 次の波へ");
+                _ui.SetBanner($"Wave {lull.WaveIndex + 1}  クリア");
+                _ui.SetStatus("");
             }
             else if (cur is ResultState)
             {
-                _ui.SetStatus(""); // リザルトはオーバーレイ（ShowResult）で表示。背後の Wave 文を消す
+                _ui.ClearBanner();
+                _ui.SetStatus("");
             }
+        }
+
+        private string GetWaveDisplayName(int i)
+        {
+            if (_waveConfigs == null || i < 0 || i >= _waveConfigs.Length) return "";
+            var name = _waveConfigs[i].DisplayName;
+            return string.IsNullOrEmpty(name) ? "" : name;
         }
 
         private GameObject NewChild(string name)
