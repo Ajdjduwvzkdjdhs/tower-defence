@@ -26,6 +26,12 @@ namespace KakigoriTD.Gameplay
         private Vector3 _targetPos;
         private float _advanceSpeed;
 
+        // ADR-23: 発射は所定スロット到達後のみ（入場・繰り上がりの移動中は撃たない）。
+        private const float ArriveEpsilonSqr = 0.0004f; // (0.02)^2
+
+        /// <summary>目標位置（スロット）に到達して静止しているか。移動中は false（＝発射しない）。</summary>
+        protected bool IsInPosition => (transform.position - _targetPos).sqrMagnitude <= ArriveEpsilonSqr;
+
         // per-instance tint: sharedMaterial を汚さずプール再利用で色を切り替える（ADR-16）。
         private Renderer _renderer;
         private MaterialPropertyBlock _mpb;
@@ -81,6 +87,10 @@ namespace KakigoriTD.Gameplay
         {
             if (!_alive) return;
             MoveTowardTarget();
+
+            // ADR-23: 所定スロットに到達して静止するまで発射しない（入場・繰り上がり中はタイマ凍結）。
+            // 初弾は到達後に InitialFireDelay から計時される。
+            if (!IsInPosition) return;
 
             _fireTimer -= Time.deltaTime;
             if (_fireTimer <= 0f)

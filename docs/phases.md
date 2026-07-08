@@ -235,6 +235,75 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 4.5 — 敵の登場・静止位置の再設計（遠方入場／麓静止）／別計画　【🟢 完了】
+
+**ゴール**: 俯瞰カメラ化後の手触り調整。敵が「山からかなり遠い平地（カメラ縁）に登場 → 山の麓まで歩いて接近して静止し攻撃」する表現へ。ゲーム性・数値・Core（`EnemyMatrix`/雪崩/生成/`Projectile`）は Phase 4 のまま不変（**描画・座標のみ**）。詳細計画は `docs/Phase4.5.md`、設計判断は **ADR-22**。ブランチ `phase4-5-entrance-rework`。
+
+### In scope
+
+- 隊列の静止位置を斜面中腹→**麓（斜面基部）**へ（`_frontGap` 数値のみ・ADR-14 前例）、入場を**絶対半径 `_entranceRadius`（カメラ縁の遠方ライン）＋専用速度 `_entranceSpeed`**で歩かせる（案B・ADR-22）、俯瞰カメラのズームアウト（遠方入場を収容）、Aim レーンの麓隊列への整合。
+
+### Out of scope（やらない）
+
+- アクターの3Dモデル化・本格 VFX・サウンド・弾の放物線化・バランス数値（HP/damage/fireInterval/spawn 等）の調整・アクターの斜面向き。
+
+### 受け入れ基準
+
+- [x] 敵が山からかなり遠い平地（俯瞰カメラ視野の縁の内側・**radial 10**）に登場する
+- [x] 登場した敵が**麓（radial 5.0〜6.65）まで歩いて接近し静止して砦を攻撃**する（`alongOutward` 10.02→5.05 を実測）
+- [x] 削り入力で**先頭行が消え後続が繰り上がる**挙動が従来どおり（Core 不変・`ApplyAvalanche` killed=3・rows 減）
+- [x] 弾着弾→砦HP減、Result、retry 等、**既存 Wave 通し**が成立（Title→Wave→Result(Lose)→retry をライブ実証）
+- [x] 谷ハイライト（Aim レーン）が麓の新隊列を覆う（`AimNearAlong 3.5`/`AimFarAlong 7.0`）
+- [x] **物理不使用を維持**（コライダー不使用・高さは `Terrain.SampleHeight`）
+- [x] Singleton は `GameManager` のみ・入力は `IInputSource` 経由を維持
+- [x] **EditMode 全120本緑**（Core 無改修・回帰ゼロ）
+- [x] 変更を `docs/architecture.md` **ADR-22** に記録（Accepted）
+
+### Status: 🟢 Phase 4.5 完了（2026-07-07）— マイルストーン A・B・C 達成。受け入れ基準すべて充足。ADR-22 Accepted。
+
+`docs/Phase4.5.md` 参照。EditMode **120本緑**（Core 無改修・回帰ゼロ）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| U1 | 俯瞰カメラ可視半径・Terrain 麓半径・高さプロファイルを MCP 実測（N/S 可視 ±8/9・麓 r≈6.5-8・放射非対称） | `script-execute` 実測値で目標 along 確定 | ✅ |
+| U2 | `ChannelController._frontGap` 2.7→5.0（麓へ・1パラメータのみ） | MCP Play: 4谷 radial 5.05〜6.69 に整列・`ApplyAvalanche` killed=3/rows 4→3・EditMode 120本緑 | ✅ |
+| U3 | 案B: `_entranceRadius=10`＋`_entranceSpeed=6`（`_entranceGap` 廃止）＋カメラ (0,20,-0.5)→(0,27,0) ズームアウト | MCP Play: 4谷 radial 10.02（カメラ縁）に登場→5.05（麓）へ歩行・弾着弾で砦HP減・雪崩回帰なし・EditMode 120本緑 | ✅ |
+| U4 | Aim レンジ Near3.5/Far7.0＋Wave 通し＋ADR-22 Accepted | MCP Play（fake input 注入）: Wave1 WavePlaying・Aim レーンが N谷麓帯に表示・砦HP0→Result→Confirm 再挑戦→WavePlaying（retry）・EditMode 120本緑 | ✅ |
+
+---
+
+## Phase 4.6 — 発射タイミングの修正（所定位置到達後に発射）／別計画　【🟢 完了】
+
+**ゴール**: Phase 4.5 後の不具合修正。敵が**入場中（麓へ歩行中）に発射**し、敵と弾が同時移動・敵が自分の弾を追い越す不自然さを解消。敵は**所定の隊列スロット（麓）に到達して静止してから**発射するよう変更。詳細計画は `docs/Phase4.6.md`、設計判断は **ADR-23**。ブランチ `phase4-6-fire-timing`。
+
+### In scope
+
+- `Enemy` の発射ゲート（在位置判定 `IsInPosition` で移動中は発射抑制）。Core・`Projectile`・生成・カメラ・座標系は無改修。
+
+### Out of scope（やらない）
+
+- バランス数値調整・初弾の間（`InitialFireDelay`）の演出調整・アクター3Dモデル化・VFX・サウンド・弾の放物線化。
+
+### 受け入れ基準
+
+- [x] **入場中の敵は発射しない**（麓のスロットに到達するまで `ShotsFired=0`）
+- [x] **麓到達後に発射を開始**し、弾は静止した敵の位置から生成される
+- [x] 敵が自分の弾を**追い越さない**（到達後は静止して撃つ）
+- [x] 雪崩後の繰り上がり移動中も発射せず、到達で再開（同一ゲート）
+- [x] 既存 Wave 通し（発射・砦HP減・雪崩・Result・retry）が成立
+- [x] Singleton=GameManager・入力=IInputSource・物理不使用を維持
+- [x] **EditMode 全120本緑**（Core・`Projectile` 無改修・回帰ゼロ）
+- [x] 変更を `docs/architecture.md` **ADR-23** に記録（Accepted）
+
+### Status: 🟢 Phase 4.6 完了（2026-07-07）— マイルストーン A・B 達成。受け入れ基準すべて充足。ADR-23 Accepted。
+
+`docs/Phase4.6.md` 参照。EditMode **120本緑**（Core・`Projectile` 無改修・回帰ゼロ）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| A1 | `Enemy.IsInPosition`（`_targetPos` 距離）＋`Update` の発射を在位置時のみゲート（`DisguisedEnemy` は基底継承で自動適用・`AllyNPC` は無発射） | MCP Play: 単体入場を実測—radial 10.02→8.37→5.82 で `ShotsFired=0`、radial 5.05 到達で `ShotsFired>0`・screenshot で歩行中の敵が平地に弾なし・EditMode 120本緑 | ✅ |
+| B1 | Wave 通し回帰＋ADR-23＋docs | MCP Play（fake input 注入）: Title→Wave1 WavePlaying（砦HP減＝到達後発射）→WaveLull「Wave 1 クリア」→…→ResultState→Confirm 再挑戦→WavePlaying（HP リセット）・EditMode 120本緑 | ✅ |
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン

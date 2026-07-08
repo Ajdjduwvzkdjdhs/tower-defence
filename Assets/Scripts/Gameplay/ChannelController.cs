@@ -19,15 +19,17 @@ namespace KakigoriTD.Gameplay
     public class ChannelController : MonoBehaviour
     {
         [Header("配置（砦中心からの外向き）")]
-        // 先頭行(index0)は山の一番外側の円(r≈2.2)より外＝麓の茶色い地面に置く。
-        // 最奥行(index3)でも画面内: 2.7 + 3*0.55 = 4.35（敵半幅0.25 → y±4.6 < カメラ視野±5）。
-        [SerializeField] private float _frontGap = 2.7f;    // 先頭行(index0)の砦中心からの距離（山の外）
+        // Phase4.5: 隊列を山の麓（斜面基部）に静止させる。先頭行(index0)=山頂寄り(up-slope)、後続は麓の平地側。
+        // 先頭 r=5.0(y≈0.39) 〜 最奥 r=5.0+3*0.55=6.65(y≈0)。俯瞰カメラ(y=20/fov46)の N谷可視半径≈8.0 内。
+        // 斜面高さ実測: r=5→0.39 / r=6→0.06 / r=6.5→0.01 / r≥7→0（斜面が平地に着く＝麓は r≈6.5）。
+        [SerializeField] private float _frontGap = 5.0f;    // 先頭行(index0)の砦中心からの距離（＝麓・斜面基部）
         [SerializeField] private float _rowSpacing = 0.55f; // 行間（奥行き方向）
         [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数
-        [SerializeField] private float _advanceSpeed = 3.5f; // 繰り上がり前進速度（lerp、ADR-20）
-        [SerializeField] private float _entranceGap = 1.5f;  // 入場時に隊列スロットより麓側へ置くオフセット（Option A・ADR-21/U5）
+        [SerializeField] private float _advanceSpeed = 3.5f;  // 繰り上がり前進速度（lerp、ADR-20）
+        [SerializeField] private float _entranceRadius = 10f; // 入場開始の絶対半径＝カメラ縁の遠方ライン（案B・Phase4.5/ADR-22）
+        [SerializeField] private float _entranceSpeed = 6f;   // 入場の歩行速度（繰り上がり _advanceSpeed とは独立・Phase4.5）
 
         private EnemyMatrix<Enemy> _matrix;
         private ObjectPool<Enemy> _pool;
@@ -237,9 +239,10 @@ namespace KakigoriTD.Gameplay
                     if (e == null) continue;
                     if (e == justSpawned)
                     {
-                        // 入場（Option A）: 麓側の外に置き、スロットへ歩かせる（gameplay locomotion ではない）。
-                        e.SetTarget(PositionFor(row, slot, _entranceGap), snap: true, _advanceSpeed);
-                        e.SetTarget(PositionFor(row, slot), snap: false, _advanceSpeed);
+                        // 入場（案B・ADR-22）: 谷方向の絶対半径 _entranceRadius（カメラ縁の遠方ライン）へ snap し、
+                        // スロットへ _entranceSpeed で歩かせる（cosmetic reposition。gameplay locomotion ではない＝ADR-18 整合）。
+                        e.SetTarget(EntrancePositionFor(slot), snap: true, _entranceSpeed);
+                        e.SetTarget(PositionFor(row, slot), snap: false, _entranceSpeed);
                     }
                     else
                     {
@@ -249,9 +252,20 @@ namespace KakigoriTD.Gameplay
             }
         }
 
-        private Vector3 PositionFor(int row, int slot, float extraAlong = 0f)
+        private Vector3 PositionFor(int row, int slot)
         {
-            float along = _frontGap + row * _rowSpacing + extraAlong;
+            float along = _frontGap + row * _rowSpacing;
+            return PointAt(along, slot);
+        }
+
+        // 入場開始点（案B・ADR-22）: スロットの across を保ったまま絶対半径 _entranceRadius の遠方（カメラ縁）に置く。
+        private Vector3 EntrancePositionFor(int slot)
+        {
+            return PointAt(_entranceRadius, slot);
+        }
+
+        private Vector3 PointAt(float along, int slot)
+        {
             float across = (slot - (_rowWidth - 1) * 0.5f) * _slotSpacing;
             Vector3 p = _center + _outwardDir * along + _perpDir * across; // XZ 平面（y=0）
             p.y = _heightAt != null ? _heightAt(p.x, p.z) : 0f;            // 斜面に乗せる（ADR-21）
