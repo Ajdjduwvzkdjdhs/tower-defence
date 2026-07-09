@@ -116,6 +116,13 @@ Vision 入力（実 Python or fake ファイル注入）で `ActiveChannel` を�
 - **A1 検証（カメラ無し）**: 当環境はカメラ非搭載のため契約を決定的に検証。①`classify` 代表点＝ (0.5,0.1)→0(N) / (0.5,0.9)→2(S) / (0.1,0.5)→1(W) / (0.9,0.5)→3(E) / 中心→-1 / 中心近傍(距離0.02)→-1。②原子的書き込み＝連続書き込みで読み出しが**常に完全な1行**（partial/multi なし）・`seq` 厳密単調増加 `[1..7]`・`channel`∈[-1,3]・`.tmp` 残留なし。③パス解決順 env>config>相対デフォルト。④`--sim` 実起動で `out/position.txt` の seq が 158→210 と進み channel が 0/-1 と変化（中心通過で不感帯）、5連続読みが同一完全行（原子性）。全 PASS。
 - **合否**: §5 マイルストーン A の合否条件（ファイル生成・seq 単調増加・channel 0-3/-1・原子性）を充足。実機カメラでの手位置→channel 追従は当日 MCP/実機で確認（環境にカメラが無いため保留）。
 
-### マイルストーン B〜D
+### マイルストーン B 完了（2026-07-09）— Unity 純ロジック `VisionInputProtocol`
+
+- **B1（`VisionInputProtocol`）**: `Assets/Scripts/Input/VisionInputProtocol.cs`。`SerialInputProtocol` と対称の純 C#。`Ingest(line)`＝`seq,channel` を厳格パース（カンマ・long・int・範囲 -1..3 検査、外れは不正行として無視）。**watchdog は seq の変化で判定**（IO 層がポーリングで同一行を繰り返し Ingest しうるため。`seq != _lastSeq` で新鮮＝再武装。Python 再起動で seq が小さく戻っても「変化」＝新鮮）。`Tick(dt)` で `_timeSinceSeqChange` 加算＋モード適用（ライブ=raw そのまま／ラッチ=-1 を直前有効値で埋める）＋デバウンス（候補が指定秒安定で採用・0 で即時）。`IsLost`（状態Y）と `ActiveChannel`（ロスト時は -1 フェイルセーフ）を公開。
+- **B1（テスト）**: `Assets/Tests/EditMode/VisionInputProtocolTests.cs` 15 本 — 受信前ロスト＋-1、ライブ追従、ライブ -1 で解除、ラッチ -1 で谷保持・別谷で切替、不正行/null 無視、seq 停止でロスト＋フェイルセーフ、seq 前進で生存、復帰、Python 再起動(seq 降下)を新鮮扱い、watchdog 無効、デバウンス（安定で採用/ちらつきは不採用/0 で即時）。
+- **B1 検証（MCP EditMode）**: `VisionInputProtocolTests` 15/15 緑。フル EditMode **135/135 緑**（既存 120＋新規 15・回帰ゼロ）。
+- **合否**: §5 マイルストーン B の合否条件（新規テスト＋既存全緑）を充足。
+
+### マイルストーン C〜D
 
 （未着手。完了ごとに追記する。）
