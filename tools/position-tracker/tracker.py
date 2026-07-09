@@ -16,7 +16,8 @@ Unity は seq の停止で「ロスト」を検知する（§3-⑥）。手未�
   3. スクリプト相対 out/position.txt（Editor 開発の既定）
 
 実行:
-  uv run python tracker.py           # カメラ + MediaPipe（本番）
+  uv run python tracker.py           # カメラ + MediaPipe（本番。左右反転なし）
+  uv run python tracker.py --flip    # 映像を左右反転（水平ミラー）する
   uv run python tracker.py --sim     # カメラ無し・合成座標で契約を検証
 """
 
@@ -27,6 +28,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -115,33 +117,83 @@ def run_sim(writer: PositionWriter, deadzone: float) -> None:
         time.sleep(WRITE_INTERVAL_SEC)
 
 
-def run_camera(writer: PositionWriter, deadzone: float) -> None:
-    """MediaPipe + カメラ（本番）。quad はマウスでドラッグ調整。"""
+def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> None:
+    """MediaPipe + カメラ（本番）。quad はマウスでドラッグ調整。
+
+    flip=True で映像を水平ミラーする（既定はミラーなし）。左右反転はチャンネル的に
+    W↔E の入れ替えと等価で、Unity 側（GameManager Inspector）でも切替可能。
+    """
     import cv2
     import mediapipe as mp
     import numpy as np
 
-    pts = np.array([[200, 150], [440, 150], [440, 330], [200, 330]], np.int32)
+    # 取り込み・表示の固定解像度（下のキャプチャ設定と共通の基準）。
+    DISP_W, DISP_H = 640, 480
+    # 検出枠(quad)の初期位置。画面中央に大きめ＝左右 MX / 上下 MY の余白だけ残す。
+    # 余白は角をドラッグで掴める＆手が枠外に出にくいよう少しだけ確保する。
+    MX, MY = 60, 45
+    pts = np.array([[MX, MY], [DISP_W - MX, MY],
+                    [DISP_W - MX, DISP_H - MY], [MX, DISP_H - MY]], np.int32)
     state = {"drag": -1}
-    CLICK_THRESHOLD = 20
+
+    def nearest_corner(x: int, y: int) -> int:
+        """クリック点に最も近い角の index。掴み損ね(Retina 等の座標ずれ)を避けるため
+        しきい値なしで常に最寄りを掴む（キャリブレーション用途なので誤爆は許容）。"""
+        d = [math.hypot(x - px, y - py) for px, py in pts]
+        return int(np.argmin(d))
 
     def on_mouse(event, x, y, flags, param):
+        # macOS/COCOA では LBUTTONUP を取りこぼすことがある。MOUSEMOVE の flags で
+        # 「実際にボタンが押されているか」を毎回確認し、押されていなければ強制解放する。
+        held = bool(flags & cv2.EVENT_FLAG_LBUTTON)
         if event == cv2.EVENT_LBUTTONDOWN:
-            for i, pt in enumerate(pts):
-                if math.hypot(x - pt[0], y - pt[1]) < CLICK_THRESHOLD:
-                    state["drag"] = i
-                    break
-        elif event == cv2.EVENT_MOUSEMOVE and state["drag"] != -1:
+            state["drag"] = nearest_corner(x, y)
             pts[state["drag"]] = [x, y]
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if state["drag"] != -1 and held:
+                pts[state["drag"]] = [x, y]
+            elif not held:
+                state["drag"] = -1  # up 取りこぼしの保険
         elif event == cv2.EVENT_LBUTTONUP:
+            if state["drag"] != -1:
+                pts[state["drag"]] = [x, y]
             state["drag"] = -1
 
+    UNIT = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32)  # 正規化空間の quad 角
+
     def normalized(tx, ty):
-        src = pts.astype(np.float32)
-        dst = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32)
-        m = cv2.getPerspectiveTransform(src, dst)
+        m = cv2.getPerspectiveTransform(pts.astype(np.float32), UNIT)
         p = cv2.perspectiveTransform(np.array([[[tx, ty]]], np.float32), m)
         return float(p[0][0][0]), float(p[0][0][1])
+
+    def draw_sectors(frame) -> None:
+        """0/1/2/3 の判定領域と不感帯(-1)を quad 内に重畳表示。マウス調整に追従する。
+
+        判定は正規化空間で「中心からの対角線で4分割 + 中心の不感帯」（classify と同じ）。
+        正規化空間の幾何を逆射影して画像に描くので、quad が歪んでいても領域と一致する。
+        """
+        m_inv = cv2.getPerspectiveTransform(UNIT, pts.astype(np.float32))
+
+        def to_img(norm):
+            a = np.asarray(norm, np.float32).reshape(-1, 1, 2)
+            return cv2.perspectiveTransform(a, m_inv).reshape(-1, 2)
+
+        # 対角線2本（対角の角どうし）で N/W/S/E の4三角形に分割＝境界 |dy|=|dx|。
+        p = pts.reshape(-1, 2)
+        cv2.line(frame, tuple(p[0]), tuple(p[2]), (200, 200, 200), 1)
+        cv2.line(frame, tuple(p[1]), tuple(p[3]), (200, 200, 200), 1)
+
+        # 不感帯(-1)の円。射影で歪むので円周点を変換して多角形として描く。
+        ang = np.linspace(0, 2 * np.pi, 48, endpoint=False)
+        circle = np.stack([0.5 + deadzone * np.cos(ang), 0.5 + deadzone * np.sin(ang)], 1)
+        cv2.polylines(frame, [to_img(circle).astype(np.int32)], True, (0, 255, 255), 1)
+
+        # 各領域と中心にラベル。
+        labels = [(0.5, 0.19, "0 N"), (0.19, 0.5, "1 W"),
+                  (0.5, 0.81, "2 S"), (0.81, 0.5, "3 E"), (0.5, 0.5, "-1")]
+        for (lx, ly), (_, _, txt) in zip(to_img([(a, b) for a, b, _ in labels]), labels):
+            cv2.putText(frame, txt, (int(lx) - 14, int(ly) + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2,
@@ -150,27 +202,64 @@ def run_camera(writer: PositionWriter, deadzone: float) -> None:
     mp_styles = mp.solutions.drawing_styles
 
     cap = cv2.VideoCapture(0)
+    # キャプチャ解像度を明示的に落とす。既定では 1920x1080 で開くカメラがあり、その場合
+    # cvtColor/hands.process/imshow/描画が全て 1080p になって重くなる。DISP に合わせて要求する。
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, DISP_W)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DISP_H)
+
+    # --- カメラ取得 + MediaPipe をバックグラウンドスレッドへ ------------------
+    # cap.read() はカメラFPS(~30)でブロックし、hands.process() も ~20-26ms/フレーム。
+    # これらをメインループで直列に回すと、マウス位置がループ1回に1回しか反映されず
+    # ドラッグがカクつく。取得+検出をワーカースレッドに逃がし、メイン(GUI/マウス)は
+    # 「最新フレームを描いて imshow するだけ」の軽量ループにして高FPSでドラッグを滑らかにする。
+    # OpenCV の GUI(imshow/waitKey/mouse) は必ずメインスレッドで動かす必要がある。
+    shared: dict = {"frame": None, "results": None}
+    lock = threading.Lock()
+    stop = threading.Event()
+
+    def capture_worker() -> None:
+        while not stop.is_set():
+            ret, f = cap.read()
+            if not ret:
+                print("[tracker] カメラが開けません", file=sys.stderr)
+                stop.set()
+                break
+            # cap.set を無視するカメラ対策に、表示・検出とも固定サイズへ揃える（imshow を軽量化）。
+            if f.shape[1] != DISP_W or f.shape[0] != DISP_H:
+                f = cv2.resize(f, (DISP_W, DISP_H))
+            if flip:
+                f = cv2.flip(f, 1)  # --flip 指定時のみ水平ミラー
+            res = hands.process(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+            with lock:
+                shared["frame"] = f
+                shared["results"] = res
+
+    worker = threading.Thread(target=capture_worker, daemon=True)
+    worker.start()
+
     cv2.namedWindow("dst_img")
     cv2.setMouseCallback("dst_img", on_mouse)
-    print(f"[tracker] camera: writing {writer._path}  (ESC to stop)")
+    print(f"[tracker] camera (threaded): writing {writer._path}  (ESC to stop)")
 
     last_write = 0.0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            print("[tracker] カメラが開けません", file=sys.stderr)
-            break
+    while not stop.is_set():
+        with lock:
+            frame = None if shared["frame"] is None else shared["frame"].copy()
+            results = shared["results"]
+        if frame is None:  # まだ最初のフレームが来ていない
+            if cv2.waitKey(10) & 0xFF == 27:
+                break
+            continue
         h, w, _ = frame.shape
-        frame = cv2.flip(frame, 1)
 
         cv2.polylines(frame, [pts], True, (255, 255, 0), 2)
+        draw_sectors(frame)  # 0/1/2/3 領域と不感帯(-1)を quad 内に可視化
         for i, pt in enumerate(pts):
             cv2.circle(frame, tuple(pt), 8,
                        (0, 0, 255) if i == state["drag"] else (0, 255, 0), -1)
 
-        results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         wrists = []
-        if results.multi_hand_landmarks:
+        if results is not None and results.multi_hand_landmarks:
             for hlm in results.multi_hand_landmarks:
                 mp_draw.draw_landmarks(frame, hlm, mp_hands.HAND_CONNECTIONS,
                                        mp_styles.get_default_hand_landmarks_style(),
@@ -201,10 +290,14 @@ def run_camera(writer: PositionWriter, deadzone: float) -> None:
 
         cv2.putText(frame, f"ch={channel} seq={writer._seq}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, "drag green corners to set area / ESC to quit", (10, h - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
         cv2.imshow("dst_img", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC
             break
 
+    stop.set()
+    worker.join(timeout=1.0)
     cap.release()
     cv2.destroyAllWindows()
     hands.close()
@@ -214,6 +307,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Kakigori TD hand-position tracker")
     ap.add_argument("--sim", action="store_true",
                     help="カメラ無し。合成座標で書き込み契約を検証する")
+    ap.add_argument("--flip", action="store_true",
+                    help="映像を左右反転（水平ミラー）する。既定は反転なし")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -225,7 +320,7 @@ def main() -> None:
         if args.sim:
             run_sim(writer, deadzone)
         else:
-            run_camera(writer, deadzone)
+            run_camera(writer, deadzone, flip=args.flip)
     except KeyboardInterrupt:
         print("\n[tracker] stopped")
 
