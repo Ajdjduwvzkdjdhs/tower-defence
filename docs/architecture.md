@@ -23,6 +23,7 @@
 | 3D表現 | URP 2D→3D レンダラ切替＋Terrain移植＋透視カメラ＋斜面 PositionFor＋lit（描画のみ・Core 不変） | ADR-21 |
 | 敵の登場・静止位置 | 隊列を麓へ（_frontGap 数値のみ）＋入場を絶対半径 _entranceRadius から専用速度で歩かせる（cosmetic・Core 不変） | ADR-22 |
 | 発射タイミング | 敵は所定スロット到達後のみ発射（入場・繰り上がりの移動中は発射しない・IsInPosition ゲート） | ADR-23 |
+| 実機位置検知 | かき氷機の位置＝ファイル経由 Vision 入力（VisionInputProtocol＋VisionInputSource＋Composite の InputMode 合流。分類は Python・seq 原子的書き込み・config.json 単一真実・ロスト時 -1） | ADR-24 |
 
 ---
 
@@ -268,3 +269,17 @@
 - **不変（覆さない）**: Core（`EnemyMatrix`/Clock/State/`Scoring`）・雪崩・生成・`Projectile`・`ProjectileFactory`・入力・カメラ・座標系・EditMode テスト。物理不使用維持。ADR-7（発射）・ADR-11（戦闘アクターの状態は MonoBehaviour）・ADR-22（入場）を踏襲した挙動の明確化。
 - **balance 補足（スコープ外）**: 入場中に撃たなくなる分、単位時間あたりの被弾がわずかに減る（＝正しい挙動）。数値調整は行わない。MCP Play では本修正後 Wave1 で砦が生存（HP 275）→Lull 遷移する場面も観測されたが、これは意図した挙動差であり balance 調整の対象外。
 - **結果**: EditMode **120本緑**（Core・`Projectile` 無改修・回帰ゼロ）。MCP Play 検証（単体の入場を実測）: 敵が radial 10.02→8.37→5.82 の**歩行中は `ShotsFired=0`**、radial 5.05（麓スロット）**到達後に発射開始**（`ShotsFired>0`）。到達後は静止して撃つため弾を追い越さない。Wave 通し（fake `IInputSource` 注入）: Title→Wave1（砦HP減＝到達後発射）→WaveLull「Wave 1 クリア」→…→ResultState→Confirm 再挑戦→WavePlaying（HP リセット）。Phase 4.6。
+
+## ADR-24: かき氷機の位置検知はファイル経由 Vision 入力（Python 分類＋seq 原子的書き込み＋Composite の InputMode 合流＋ロスト時フェイルセーフ）— Accepted（Phase 5）
+
+- **背景**: 物理かき氷機には「削り（回転）」と「位置検知（XY）」の 2 系統があり、前者は Phase 1.5（ADR-15）で M5Stick シリアル接続済み。後者の位置検知は MediaPipe（Python/OpenCV）で手の中点を追う既存プログラムがあり、これを Unity の照準（`IInputSource.ActiveChannel`）に接続する。デモ展示に間に合わせるため、複雑な通信プロトコルを避け**テキストファイル経由で疎結合**にする（更新 ~50ms・信頼性は最低限で可）。設計判断は `docs/phase5.md`（dig で確定した Q1〜Q12）を正本とする。
+- **決定**:
+  - **照準への写像＝離散4チャンネル / 分類は Python**: 正規化 (x,y)→放射4セクター（`0:N 1:W 2:S 3:E` / 中心不感帯・未検出 -1）の判定は **Python 側**で行い、Unity は `seq,channel` の int を読むだけ（既存 `ActiveChannel` モデル無改修・連続照準は導入しない）。生の (x,y) は Unity に持ち込まない。
+  - **データ契約＝`seq,channel`＋原子的書き込み**: Python は 1 行 `seq,channel`（`seq` 単調増加）を `position.txt.tmp` に書き切って `os.replace()` で**原子的 rename**（partial read を排除）。手未検出・quad 外・不感帯でも `-1` を書き続け seq を進める（正常な「谷なし」と Python 停止を区別）。
+  - **Vision 入力＝3層（ADR-15 と対称）**: 純ロジック `VisionInputProtocol`（`seq,channel` パース＋seq 変化ベースの watchdog＋ライブ(A)/ラッチ(B)＋デバウンス。**IO のポーリング再読みに耐えるため watchdog は seq の変化で判定**・Python 再起動で seq が降下しても新鮮扱い）＋ IO の薄い `VisionInputSource : IInputSource`（間隔ポーリングのファイル読み・パス解決）＋ 調整値 `VisionConfigSO`（ADR-1）。`VisionInputProtocol` は MonoBehaviour 非依存＝EditMode 検証。
+  - **入力源の合流＝InputMode 明示切替**: `CompositeInputSource` を拡張し `InputMode{Keyboard,Vision}` で `ActiveChannel` の源を明示切替（暗黙の優先順位合成はしない＝キーボードのラッチが本番に紛れ込む事故を防ぐ）。`IsShaving`（keyboard OR serial(M5Stick)）・`ConfirmPressed` は**モードに依らず不変**（位置検知は削り・決定を担当しない）。旧2引数コンストラクタは Keyboard モードへ委譲（後方互換）。
+  - **ロスト時フェイルセーフ**: seq が `_lostTimeoutSec`（既定 0.3s）を超えて不変なら「ロスト（Python 停止/ハング）」＝ `ActiveChannel` を **-1 強制**（削っても雪崩が流れない安全側・ADR-15 の watchdog 思想と一貫）＋ `UIManager` の `OnGUI` に赤字警告（**状態Y 限定**・正常な谷なし -1 とは別フラグで区別）。復帰で自動解除。
+  - **ちらつき対策＝まず入れない・保険のみ**: セクター境界の channel ちらつきは実機で程度が読めないため、まず素で試し、必要なら `VisionConfigSO` のデバウンス秒（既定 0＝無効）を当日回す。分類本体は Python、ちらつき吸収は調整頻度が高いので Unity 側に置く役割分担。
+  - **配置・実行・パス解決（将来ビルド方針）**: Python は `tools/position-tracker/`（`Assets/`・`Packages/` の外）の **uv 環境で隔離**（`.venv` は Unity 非対象）。Unity からは起動せず独立起動（OpenCV 窓で quad キャリブレーション）。共有ファイルのパス解決順（Python・Unity 共通）は「① 環境変数 `KAKIGORI_POSITION_FILE`（手動運用の保険）→ ② **`config.json` の `positionFile`（両者が読む単一の真実）** → ③ Editor はプロジェクトルート相対 / ビルドは `persistentDataPath`」。標的は macOS `.app`（`open` は env を継承しないため env 方式は内部バイナリ直叩き・通常は起動法非依存の config.json を主にする）。
+- **不変（覆さない）**: Core（`EnemyMatrix`/各種 Clock/State/`Scoring`/`AvalancheClock`）・雪崩・生成・`Projectile`・カメラ・座標系・`KeyboardInputSource`・`SerialInputSource`・EditMode テスト。物理不使用維持。ADR-6（入力 Strategy）・ADR-8（純ロジック分離）・ADR-15（実機接続＋Composite）を踏襲し覆さない。
+- **結果**: EditMode **139本緑**（既存 120＋`VisionInputProtocol` 15＋`CompositeInputSource` mode 分岐 4・回帰ゼロ）。MCP Play 検証（カメラ無し・決定的な `seq,channel` 注入）: ①パス解決＝Editor 相対で `…/tools/position-tracker/out/position.txt` ②Vision モードで file `2208,2`→`vision.ActiveChannel=2`／`avalanche.ActiveChannel=2`、谷切替 `2571,1`→`1`（Composite 経由で AvalancheController まで一致）③seq 凍結で `IsLost=True`・`ActiveChannel=-1`・谷ハイライト消灯・赤字警告「⚠ 位置トラッキング未接続（Python を確認）」表示（screenshot 確認）④Keyboard モード（コミット既定）は Vision の -1/ロストを無視し従来通り・boot にエラーなし。Python 側は `--sim` で `seq,channel` の原子的書き込み・seq 単調増加を確認。実機カメラでの手位置→channel 追従、M5Stick 削りとの併用による雪崩は展示現場で確認（環境にカメラ・実機が無いため headless 範囲外）。Phase 5。

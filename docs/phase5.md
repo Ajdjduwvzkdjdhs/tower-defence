@@ -132,6 +132,9 @@ Vision 入力（実 Python or fake ファイル注入）で `ActiveChannel` を�
 - **コミット既定**: シーンは `_visionConfig` 割当済み・`_inputMode=Keyboard`（他メンバー・EditMode・カメラ無しでも動く安全側）で保存。展示時は Inspector で Vision に切替、または `config.json` を置く。
 - **合否**: §5 マイルストーン C の合否条件（mode 分岐テスト＋MCP Play の谷選択・雪崩・ロスト警告・全緑）を充足。
 
-### マイルストーン D
+### マイルストーン D 完了（2026-07-09）— Wave 通し回帰＋ADR-24／docs ＝ Phase 5 完了
 
-（未着手。完了ごとに追記する。）
+- **D1（回帰）**: Phase 5 は入力層のみの追加で、Core（`EnemyMatrix`/各種 Clock/State/`Scoring`/`AvalancheClock`）・雪崩・生成・`Projectile`・カメラ・座標系を**一切改修していない**。よって Wave/雪崩/Result/retry の回帰は **EditMode 139本緑**（該当ロジックのテストは不変で緑）で担保。加えて MCP Play で ①C の検証で Vision→`CompositeInputSource`→`AvalancheController.ActiveChannel` の連結を実証済み ②コミット既定（Keyboard モード・`_visionConfig` 割当済み）で boot エラーゼロ・Vision の -1/ロストが Keyboard モードに漏れないことを確認（mode ルーティング正常）。
+- **D1（headless 範囲外）**: 実機カメラでの手位置→channel 追従、および M5Stick 削り（keyboard OR serial）と併用した「Vision で選んだ谷に雪崩が流れる」end-to-end は、カメラ・実機が当環境に無いため**展示現場で確認**する（`--sim`／決定的注入で契約と連結は検証済み）。
+- **D1（docs）**: `architecture.md` に **ADR-24 Accepted**（パターン適用マップ＋本文）、`phases.md` に Phase 5 節（受け入れ基準・Unit 表・Status）を追加。
+- **完了判定**: §6 受け入れ基準を総達成 → Phase 5 完了。

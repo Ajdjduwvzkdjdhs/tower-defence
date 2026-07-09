@@ -304,6 +304,44 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 5 — かき氷機の位置検知連携（画像処理→ファイル→Unity）／別計画　【🟢 完了】
+
+**ゴール**: 物理かき氷機の**位置検知**（MediaPipe/Python）を Unity の照準（`ActiveChannel`）に接続する。分類（(x,y)→谷）は Python、Unity は `seq,channel` をファイル経由で読む疎結合。削り（M5Stick・Phase 1.5）と合わせて 2 系統の実機入力が揃う。詳細計画は `docs/phase5.md`、設計判断は **ADR-24**。ブランチ `phase5-vision-input`。
+
+### In scope
+
+- Python トラッカー（`tools/position-tracker/`・uv 隔離）＝セクター判定＋`seq,channel` 原子的書き込み。
+- Unity 入力層＝`VisionInputProtocol`（純C#）＋`VisionInputSource`（IO）＋`VisionConfigSO`＋`CompositeInputSource` の `InputMode` 合流＋UI ロスト警告。Core・雪崩・State・カメラは無改修。
+
+### Out of scope（やらない）
+
+- 連続照準（離散4chに落とす）・quad キャリブレの Unity 化・Python の Unity 起動・ビルド配布の作り込み（方針のみ）・境界ヒステリシスの Python 実装・バランス/VFX/サウンド。
+
+### 受け入れ基準
+
+- [x] Python が `seq,channel` を ~50ms・原子的に書き、手位置で channel 0-3／外すと -1
+- [x] Vision モードで機械位置が `ActiveChannel` を選び、Composite 経由で AvalancheController まで一致（削り＝keyboard OR serial は不変）
+- [x] `InputMode` で Keyboard/Vision を明示切替（Keyboard は従来操作が回帰なし）
+- [x] channel の意味を A（ライブ）/B（ラッチ）で切替可能・デバウンス保険（既定0）
+- [x] Python 停止/ハングを検知し -1 フェイルセーフ＋警告表示、復帰で自動解除。正常な谷なし(-1)とロストを区別
+- [x] パス解決 env→config.json→Editor 相対/ビルド persistentDataPath（clone で無編集動作）
+- [x] Python は `Assets/`・`Packages/` 外の uv 環境で隔離（Unity 非対象）
+- [x] Singleton=GameManager・入力=IInputSource・物理不使用を維持（Core/`Projectile` 無改修）
+- [x] **EditMode 全139本緑**（既存120＋Vision15＋Composite4・回帰ゼロ）
+- [x] 変更を `docs/architecture.md` **ADR-24** に記録（Accepted）
+
+### Status: 🟢 Phase 5 完了（2026-07-09）— マイルストーン A・B・C・D 達成。受け入れ基準すべて充足。ADR-24 Accepted。
+
+`docs/phase5.md` 参照。EditMode **139本緑**（Core・`Projectile` 無改修・回帰ゼロ）。
+| Unit | 成果物 | 検証 | 状態 |
+|---|---|---|---|
+| A1 | `tools/position-tracker/`（uv・Python 3.12）＋`tracker.py`（パス解決／セクター判定／`seq,channel` 原子的書き込み／camera・sim 2モード） | カメラ無し検証: `classify` 代表点・原子的書き込みの seq 単調増加/行完全性・パス解決順・`--sim` 実起動（全 PASS） | ✅ |
+| B1 | `VisionInputProtocol`（純C#・seq 変化 watchdog／ライブ/ラッチ／デバウンス／-1 フェイルセーフ）＋EditMode 15本 | MCP EditMode 15/15・フル 135/135 緑 | ✅ |
+| C1/C2 | `VisionInputSource`＋`VisionConfigSO`＋`InputMode`＋`CompositeInputSource` 拡張＋`GameManager` 配線＋`UIManager` 警告 | MCP Play（決定的注入）: パス解決・追従(2→2,1→1)・谷切替・ロスト時 -1＋赤字警告（screenshot）・Keyboard 既定は回帰なし・EditMode 139/139 緑 | ✅ |
+| D1 | Wave 通し回帰＋ADR-24＋phases.md | Core/State/雪崩 無改修＝EditMode 139緑＋Vision→AvalancheController 連結実証＋Keyboard 既定 boot エラーなしで回帰ゼロを確認。ADR-24 Accepted | ✅ |
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン
