@@ -29,6 +29,8 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private VisionConfigSO _visionConfig;
         [Tooltip("谷選択の源。展示本番=Vision（かき氷機の位置）／開発=Keyboard。")]
         [SerializeField] private InputMode _inputMode = InputMode.Keyboard;
+        [Tooltip("カメラの左右反転（ミラー）。左右の谷が逆に出るときに ON。W↔E を入れ替える（再生中もライブ反映）。")]
+        [SerializeField] private bool _visionFlipHorizontal;
 
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
@@ -47,6 +49,7 @@ namespace KakigoriTD.Bootstrap
         private IceStock _ice;
         private IInputSource _input;
         private AvalancheController _avalanche;
+        private AvalancheVfx _avalancheVfx;
         private WaveManager _waveManager;
         private UIManager _ui;
         private GameStateMachine _machine;
@@ -55,7 +58,7 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat;
+        private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat, _snowballMat;
         private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
@@ -67,6 +70,7 @@ namespace KakigoriTD.Bootstrap
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
+            _snowballMat = MakeUnlit(new Color(0.97f, 0.98f, 1.0f)); // 雪玉（斜面を流れる雪崩の粒）
 
             // 山は Terrain（シーン配置・ADR-21）。手続き Quad は廃止。
             BuildFort();
@@ -79,6 +83,10 @@ namespace KakigoriTD.Bootstrap
 
             _avalanche = NewChild("AvalancheController").AddComponent<AvalancheController>();
             _avalanche.Configure(_input, _ice, _channels);
+
+            // 雪崩の見た目（斜面を流れる雪玉ストリーム）。削り状態を読むだけの純 cosmetic（ADR-21）。
+            _avalancheVfx = NewChild("AvalancheVfx").AddComponent<AvalancheVfx>();
+            _avalancheVfx.Configure(_avalanche, _channels, HeightAt, CreateSnowball);
 
             _waveManager = NewChild("WaveManager").AddComponent<WaveManager>();
             _waveManager.Configure(_channels);
@@ -104,6 +112,9 @@ namespace KakigoriTD.Bootstrap
         // 正常な「谷なし(-1)」とは区別し、ロスト時のみ表示する（docs/phase5.md §3-⑥）。
         private void UpdateTrackerWarning()
         {
+            // Inspector の左右反転トグルを再生中もライブ反映（キャリブレーション用）。
+            if (_visionSource != null) _visionSource.FlipHorizontal = _visionFlipHorizontal;
+
             bool warn = _inputMode == InputMode.Vision && _visionSource != null && _visionSource.IsLost;
             _ui.SetTrackerWarning(warn ? "位置トラッキング未接続（Python を確認）" : "");
         }
@@ -170,6 +181,7 @@ namespace KakigoriTD.Bootstrap
             {
                 _visionSource = NewChild("VisionInput").AddComponent<VisionInputSource>();
                 _visionSource.Configure(_visionConfig);
+                _visionSource.FlipHorizontal = _visionFlipHorizontal;
                 vision = _visionSource;
             }
 
@@ -249,6 +261,15 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _snowPuffMat;
             return go.AddComponent<SnowPuff>();
+        }
+
+        private Snowball CreateSnowball()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "Snowball"; go.transform.localScale = Vector3.one * 0.22f;
+            DestroyCollider(go);
+            go.GetComponent<MeshRenderer>().sharedMaterial = _snowballMat;
+            return go.AddComponent<Snowball>();
         }
 
         private Projectile CreateProjectile()

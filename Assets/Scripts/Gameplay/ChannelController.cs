@@ -58,6 +58,29 @@ namespace KakigoriTD.Gameplay
         /// <summary>この谷に敵が居ないか。</summary>
         public bool IsEmpty => _matrix == null || _matrix.IsEmpty;
 
+        /// <summary>
+        /// 先頭行（雪崩が次に消す行）の敵の、谷軸（外向き）に沿った麓方向距離。
+        /// 雪崩フロントの到達判定に使う（<see cref="AvalancheController"/>）。入場中は敵の実位置を反映する。
+        /// 敵が居なければ +∞（到達しない＝撃破対象なし）。
+        /// </summary>
+        public float FrontRowDistance
+        {
+            get
+            {
+                if (_matrix == null || _matrix.IsEmpty) return float.PositiveInfinity;
+                var row = _matrix.RowAt(0);
+                float maxAlong = 0f;
+                for (int i = 0; i < row.Count; i++)
+                {
+                    var e = row[i];
+                    if (e == null) continue;
+                    float along = Vector3.Dot(e.transform.position, _outwardDir);
+                    if (along > maxAlong) maxAlong = along;
+                }
+                return maxAlong;
+            }
+        }
+
         /// <summary>これ以上湧かせられないか（画面内行数の上限に達した）。</summary>
         public bool IsFull => _matrix != null && _matrix.RowCount >= _maxRows && IsBackRowFull();
 
