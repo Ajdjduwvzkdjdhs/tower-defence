@@ -1,0 +1,5 @@
+{
+  "_comment": "config.json は Python・Unity 共通の単一真実（docs/phase5.md §8）。配布時にこのファイルを config.json にコピーし positionFile を実環境の絶対パスへ書き換える。Editor 開発では config.json を置かず、Python/Unity ともにプロジェクトルート相対のデフォルトで動く。",
+  "positionFile": "/absolute/path/to/kakigori_demo/tools/position-tracker/out/position.txt",
+  "deadzone": 0.15
+}
