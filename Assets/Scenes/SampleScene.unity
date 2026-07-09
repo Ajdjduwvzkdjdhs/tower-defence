@@ -449,7 +449,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 27, z: 0}
+  m_LocalPosition: {x: 0, y: 40, z: -0.83}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -575,7 +575,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
   _serialConfig: {fileID: 11400000, guid: 27303cf420dd045649ea9248add20c4a, type: 2}
   _visionConfig: {fileID: 11400000, guid: 28e053ac657f0494983fc73c4ffd62c9, type: 2}
-  _inputMode: 0
+  _inputMode: 1
+  _visionFlipHorizontal: 0
   _terrain: {fileID: 147147102}
   _fortHpMax: 1000
   _iceTotal: 50
@@ -609,9 +610,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05a3cd0009bca4cec90ce375a276107b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Gameplay.AvalancheController
-  _avalancheDelay: 2
   _killInterval: 0.4
   _iceDrainPerSec: 1
+  _frontStartRadius: 1.2
+  _frontStartSpeed: 2.5
+  _frontAccel: 6
+  _frontMaxSpeed: 8
+  _frontMaxRadius: 7
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
