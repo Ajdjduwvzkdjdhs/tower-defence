@@ -22,8 +22,25 @@ namespace KakigoriTD.Input
         private float _pollInterval;
         private float _pollTimer;
 
+        /// <summary>
+        /// カメラの左右反転（ミラー）。true で W(1)↔E(3) を入れ替える（N/S/-1 は不変）。
+        /// 画像を水平ミラーすることは谷判定上この入れ替えと等価なので、Python を触らず
+        /// Unity 側（GameManager Inspector）でライブ切替できる。出力段の純粋な remap のため
+        /// <see cref="VisionInputProtocol"/>（ラッチ/デバウンス/watchdog）には影響しない。
+        /// </summary>
+        public bool FlipHorizontal { get; set; }
+
         /// <inheritdoc/>
-        public int ActiveChannel => _protocol?.ActiveChannel ?? -1;
+        public int ActiveChannel => MaybeFlip(_protocol?.ActiveChannel ?? -1);
+
+        // 左右反転時に W(1)↔E(3) を入れ替える involution。-1/0/2 はそのまま。
+        private int MaybeFlip(int ch)
+        {
+            if (!FlipHorizontal) return ch;
+            if (ch == 1) return 3;
+            if (ch == 3) return 1;
+            return ch;
+        }
 
         /// <inheritdoc/>
         public bool IsShaving => false;
