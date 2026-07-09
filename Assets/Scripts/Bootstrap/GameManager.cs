@@ -25,6 +25,11 @@ namespace KakigoriTD.Bootstrap
         [Header("シリアル（実機ハンドル接続。未割り当てならキーボードのみで動作）")]
         [SerializeField] private SerialConfigSO _serialConfig;
 
+        [Header("位置検知（Vision。未割り当てならキーボードのみ。谷選択の源は _inputMode で切替）")]
+        [SerializeField] private VisionConfigSO _visionConfig;
+        [Tooltip("谷選択の源。展示本番=Vision（かき氷機の位置）／開発=Keyboard。")]
+        [SerializeField] private InputMode _inputMode = InputMode.Keyboard;
+
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
 
@@ -45,6 +50,7 @@ namespace KakigoriTD.Bootstrap
         private WaveManager _waveManager;
         private UIManager _ui;
         private GameStateMachine _machine;
+        private VisionInputSource _visionSource; // ロスト（Python 停止）を UI 警告に反映するため保持
 
         private int _currentWaveIndex;
         private float _waveStartTime;
@@ -91,6 +97,15 @@ namespace KakigoriTD.Bootstrap
             _machine.Tick(Time.deltaTime);
             UpdateStatusUI();
             UpdateAimIndicator();
+            UpdateTrackerWarning();
+        }
+
+        // Vision モードで位置検知がロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
+        // 正常な「谷なし(-1)」とは区別し、ロスト時のみ表示する（docs/phase5.md §3-⑥）。
+        private void UpdateTrackerWarning()
+        {
+            bool warn = _inputMode == InputMode.Vision && _visionSource != null && _visionSource.IsLost;
+            _ui.SetTrackerWarning(warn ? "位置トラッキング未接続（Python を確認）" : "");
         }
 
         // ---- IGameContext ----------------------------------------------------
@@ -132,9 +147,9 @@ namespace KakigoriTD.Bootstrap
 
         // ---- build helpers ---------------------------------------------------
 
-        // 入力は Composite（キーボード＋シリアル、ADR-15）。谷選択/決定＝キーボード、
-        // 削り＝キーボード Space OR ハンドル回転。SerialConfigSO 未割り当てならシリアルは生成せず
-        // キーボードのみ（実機なしでもそのまま遊べる）。
+        // 入力は Composite（キーボード＋シリアル＋位置検知、ADR-15/24）。谷選択＝_inputMode で
+        // Keyboard/Vision を明示切替、決定＝キーボード、削り＝キーボード Space OR ハンドル回転。
+        // 各 Config 未割り当てなら該当ソースは生成しない（実機なしでもキーボードで全操作可能）。
         private IInputSource BuildInput()
         {
             var keyboard = NewChild("InputSource").AddComponent<KeyboardInputSource>();
@@ -150,7 +165,15 @@ namespace KakigoriTD.Bootstrap
                 serial = serialSource;
             }
 
-            return new CompositeInputSource(keyboard, serial);
+            IInputSource vision = null;
+            if (_visionConfig != null)
+            {
+                _visionSource = NewChild("VisionInput").AddComponent<VisionInputSource>();
+                _visionSource.Configure(_visionConfig);
+                vision = _visionSource;
+            }
+
+            return new CompositeInputSource(keyboard, serial, vision, _inputMode);
         }
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。

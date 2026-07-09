@@ -574,6 +574,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 378cd1aa64eab4e3a858717372c841b5, type: 2}
   - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
   _serialConfig: {fileID: 11400000, guid: 27303cf420dd045649ea9248add20c4a, type: 2}
+  _visionConfig: {fileID: 11400000, guid: 28e053ac657f0494983fc73c4ffd62c9, type: 2}
+  _inputMode: 0
   _terrain: {fileID: 147147102}
   _fortHpMax: 1000
   _iceTotal: 50

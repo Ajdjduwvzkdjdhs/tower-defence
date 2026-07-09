@@ -123,6 +123,15 @@ Vision 入力（実 Python or fake ファイル注入）で `ActiveChannel` を�
 - **B1 検証（MCP EditMode）**: `VisionInputProtocolTests` 15/15 緑。フル EditMode **135/135 緑**（既存 120＋新規 15・回帰ゼロ）。
 - **合否**: §5 マイルストーン B の合否条件（新規テスト＋既存全緑）を充足。
 
-### マイルストーン C〜D
+### マイルストーン C 完了（2026-07-09）— Unity 統合（IO・SO・Composite・UI）
+
+- **C1（`VisionInputSource`＋`VisionConfigSO`）**: `Assets/Scripts/Input/VisionInputSource.cs`（`IInputSource`）は間隔ポーリング（既定 50ms）でファイル最終行を読み `VisionInputProtocol.Ingest`→`Tick`。`ActiveChannel`＝protocol、`IsShaving`=false / `ConfirmPressed`=false、`IsLost`/`ResolvedPath` を公開。パス解決 `ResolvePath`＝env `KAKIGORI_POSITION_FILE` → `config.json` の `positionFile`（実行ファイル隣接・cwd・persistentDataPath を探索）→ Editor はプロジェクトルート相対 / ビルドは persistentDataPath。ファイル読みは try/catch で競合・未生成を吸収（原子的 rename のため読めた行は常に完全）。`VisionConfigSO`（`Data/`）に相対パス・config 名・persistent 名・ポーリング間隔・`_lostTimeoutSec`・ラッチ(A/B)・デバウンス秒を集約（ADR-1）。
+- **C2（`CompositeInputSource` 拡張＋`GameManager`＋UI）**: `CompositeInputSource` に `vision`＋`InputMode` を追加し `ActiveChannel` を mode 分岐（Vision＝位置検知のみ／Keyboard＝キーボード優先・serial フォールバック＝旧挙動）。`IsShaving`/`ConfirmPressed` は不変（keyboard OR serial）。旧2引数コンストラクタは Keyboard モードへ委譲（後方互換）。`GameManager` に `_visionConfig`/`_inputMode` の `SerializeField`、`BuildInput` で Vision 系生成、`UpdateTrackerWarning` で Vision モード時のみロスト警告を UI へ。`UIManager.SetTrackerWarning`＋`OnGUI` 赤字表示（状態Y 限定）。`InputMode`（enum）新規。
+- **C 検証（EditMode）**: `VisionInputProtocol` 15＋`CompositeInputSource` の mode 分岐 4 追加。フル EditMode **139/139 緑**（既存 120＋Vision 15＋Composite 4・回帰ゼロ）。
+- **C 検証（MCP Play・カメラ無し・決定的注入）**: `VisionConfigSO` アセット作成＋GameManager に `_inputMode=Vision` を割当。共有ファイルへ `seq,channel` を連続書き込みして駆動 — ①**パス解決**＝Editor 相対で `…/tools/position-tracker/out/position.txt` に解決（ログ確認）②**追従**＝file `2208,2`→`vision.ActiveChannel=2`／`avalanche.ActiveChannel=2`、**谷切替**＝`2571,1`→`1`（Composite 経由で AvalancheController まで一致）③**ロスト fail-safe**＝seq 凍結(`2995,1`)で `IsLost=True`・`ActiveChannel=-1`・谷ハイライト消灯・**赤字警告「⚠ 位置トラッキング未接続（Python を確認）」表示**（screenshot 確認）。正常な谷なし(-1)とロストを区別。
+- **コミット既定**: シーンは `_visionConfig` 割当済み・`_inputMode=Keyboard`（他メンバー・EditMode・カメラ無しでも動く安全側）で保存。展示時は Inspector で Vision に切替、または `config.json` を置く。
+- **合否**: §5 マイルストーン C の合否条件（mode 分岐テスト＋MCP Play の谷選択・雪崩・ロスト警告・全緑）を充足。
+
+### マイルストーン D
 
 （未着手。完了ごとに追記する。）

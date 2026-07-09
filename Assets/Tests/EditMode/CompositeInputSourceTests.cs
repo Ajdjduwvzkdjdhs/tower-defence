@@ -79,5 +79,53 @@ namespace KakigoriTD.Tests.EditMode
             Assert.That(c.IsShaving, Is.True);
             Assert.That(c.ConfirmPressed, Is.True);
         }
+
+        // ---- InputMode 分岐（ADR-24 / Phase 5）--------------------------------
+
+        [Test]
+        public void VisionMode_ActiveChannel_ComesFromVision_IgnoringKeyboard()
+        {
+            var kb = new StubInput { ActiveChannel = 1 };   // キーボードは押されていても
+            var serial = new StubInput { ActiveChannel = -1 };
+            var vision = new StubInput { ActiveChannel = 3 };
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Vision);
+
+            Assert.That(c.ActiveChannel, Is.EqualTo(3)); // Vision モードは位置検知のみ
+        }
+
+        [Test]
+        public void KeyboardMode_ActiveChannel_IgnoresVision()
+        {
+            var kb = new StubInput { ActiveChannel = 2 };
+            var serial = new StubInput { ActiveChannel = -1 };
+            var vision = new StubInput { ActiveChannel = 0 };
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Keyboard);
+
+            Assert.That(c.ActiveChannel, Is.EqualTo(2)); // Keyboard モードは位置検知を見ない
+        }
+
+        [Test]
+        public void VisionMode_ShaveStillOrsKeyboardAndSerial()
+        {
+            var kb = new StubInput();
+            var serial = new StubInput();
+            var vision = new StubInput { ActiveChannel = 0 }; // 削りは担当しない
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Vision);
+
+            Assert.That(c.IsShaving, Is.False);
+            serial.IsShaving = true;                          // M5Stick 回転
+            Assert.That(c.IsShaving, Is.True);                // Vision モードでも削りは OR
+            serial.IsShaving = false; kb.IsShaving = true;    // キーボード Space
+            Assert.That(c.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void VisionMode_NullVision_ChannelMinusOne()
+        {
+            var kb = new StubInput { ActiveChannel = 2 };
+            var c = new CompositeInputSource(kb, null, null, InputMode.Vision);
+
+            Assert.That(c.ActiveChannel, Is.EqualTo(-1)); // 位置検知未接続なら谷なし
+        }
     }
 }
