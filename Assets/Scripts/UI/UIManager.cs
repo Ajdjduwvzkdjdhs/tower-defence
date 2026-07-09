@@ -23,6 +23,7 @@ namespace KakigoriTD.UI
         private int _hp, _maxHp;
         private string _status = "";
         private string _banner = "";
+        private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
         private bool _resultWin;
         private int _resultScore;
@@ -59,6 +60,9 @@ namespace KakigoriTD.UI
         /// <summary>中央バナーを消す（戦闘中・タイトル・リザルト）。</summary>
         public void ClearBanner() => _banner = "";
 
+        /// <summary>位置検知ロスト警告（状態Y）。空文字で非表示。GameManager が毎フレーム設定（Phase 5）。</summary>
+        public void SetTrackerWarning(string text) => _trackerWarning = text;
+
         /// <summary>リザルトを表示する。penalty は減点合計（0 なら非表示）。</summary>
         public void ShowResult(bool isWin, int score, int penalty = 0)
         {
@@ -75,6 +79,14 @@ namespace KakigoriTD.UI
         {
             GUI.contentColor = Color.white;
             GUI.Label(new Rect(16, 10, 1200, 24), _status);
+
+            // 位置検知ロスト警告（状態Y）。正常な「谷なし」とは区別し、ロスト時のみ赤で表示（Phase 5）。
+            if (!string.IsNullOrEmpty(_trackerWarning))
+            {
+                GUI.contentColor = new Color(1f, 0.35f, 0.3f);
+                GUI.Label(new Rect(16, 128, 600, 24), "⚠ " + _trackerWarning);
+                GUI.contentColor = Color.white;
+            }
 
             // 氷バー
             float ice01 = _ice != null ? _ice.Normalized : 0f;

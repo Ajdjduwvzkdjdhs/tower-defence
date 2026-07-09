@@ -1,0 +1,13 @@
+[project]
+name = "position-tracker"
+version = "0.1.0"
+description = "Kakigori TD: hand-position (MediaPipe) -> valley channel over a shared text file"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# 実機で検証済みの環境に合わせて固定（requirements.txt が参照フリーズ・Python 3.12）。
+dependencies = [
+    "mediapipe==0.10.14",
+    "opencv-python==4.13.0.92",
+    "opencv-contrib-python==4.13.0.92",
+    "numpy==2.5.0",
+]

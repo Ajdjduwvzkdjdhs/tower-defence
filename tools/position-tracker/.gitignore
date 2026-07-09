@@ -1,0 +1,9 @@
+# uv virtual env（Assets/ 外なので Unity は無視。環境はこのフォルダに自閉）
+.venv/
+__pycache__/
+
+# 実行時に生成される共有ファイル（Unity が読む出力）。コミットしない。
+out/
+
+# 配布環境ごとに書き換える実パス。テンプレは config.example.json をコミット。
+config.json
