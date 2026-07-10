@@ -88,6 +88,13 @@ namespace KakigoriTD.Gameplay
         public event Action OnAllyCaught;
 
         /// <summary>
+        /// 1 回の <see cref="ApplyAvalanche"/>（先頭行消去）で実敵/変装敵を1体でも撃破したときに 1 回だけ発火（ADR-26）。
+        /// 撃破音（Monster）用の additive な cosmetic イベント。行は最大 rowWidth 体なので敵ごとに鳴らすと
+        /// 同フレーム多重になるため行単位で1回に集約。味方のみの行では発火しない。撃破解決ロジックは不変。
+        /// </summary>
+        public event Action OnEnemyKilled;
+
+        /// <summary>
         /// Composition Root から依存を注入して谷を構成する。
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
@@ -173,6 +180,7 @@ namespace KakigoriTD.Gameplay
             if (_matrix.IsEmpty) return 0;
             var killed = _matrix.RemoveFrontRow();
             int n = killed.Count;
+            bool killedReal = false; // この行で実敵/変装を1体でも撃破したか（撃破音を行単位で1回・ADR-26）
             for (int i = 0; i < n; i++)
             {
                 var e = killed[i];
@@ -194,14 +202,18 @@ namespace KakigoriTD.Gameplay
                     // 変装敵は AllyNPC ではないので OnAllyCaught を発火しない（無ペナルティ）。
                     disguised.Kill();
                     _disguisedPool.Release(disguised);
+                    killedReal = true;
                 }
                 else
                 {
                     e.Kill();
                     _pool.Release(e);
+                    killedReal = true;
                 }
             }
             RepositionAll();
+            // 実敵/変装を撃破した行でのみ撃破音（Monster）を 1 回。味方のみの行は無音（ADR-26）。
+            if (killedReal) OnEnemyKilled?.Invoke();
             return n;
         }
 

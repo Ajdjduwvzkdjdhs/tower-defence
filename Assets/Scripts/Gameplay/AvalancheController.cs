@@ -33,6 +33,7 @@ namespace KakigoriTD.Gameplay
         private ChannelController[] _channels;
         private AvalancheClock _clock;
         private int _lastChannel = -1;
+        private bool _wasAvalanching; // OnAvalancheChanged のエッジ検出用（前フレーム値）
 
         // 雪崩フロントの状態（削りセッション内で前進、停止・谷変更でリセット）。
         private float _frontRadius;
@@ -44,6 +45,13 @@ namespace KakigoriTD.Gameplay
 
         /// <summary>このフレームに実際に削れているか（氷あり・Space 長押し・谷選択中）。UI/エフェクト用。</summary>
         public bool IsAvalanching { get; private set; }
+
+        /// <summary>
+        /// <see cref="IsAvalanching"/> が変化したフレームに発火する（true=削り開始 / false=停止・ADR-26）。
+        /// 雪崩ループ音（<see cref="AudioService"/>）の on/off に使う。エッジ検出済みなので購読側は
+        /// 毎フレーム発火を気にしなくてよい。純 cosmetic なイベントで撃破ロジックには干渉しない。
+        /// </summary>
+        public event System.Action<bool> OnAvalancheChanged;
 
         /// <summary>氷ストック（UI バー購読用）。</summary>
         public IceStock Ice => _ice;
@@ -88,6 +96,13 @@ namespace KakigoriTD.Gameplay
                     activeShave = true;
             }
             IsAvalanching = activeShave;
+
+            // 削り状態が変化したフレームだけ通知（エッジ検出＝雪崩ループ音の on/off・ADR-26）。
+            if (activeShave != _wasAvalanching)
+            {
+                _wasAvalanching = activeShave;
+                OnAvalancheChanged?.Invoke(activeShave);
+            }
 
             // 削っていないフレームはフロントも刻みもリセット（次の削りは山頂から・深さ制御）。
             if (!activeShave)

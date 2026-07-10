@@ -575,9 +575,11 @@ MonoBehaviour:
   - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
   _serialConfig: {fileID: 11400000, guid: 27303cf420dd045649ea9248add20c4a, type: 2}
   _visionConfig: {fileID: 11400000, guid: 28e053ac657f0494983fc73c4ffd62c9, type: 2}
-  _inputMode: 1
+  _inputMode: 0
   _visionFlipHorizontal: 0
+  _visionFlipVertical: 1
   _terrain: {fileID: 147147102}
+  _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
   _fortHpMax: 1000
   _iceTotal: 50
   _waveLull: 5

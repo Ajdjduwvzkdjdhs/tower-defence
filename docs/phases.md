@@ -342,7 +342,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
-## Phase 6 — サウンド（BGM / SE 移植）／別計画　【🔵 計画確定・未着手】
+## Phase 6 — サウンド（BGM / SE 移植）／別計画　【🟢 完了】
 
 **ゴール**: 3d-t の BGM 1＋SE 6（`Assets/SoundE/`）を移植する。ただし 3d-t の Singleton 直叩き（`AudioManager.Instance.PlaySound(...)`）は採用せず、Composition Root で DI 配線 → イベント購読で鳴らす本リポジトリの流儀に translate。**表現層のみ・Core 無改修**（ADR-20/21/25 と同方針）。詳細計画は `docs/phase6.md`、設計判断は **ADR-26**。ブランチ `phase6-audio`。
 
@@ -358,15 +358,28 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ### 受け入れ基準
 
-- [ ] BGM が開始時にループ再生され、リトライ（`BeginWave(0)`）後も鳴り続ける（Result で止めない）
-- [ ] 削り中（`IsAvalanching`）は雪崩音がループ、離すと停止（`AvalancheVfx` の雪玉ストリームと同期）
-- [ ] 敵発射で発射音（毎発）／砦被弾（HP 減少 & >0）で Hit ／雪崩で1行消えるごとに Monster（味方のみの行は無音）
-- [ ] 勝利で Clear、敗北で GameOver（BGM に重なる）／味方巻き込みで AllyCaught（クリップ null なら無音でエラーなし）
-- [ ] 全新規購読が `OnDestroy` で解除される
-- [ ] Core・雪崩・生成・State・`Projectile` 無改修＝**EditMode 139本緑・回帰ゼロ**
-- [ ] 変更を `docs/architecture.md` **ADR-26** に記録（Accepted）
+- [x] BGM が開始時にループ再生され、リトライ（`BeginWave(0)`）後も鳴り続ける（Result で止めない）
+- [x] 削り中（`IsAvalanching`）は雪崩音がループ、離すと停止（`AvalancheVfx` の雪玉ストリームと同期）
+- [x] 敵発射で発射音（毎発）／砦被弾（HP 減少 & >0）で Hit ／雪崩で1行消えるごとに Monster（味方のみの行は無音）
+- [x] 勝利で Clear、敗北で GameOver（BGM に重なる）／味方巻き込みで AllyCaught（クリップ null なら無音でエラーなし）
+- [x] 全新規購読が `OnDestroy` で解除される
+- [x] Core・雪崩・生成・State・`Projectile` 無改修＝**EditMode 139本緑・回帰ゼロ**
+- [x] 変更を `docs/architecture.md` **ADR-26** に記録（Accepted）
 
-### Status: 🔵 計画確定・未着手（2026-07-10）— dig で Q1〜Q6 を確定。`docs/phase6.md`・ADR-26（Proposed）作成済み。
+### Status: 🟢 Phase 6 完了（2026-07-10）— 受け入れ基準すべて充足。EditMode **139本緑**（Core・`Projectile` 無改修・回帰ゼロ）。ADR-26 Accepted。
+
+`docs/phase6.md` 参照。ブランチ `phase6-audio`。3d-t の 7 音源を `Assets/Audio/`（ASCII 名・OS コピー→GUID 再生成）へ移植し、薄い `AudioService`（3系統 AudioSource: bgm loop / se PlayOneShot / avalanche 専用 loop）＋`AudioConfigSO`（音量 3d-t 踏襲・`allyCaught` 空＝無音）＋`AudioConfig.asset` を追加。additive cosmetic イベント（`ProjectileFactory.OnCreated`／`ChannelController.OnEnemyKilled`〈行単位・実敵/変装のみ〉／`AvalancheController.OnAvalancheChanged`〈`IsAvalanching` エッジ〉＋既存 `Fort.OnHpChanged`／`ShowResult`／`OnAllyCaught`）を GameManager で購読・`OnDestroy` で全解除。3d-t の Singleton 直叩きは不採用。
+| 検証 | 結果 |
+|---|---|
+| EditMode | **139本緑**（回帰ゼロ・Core 無改修） |
+| BGM | boot で `_bgmSource` loop・isPlaying=True・clip=bgm_main／Result でも止めない |
+| 雪崩ループ | `OnAvalancheChanged` ON→`_avalancheSource`(se_avalanche) isPlaying=True／OFF→False |
+| Hit/Monster/EnemyAttack | 実イベント経由で `_seSource` 再生を実測（Hit=HP減&>0・Monster=行単位1回・発射=毎発） |
+| Clear/GameOver | `ShowResult(true/false)` で再生・BGM は isPlaying=True 維持（重ねる） |
+| Hit 除外 | `Initialize` 満タン通知・HP→0 はどちらも Hit 無音（負検証 PASS） |
+| エラー | Play 中エラー/例外ゼロ |
+
+**音量バランス調整（2026-07-11・プレイ確認済み）**: 実プレイで hit/enemyAttack/avalanche が聞こえない報告→`ffmpeg` で音圧実測し切り分け（発火は正常＝音圧が原因）。①`AudioConfig.asset` の hit 0.1→**0.7**・enemyAttack 0.1→**0.4**（0.1 は BGM に約16dB 埋もれていた）②`se_avalanche.mp3` は頭無音のスウェルだったため大きい中核（t=4-8s）を切り出し＋ゲイン＋リミッターで作り直し（頭0.5s −9.4dB・尺8s・`.meta` 温存で GUID 維持）＝小刻み削りでも即・大音量。コード・EditMode 139本は無改修。詳細は architecture.md ADR-26 着手メモ。**残**: 実機カメラ/M5Stick 併用の end-to-end は展示現場。
 
 ---
 

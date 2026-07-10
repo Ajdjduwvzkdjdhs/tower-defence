@@ -1,4 +1,5 @@
 using UnityEngine;
+using KakigoriTD.Audio;
 using KakigoriTD.Core;
 using KakigoriTD.Data;
 using KakigoriTD.Factory;
@@ -37,6 +38,9 @@ namespace KakigoriTD.Bootstrap
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
 
+        [Header("サウンド（Phase 6 / ADR-26。未割り当てなら全音無音でエラーなし）")]
+        [SerializeField] private AudioConfigSO _audioConfig;
+
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
         [SerializeField] private float _iceTotal = 50f;
@@ -56,6 +60,8 @@ namespace KakigoriTD.Bootstrap
         private UIManager _ui;
         private GameStateMachine _machine;
         private VisionInputSource _visionSource; // ロスト（Python 停止）を UI 警告に反映するため保持
+        private AudioService _audio;             // BGM/SE アダプタ（Phase 6 / ADR-26）
+        private int _prevFortHp;                 // Hit 音の判定用（減少 かつ >0 のときだけ鳴らす）
 
         private int _currentWaveIndex;
         private float _waveStartTime;
@@ -95,6 +101,9 @@ namespace KakigoriTD.Bootstrap
 
             _ui = NewChild("UIManager").AddComponent<UIManager>();
             _ui.Configure(_fort, _ice, _avalanche);
+
+            // オーディオは購読対象（Fort/Factory/Channels/Avalanche）が揃った後に配線（ADR-26）。
+            BuildAudio();
 
             BuildAimIndicator();
 
@@ -160,7 +169,12 @@ namespace KakigoriTD.Bootstrap
             foreach (var ch in _channels) ch.ClearAll();
         }
 
-        public void ShowResult(bool isWin, int score) => _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
+        public void ShowResult(bool isWin, int score)
+        {
+            _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
+            // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
+            if (isWin) _audio?.PlayClear(); else _audio?.PlayGameOver();
+        }
 
         // ---- build helpers ---------------------------------------------------
 
@@ -230,7 +244,38 @@ namespace KakigoriTD.Bootstrap
             }
         }
 
-        private void OnAllyCaughtHandler() => _penalty.Add(_allyHitPenalty);
+        private void OnAllyCaughtHandler()
+        {
+            _penalty.Add(_allyHitPenalty);
+            _audio?.PlayAllyCaught(); // 3d-t に該当音なし＝既定 null で無音（ADR-26）
+        }
+
+        // サウンド配線（Phase 6 / ADR-26）。薄い AudioService を子生成し、BGM 開始＋additive イベント購読。
+        // 追加は cosmetic な購読のみで既存ロジックの分岐・数値・順序は不変。_audioConfig 未割り当てでも無音で安全。
+        private void BuildAudio()
+        {
+            _audio = NewChild("AudioService").AddComponent<AudioService>();
+            _audio.Configure(_audioConfig);
+            _audio.PlayBgm(); // 開始時に1回・以後止めない（Q4-A）
+
+            _prevFortHp = _fort.CurrentHp;
+
+            _projectileFactory.OnCreated += OnProjectileCreatedForAudio;     // EnemyAttack（毎発）
+            foreach (var ch in _channels) ch.OnEnemyKilled += OnEnemyKilledForAudio; // Monster（行単位）
+            _avalanche.OnAvalancheChanged += OnAvalancheChangedForAudio;     // Avalanche loop on/off
+            _fort.OnHpChanged += OnFortHpChangedForAudio;                    // Hit（減少 かつ >0）
+        }
+
+        private void OnProjectileCreatedForAudio() => _audio.PlayEnemyAttack();
+        private void OnEnemyKilledForAudio() => _audio.PlayEnemyKilled();
+        private void OnAvalancheChangedForAudio(bool on) => _audio.SetAvalanche(on);
+
+        // 砦被弾＝HP が「減少 かつ 新HP>0」のときのみ Hit（Initialize の満タン通知・0到達=GameOver を除外）。
+        private void OnFortHpChangedForAudio(int cur, int max)
+        {
+            if (cur < _prevFortHp && cur > 0) _audio.PlayHit();
+            _prevFortHp = cur;
+        }
 
         private Enemy CreateEnemy()
         {
@@ -425,6 +470,14 @@ namespace KakigoriTD.Bootstrap
             if (_channels != null)
                 foreach (var ch in _channels)
                     if (ch != null) ch.OnAllyCaught -= OnAllyCaughtHandler;
+
+            // サウンド購読解除（Phase 6 / ADR-26）。全新規購読を確実に外す。
+            if (_projectileFactory != null) _projectileFactory.OnCreated -= OnProjectileCreatedForAudio;
+            if (_channels != null)
+                foreach (var ch in _channels)
+                    if (ch != null) ch.OnEnemyKilled -= OnEnemyKilledForAudio;
+            if (_avalanche != null) _avalanche.OnAvalancheChanged -= OnAvalancheChangedForAudio;
+            if (_fort != null) _fort.OnHpChanged -= OnFortHpChangedForAudio;
         }
     }
 }

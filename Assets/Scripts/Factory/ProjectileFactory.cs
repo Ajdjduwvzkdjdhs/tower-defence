@@ -22,6 +22,12 @@ namespace KakigoriTD.Factory
         // 着弾時にプールへ返す共通デリゲート。Projectile ごとに割り当てを作らないよう 1 個を使い回す。
         private readonly Action<Projectile> _release;
 
+        /// <summary>
+        /// 弾が生成された（＝発射された）瞬間に発火する（ADR-26）。全発射の単一チョークポイント。
+        /// 発射音（EnemyAttack）を鳴らすための additive な cosmetic イベント。プール運用・ロジックは不変。
+        /// </summary>
+        public event Action OnCreated;
+
         /// <param name="createInstance">弾インスタンスを 1 つ生成するデリゲート（プレハブ Instantiate 等）。null 不可。</param>
         /// <param name="prewarm">事前生成数（初回発射時のヒッチ回避）。</param>
         public ProjectileFactory(Func<Projectile> createInstance, int prewarm = 0)
@@ -38,6 +44,7 @@ namespace KakigoriTD.Factory
         {
             var projectile = _pool.Get();
             projectile.Init(type, from, to, target, _release);
+            OnCreated?.Invoke(); // 発射音（EnemyAttack・ADR-26）。cosmetic のみ。
             return projectile;
         }
 

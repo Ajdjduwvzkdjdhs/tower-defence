@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5baac6868bcb94b3393b57e03d9a3764, type: 3}
+  m_Name: AudioConfig
+  m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Audio.AudioConfigSO
+  _bgm: {fileID: 8300000, guid: e5a92ef40f2554af1af3495e860a7bb3, type: 3}
+  _bgmVolume: 1
+  _clear: {fileID: 8300000, guid: dd7f9ff27a0084e7f969868beafd0414, type: 3}
+  _gameOver: {fileID: 8300000, guid: 8ac3818cd71764aa58d4f63184505e04, type: 3}
+  _hit: {fileID: 8300000, guid: 161707db5405747dd9a65f4606e7bf82, type: 3}
+  _enemyKilled: {fileID: 8300000, guid: 8a0a37c6b0a3a42ca8af2eb5760d635a, type: 3}
+  _enemyAttack: {fileID: 8300000, guid: 85c2c8a0a22ee4e9782e97d9b63b2266, type: 3}
+  _avalanche: {fileID: 8300000, guid: b016c78ffb3594daea3435ac800564bd, type: 3}
+  _allyCaught: {fileID: 0}
+  _clearVolume: 1
+  _gameOverVolume: 1
+  _hitVolume: 0.7
+  _enemyKilledVolume: 0.2
+  _enemyAttackVolume: 0.4
+  _avalancheVolume: 1
+  _allyCaughtVolume: 1
