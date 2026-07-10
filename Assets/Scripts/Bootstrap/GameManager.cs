@@ -31,6 +31,8 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private InputMode _inputMode = InputMode.Keyboard;
         [Tooltip("カメラの左右反転（ミラー）。左右の谷が逆に出るときに ON。W↔E を入れ替える（再生中もライブ反映）。")]
         [SerializeField] private bool _visionFlipHorizontal;
+        [Tooltip("カメラの上下反転（ミラー）。前後の谷が逆に出るときに ON。N↔S を入れ替える（再生中もライブ反映）。")]
+        [SerializeField] private bool _visionFlipVertical;
 
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
@@ -112,8 +114,12 @@ namespace KakigoriTD.Bootstrap
         // 正常な「谷なし(-1)」とは区別し、ロスト時のみ表示する（docs/phase5.md §3-⑥）。
         private void UpdateTrackerWarning()
         {
-            // Inspector の左右反転トグルを再生中もライブ反映（キャリブレーション用）。
-            if (_visionSource != null) _visionSource.FlipHorizontal = _visionFlipHorizontal;
+            // Inspector の左右／上下反転トグルを再生中もライブ反映（キャリブレーション用）。
+            if (_visionSource != null)
+            {
+                _visionSource.FlipHorizontal = _visionFlipHorizontal;
+                _visionSource.FlipVertical = _visionFlipVertical;
+            }
 
             bool warn = _inputMode == InputMode.Vision && _visionSource != null && _visionSource.IsLost;
             _ui.SetTrackerWarning(warn ? "位置トラッキング未接続（Python を確認）" : "");
@@ -182,6 +188,7 @@ namespace KakigoriTD.Bootstrap
                 _visionSource = NewChild("VisionInput").AddComponent<VisionInputSource>();
                 _visionSource.Configure(_visionConfig);
                 _visionSource.FlipHorizontal = _visionFlipHorizontal;
+                _visionSource.FlipVertical = _visionFlipVertical;
                 vision = _visionSource;
             }
 

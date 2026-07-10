@@ -30,15 +30,29 @@ namespace KakigoriTD.Input
         /// </summary>
         public bool FlipHorizontal { get; set; }
 
+        /// <summary>
+        /// カメラの上下反転（ミラー）。true で N(0)↔S(2) を入れ替える（W/E/-1 は不変）。
+        /// <see cref="FlipHorizontal"/> と同じく、画像を垂直ミラーすることと谷判定上等価な
+        /// 出力段の純粋な remap で、両者は独立に組み合わせられる（両 ON = 180°回転）。
+        /// </summary>
+        public bool FlipVertical { get; set; }
+
         /// <inheritdoc/>
         public int ActiveChannel => MaybeFlip(_protocol?.ActiveChannel ?? -1);
 
-        // 左右反転時に W(1)↔E(3) を入れ替える involution。-1/0/2 はそのまま。
+        // 反転時に W(1)↔E(3)（左右）・N(0)↔S(2)（上下）を入れ替える involution。-1 は常に不変。
         private int MaybeFlip(int ch)
         {
-            if (!FlipHorizontal) return ch;
-            if (ch == 1) return 3;
-            if (ch == 3) return 1;
+            if (FlipHorizontal)
+            {
+                if (ch == 1) ch = 3;
+                else if (ch == 3) ch = 1;
+            }
+            if (FlipVertical)
+            {
+                if (ch == 0) ch = 2;
+                else if (ch == 2) ch = 0;
+            }
             return ch;
         }
 
