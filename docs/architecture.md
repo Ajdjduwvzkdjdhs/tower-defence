@@ -24,6 +24,8 @@
 | 敵の登場・静止位置 | 隊列を麓へ（_frontGap 数値のみ）＋入場を絶対半径 _entranceRadius から専用速度で歩かせる（cosmetic・Core 不変） | ADR-22 |
 | 発射タイミング | 敵は所定スロット到達後のみ発射（入場・繰り上がりの移動中は発射しない・IsInPosition ゲート） | ADR-23 |
 | 実機位置検知 | かき氷機の位置＝ファイル経由 Vision 入力（VisionInputProtocol＋VisionInputSource＋Composite の InputMode 合流。分類は Python・seq 原子的書き込み・config.json 単一真実・ロスト時 -1） | ADR-24 |
+| 雪崩の視覚＋撃破起点 | 白い雪玉ストリーム（pooled）＋撃破の起点を雪崩フロントの到達位置（位置ベース・Core 不変） | ADR-25 |
+| サウンド | 表現層のみ移植＝薄い AudioService＋AudioConfigSO＋additive cosmetic イベント（Core 無改修・3系統 AudioSource・雪崩は IsAvalanching gate ループ） | ADR-26 |
 
 ---
 
@@ -300,3 +302,23 @@
     - **coupling の明記**: フロントの運動パラメータは `Snowball`/`AvalancheVfx` と一致させる（ズレると撃破と雪の到達がずれる）。両ファイルにコメントを残す。`AvalancheClock` のロジックは無改修（`delay=0` で使用）。
 - **不変（覆さない）**: Core（`EnemyMatrix`/各種 Clock/State/`Scoring`/`AvalancheClock` の**ロジック**）・撃破解決の粒度（先頭行×`rowWidth`／1 行 1 ヒット）・敵/弾/味方/変装の生成・`Projectile`・入力・カメラ・座標系・EditMode テスト。物理不使用維持。`SnowPuff`（撃破の雪しぶき）は据え置き＝雪崩本体（流れ）と撃破点（しぶき）で役割分担。ADR-4（プール）・ADR-20・ADR-21 を踏襲。変更は撃破の**起点を時刻ベース→位置ベース**にした点（`AvalancheClock` は到達後の刻みに限定使用）。
 - **結果**: 純 cosmetic 部（雪玉ストリーム）は EditMode 追加せず（`SnowPuff` と同方針）。撃破ゲートは MonoBehaviour＋敵実位置依存のため MCP 検証。MCP（fake `IInputSource` 注入・`Time.timeScale=0.05` スロー・reflection で内部状態ログ）で計測: ①削り開始→雪玉が中腹（`front≈3.32` が実際の雪玉先端 `snowMaxR≈3.49` と一致）→`arrived=False`・敵6体維持（**到達前は撃破しない**）②フロントが先頭行 `FrontRowDistance=5.00` に到達→`arrived=True`→撃破開始→killInterval で 2 行とも消滅。流れ落ちる過程は先の 2 枚の screenshot（中腹→麓）で確認済み。削り実入力（Title 通過→WASD→Space）はキーボード実入力依存で MCP 未駆動＝当日プレイで最終微調整。Phase 5 後の視覚補強。
+
+## ADR-26: サウンド（BGM/SE）は表現層のみ移植＝薄い AudioService＋AudioConfigSO＋additive cosmetic イベント（Core 無改修・3d-t の Singleton 直叩きは不採用）— Proposed（Phase 6）
+
+- **背景**: Phase 4 が「サウンド」を後続フェーズへ明示的に予約（`phases.md` Phase 4 Out of scope）。移植元 `kakigori-3d-t` に BGM 1＋SE 6 の 7 音源（`Assets/SoundE/`）と `AudioManager.cs` があるが、3d-t は `AudioManager.Instance.PlaySound("Hit")` の **Singleton 直叩き**で、本リポジトリの鉄則（Singleton は `GameManager` のみ・ADR-5／通信は C# event・ADR-3／調整値は SO・ADR-1）と相容れない。**表現層のみ移植し Core・雪崩・生成・State・`Projectile` は無改修**（ADR-20/21/25 と同じ「見せ方のみ」方針）に保つ。設計判断は `docs/phase6.md`（dig で確定した Q1〜Q6）を正本とする。
+- **決定**:
+  - **薄い MonoBehaviour アダプタ `AudioService`（ADR-8/11）＋ `AudioConfigSO`（ADR-1）**: `GameManager`（Composition Root）が `AudioService` を子生成し `Configure(cfg)`。3d-t の Singleton は採用しない。純ロジックを持たない薄いアダプタのため EditMode テストは書かず MCP Play で検証（`SnowPuff`/`AvalancheVfx` と同方針・ADR-11/25）。調整値（クリップ・音量・`bgmVolume`）は `AudioConfigSO`。音量は 3d-t 踏襲（`enemyKilled=0.2`/`hit=0.1`/`enemyAttack=0.1`/他=1.0）。
+  - **AudioSource 3 系統**: `_bgmSource`（loop）／`_seSource`（PlayOneShot）／`_avalancheSource`（loop・雪崩 gate 専用）。**雪崩を専用 source に分離**することで、3d-t の `PlayAndStop`（`clip=…;Play();…Stop()`）が PlayOneShot と同 source を共有して他 SE を切る問題を構造的に回避。
+  - **追加は additive な cosmetic イベント/購読のみ**（既存ロジックの分岐・数値・順序は不変）:
+    - `ProjectileFactory.OnCreated`（発射の単一チョークポイント）→ EnemyAttack。
+    - `ChannelController.OnEnemyKilled`＝**1 回の `ApplyAvalanche`（先頭行消去）につき 1 回**・実敵/変装を1体でも Release した時のみ（味方のみの行は無音）→ Monster。行は最大 `rowWidth=3` 体なので「敵ごと」だと同フレーム多重になるのを回避（Q2）。
+    - `AvalancheController.OnAvalancheChanged(bool)`＝`IsAvalanching` の**エッジ検出**（前フレーム値と比較）→ `_avalancheSource` の loop on/off。`AvalancheVfx` が同 `IsAvalanching` で雪玉を連続射出するのに音を合わせる（Q1）。→ 3d-t の `PlaySoundWithDuration(固定尺)` は**不採用**（持続アクションに対し途中無音・連打多重になるため）。
+    - `Fort.OnHpChanged`（既存）→ Hit（**前HP キャッシュし「減少 かつ 新HP>0」時のみ**。`Initialize` の満タン通知・0到達＝GameOver を除外）。
+    - `ShowResult(isWin,_)`（既存）→ Clear/GameOver（**BGM は止めず**上に重ねる。Result で止めるとリトライ `BeginWave(0)` で BGM が復帰せず＝バグ源になるため・Q4）。
+    - `ChannelController.OnAllyCaught`（既存）→ AllyCaught（3d-t に該当クリップ無し＝**null 既定で無音**・後で差し替え可）。
+  - **変装敵の発射音は特別扱いしない（Q5）**: 変装敵は基底 `Enemy.Update` で**見える弾**を撃っており（真の味方 `AllyNPC` は `Projectile=null` で無発射）、発射音は新情報ではなく既存視覚ヒントの補強。単一チョークポイント（`ProjectileFactory.Create`）を濁さない。ADR-19 の緊張（湧き直後・撃つ前に tell で見抜く）は損なわない。
+  - **発射音はまず毎発（Q3）**: `OnCreated` を毎発 PlayOneShot（0.1）。密集時の洪水は MCP Play で聴取し、過剰なら `AudioConfigSO` に最小発火間隔を追加（`AudioService` に「最後に鳴らした時刻」を持つだけ）＝手戻りなしの拡張点。
+  - **購読解除**: 新規購読（`OnCreated`／`OnEnemyKilled`×4ch／`OnAvalancheChanged`／`OnHpChanged`）を `GameManager.OnDestroy` で解除（既存 `OnAllyCaught` 解除に倣う・ADR-3）。
+- **アセンブリ/配置**: スクリプトは `Assets/Scripts/Audio/`（`KakigoriTD.Audio`）＝既存 `KakigoriTD.Runtime.asmdef` 配下に自動収容（新規参照不要）。音源は `Assets/Audio/`（クロスプロジェクトのため OS コピー・`.meta` 除外→`assets-refresh` で GUID 再生成）。`AudioConfig.asset` は `Assets/ScriptableObjects/`。
+- **不変（覆さない）**: Core（`EnemyMatrix`/各種 Clock/State/`Scoring`/`AvalancheClock`）・雪崩の撃破解決・生成・`Projectile`・`ProjectileFactory` のプール運用・入力（`IInputSource`）・カメラ・座標系・EditMode テスト（**139本**）。物理不使用維持。ADR-1/3/5/8/11/19/20/21/25 を踏襲し覆さない。
+- **結果（想定）**: 表現層のみで BGM/SE を実現。受け入れ基準は `phases.md` Phase 6／詳細は `docs/phase6.md`。実装後に MCP Play（BGM ループ・雪崩 on/off・Hit・Monster・発射・勝敗）で確認し **Accepted** 化する。

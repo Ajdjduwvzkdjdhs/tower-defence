@@ -342,6 +342,34 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 6 — サウンド（BGM / SE 移植）／別計画　【🔵 計画確定・未着手】
+
+**ゴール**: 3d-t の BGM 1＋SE 6（`Assets/SoundE/`）を移植する。ただし 3d-t の Singleton 直叩き（`AudioManager.Instance.PlaySound(...)`）は採用せず、Composition Root で DI 配線 → イベント購読で鳴らす本リポジトリの流儀に translate。**表現層のみ・Core 無改修**（ADR-20/21/25 と同方針）。詳細計画は `docs/phase6.md`、設計判断は **ADR-26**。ブランチ `phase6-audio`。
+
+### In scope
+
+- `AudioService`（薄い MB アダプタ・3系統 AudioSource）＋`AudioConfigSO`（ADR-1）＋`AudioConfig.asset`。
+- additive な cosmetic イベント/購読のみ: `ProjectileFactory.OnCreated`（発射）／`ChannelController.OnEnemyKilled`（行単位・実敵/変装のみ）／`AvalancheController.OnAvalancheChanged`（`IsAvalanching` エッジ）＋既存 `Fort.OnHpChanged`・`ShowResult`・`OnAllyCaught`。
+- 音源コピー（`.meta` 除外→GUID 再生成）・GameManager 配線・`OnDestroy` 解除。
+
+### Out of scope（やらない）
+
+- 効果音の自作・差し替え（3d-t の 7 音源をそのまま使う）。氷枯渇音・Wave 区切り音（3d-t に無い）。BGM ダッキング・音の空間化。`DontDestroyOnLoad`（単一シーン運用＝不要）。Core・雪崩・生成・State・`Projectile` の変更。
+
+### 受け入れ基準
+
+- [ ] BGM が開始時にループ再生され、リトライ（`BeginWave(0)`）後も鳴り続ける（Result で止めない）
+- [ ] 削り中（`IsAvalanching`）は雪崩音がループ、離すと停止（`AvalancheVfx` の雪玉ストリームと同期）
+- [ ] 敵発射で発射音（毎発）／砦被弾（HP 減少 & >0）で Hit ／雪崩で1行消えるごとに Monster（味方のみの行は無音）
+- [ ] 勝利で Clear、敗北で GameOver（BGM に重なる）／味方巻き込みで AllyCaught（クリップ null なら無音でエラーなし）
+- [ ] 全新規購読が `OnDestroy` で解除される
+- [ ] Core・雪崩・生成・State・`Projectile` 無改修＝**EditMode 139本緑・回帰ゼロ**
+- [ ] 変更を `docs/architecture.md` **ADR-26** に記録（Accepted）
+
+### Status: 🔵 計画確定・未着手（2026-07-10）— dig で Q1〜Q6 を確定。`docs/phase6.md`・ADR-26（Proposed）作成済み。
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン
