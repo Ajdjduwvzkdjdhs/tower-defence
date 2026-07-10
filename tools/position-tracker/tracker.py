@@ -1,8 +1,9 @@
 """かき氷機の位置検知 -> 谷チャンネル（Kakigori TD / Phase 5）。
 
 MediaPipe で手首中点を追い、マウス調整した四角形(quad)内で射影変換した
-正規化座標 (x,y)∈[0,1] を、放射4セクター(0:N 1:W 2:S 3:E / 不感帯・未検出=-1)へ
+正規化座標 (x,y)∈[0,1] を、放射4セクター(0:N 1:W 2:S 3:E / 未検出・quad外=-1)へ
 **Python 側で**判定する（分類の責務は Python・docs/phase5.md §3-①）。
+quad 内なら常にいずれかのセクターに属し、-1 は「手なし or quad 外」だけを意味する。
 
 結果は共有テキストファイルへ 1 行 `seq,channel` で書く。書き込みは temp へ書き切って
 os.replace() で原子的 rename（partial read を排除・§3-③, §8）。seq は単調増加し、
@@ -35,9 +36,12 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_REL_OUT = SCRIPT_DIR / "out" / "position.txt"
 
-# 中心不感帯の半径（正規化空間・[0,1] の中心 0.5 からの距離）。config.json で上書き可。
-DEFAULT_DEADZONE = 0.15
 WRITE_INTERVAL_SEC = 0.05  # ~50ms（§1 要件）
+
+# MediaPipe の検出/追跡しきい値。プロジェクター光の映り込みで手が白く光っても見失いにくい
+# よう既定を下げてある（MediaPipe 素の既定 0.5・以前の 0.7 より緩い）。config.json で上書き可。
+DEFAULT_MIN_DETECTION_CONFIDENCE = 0.5
+DEFAULT_MIN_TRACKING_CONFIDENCE = 0.5
 
 
 # ---- パス解決 --------------------------------------------------------------
@@ -66,17 +70,15 @@ def resolve_position_file(cfg: dict) -> Path:
 
 # ---- セクター判定 -----------------------------------------------------------
 
-def classify(nx: float, ny: float, deadzone: float) -> int:
-    """正規化 (x,y) を放射4セクターへ。0:N 1:W 2:S 3:E、不感帯=-1。
+def classify(nx: float, ny: float) -> int:
+    """正規化 (x,y) を放射4セクターへ。0:N 1:W 2:S 3:E。
 
     正規化空間は (0,0)=左上 / (1,1)=右下（get_normalized_coords の dst と一致）。
-    画像 y は下方向が増加するので N(上)=dy<0。中心からの距離が deadzone 未満なら -1。
+    画像 y は下方向が増加するので N(上)=dy<0。quad 内なら必ずいずれかに属す（中心不感帯なし）。
     セクターは中心からの対角線で4分割（|dy|>=|dx| なら上下、else 左右）。
     """
     dx = nx - 0.5
     dy = ny - 0.5
-    if math.hypot(dx, dy) < deadzone:
-        return -1
     if abs(dy) >= abs(dx):
         return 0 if dy < 0 else 2   # N / S
     return 1 if dx < 0 else 3       # W / E
@@ -100,28 +102,32 @@ class PositionWriter:
 
 # ---- 実行モード -------------------------------------------------------------
 
-def run_sim(writer: PositionWriter, deadzone: float) -> None:
+def run_sim(writer: PositionWriter) -> None:
     """カメラ無し。合成点を円運動させ、契約(seq単調増加・channel 0-3/-1)を検証する。"""
     print(f"[tracker] --sim: writing {writer._path}  (Ctrl-C to stop)")
     t0 = time.time()
     while True:
         t = time.time() - t0
-        # 円周を巡り、時々中心(不感帯=-1)を通す合成軌道。
-        r = 0.35 * abs(math.sin(t * 0.5))       # 0..0.35（中心付近で不感帯に入る）
-        ang = t * 1.2
-        nx = 0.5 + r * math.cos(ang)
-        ny = 0.5 + r * math.sin(ang)
-        ch = classify(nx, ny, deadzone)
+        # 5秒周期の最後の1秒は「手なし(-1)」区間にして、ロスト以外の -1 契約も検証する。
+        if int(t) % 5 == 4:
+            ch = -1
+        else:
+            ang = t * 1.2
+            nx = 0.5 + 0.35 * math.cos(ang)
+            ny = 0.5 + 0.35 * math.sin(ang)
+            ch = classify(nx, ny)
         writer.write(ch)
-        print(f"seq={writer._seq} ch={ch} (nx={nx:.2f} ny={ny:.2f})", end="\r")
+        print(f"seq={writer._seq} ch={ch}", end="\r")
         time.sleep(WRITE_INTERVAL_SEC)
 
 
-def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> None:
+def run_camera(writer: PositionWriter, cfg: dict, flip: bool = False) -> None:
     """MediaPipe + カメラ（本番）。quad はマウスでドラッグ調整。
 
     flip=True で映像を水平ミラーする（既定はミラーなし）。左右反転はチャンネル的に
     W↔E の入れ替えと等価で、Unity 側（GameManager Inspector）でも切替可能。
+
+    cfg から MediaPipe の検出/追跡しきい値を読む。
     """
     import cv2
     import mediapipe as mp
@@ -129,11 +135,9 @@ def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> N
 
     # 取り込み・表示の固定解像度（下のキャプチャ設定と共通の基準）。
     DISP_W, DISP_H = 640, 480
-    # 検出枠(quad)の初期位置。画面中央に大きめ＝左右 MX / 上下 MY の余白だけ残す。
-    # 余白は角をドラッグで掴める＆手が枠外に出にくいよう少しだけ確保する。
-    MX, MY = 60, 45
-    pts = np.array([[MX, MY], [DISP_W - MX, MY],
-                    [DISP_W - MX, DISP_H - MY], [MX, DISP_H - MY]], np.int32)
+    # 検出枠(quad)の初期位置＝カメラ映像の全域（四隅）。マウスで角をドラッグして狭められる。
+    pts = np.array([[0, 0], [DISP_W, 0],
+                    [DISP_W, DISP_H], [0, DISP_H]], np.int32)
     state = {"drag": -1}
 
     def nearest_corner(x: int, y: int) -> int:
@@ -167,9 +171,9 @@ def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> N
         return float(p[0][0][0]), float(p[0][0][1])
 
     def draw_sectors(frame) -> None:
-        """0/1/2/3 の判定領域と不感帯(-1)を quad 内に重畳表示。マウス調整に追従する。
+        """0/1/2/3 の判定領域を quad 内に重畳表示。マウス調整に追従する。
 
-        判定は正規化空間で「中心からの対角線で4分割 + 中心の不感帯」（classify と同じ）。
+        判定は正規化空間で「中心からの対角線で4分割」（classify と同じ・中心不感帯なし）。
         正規化空間の幾何を逆射影して画像に描くので、quad が歪んでいても領域と一致する。
         """
         m_inv = cv2.getPerspectiveTransform(UNIT, pts.astype(np.float32))
@@ -183,21 +187,18 @@ def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> N
         cv2.line(frame, tuple(p[0]), tuple(p[2]), (200, 200, 200), 1)
         cv2.line(frame, tuple(p[1]), tuple(p[3]), (200, 200, 200), 1)
 
-        # 不感帯(-1)の円。射影で歪むので円周点を変換して多角形として描く。
-        ang = np.linspace(0, 2 * np.pi, 48, endpoint=False)
-        circle = np.stack([0.5 + deadzone * np.cos(ang), 0.5 + deadzone * np.sin(ang)], 1)
-        cv2.polylines(frame, [to_img(circle).astype(np.int32)], True, (0, 255, 255), 1)
-
-        # 各領域と中心にラベル。
+        # 各領域にラベル。
         labels = [(0.5, 0.19, "0 N"), (0.19, 0.5, "1 W"),
-                  (0.5, 0.81, "2 S"), (0.81, 0.5, "3 E"), (0.5, 0.5, "-1")]
+                  (0.5, 0.81, "2 S"), (0.81, 0.5, "3 E")]
         for (lx, ly), (_, _, txt) in zip(to_img([(a, b) for a, b, _ in labels]), labels):
             cv2.putText(frame, txt, (int(lx) - 14, int(ly) + 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
+    min_det = float(cfg.get("minDetectionConfidence", DEFAULT_MIN_DETECTION_CONFIDENCE))
+    min_trk = float(cfg.get("minTrackingConfidence", DEFAULT_MIN_TRACKING_CONFIDENCE))
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2,
-                           min_detection_confidence=0.7, min_tracking_confidence=0.7)
+                           min_detection_confidence=min_det, min_tracking_confidence=min_trk)
     mp_draw = mp.solutions.drawing_utils
     mp_styles = mp.solutions.drawing_styles
 
@@ -280,7 +281,7 @@ def run_camera(writer: PositionWriter, deadzone: float, flip: bool = False) -> N
             cv2.circle(frame, mid, 8, (0, 0, 255), -1)
             if cv2.pointPolygonTest(pts, (float(mid[0]), float(mid[1])), False) >= 0:
                 nx, ny = normalized(mid[0], mid[1])
-                channel = classify(nx, ny, deadzone)
+                channel = classify(nx, ny)
 
         # ~50ms 間隔で常に書く（channel が -1 でも seq を進める＝ロストと区別）。
         now = time.time()
@@ -313,14 +314,13 @@ def main() -> None:
 
     cfg = load_config()
     out = resolve_position_file(cfg)
-    deadzone = float(cfg.get("deadzone", DEFAULT_DEADZONE))
     writer = PositionWriter(out)
 
     try:
         if args.sim:
-            run_sim(writer, deadzone)
+            run_sim(writer)
         else:
-            run_camera(writer, deadzone, flip=args.flip)
+            run_camera(writer, cfg, flip=args.flip)
     except KeyboardInterrupt:
         print("\n[tracker] stopped")
 
