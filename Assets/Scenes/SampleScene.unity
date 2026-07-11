@@ -573,7 +573,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 506be38a9f90e4df1b165fad46787bdb, type: 2}
   - {fileID: 11400000, guid: 378cd1aa64eab4e3a858717372c841b5, type: 2}
   - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
-  _serialConfig: {fileID: 11400000, guid: 27303cf420dd045649ea9248add20c4a, type: 2}
+  _serialConfig: {fileID: 11400000, guid: 186b3436379ea404fb8d6d2ee8eeb700, type: 2}
   _visionConfig: {fileID: 11400000, guid: 28e053ac657f0494983fc73c4ffd62c9, type: 2}
   _inputMode: 0
   _visionFlipHorizontal: 0
@@ -612,13 +612,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05a3cd0009bca4cec90ce375a276107b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Gameplay.AvalancheController
-  _killInterval: 0.4
   _iceDrainPerSec: 1
-  _frontStartRadius: 1.2
-  _frontStartSpeed: 2.5
-  _frontAccel: 6
-  _frontMaxSpeed: 8
-  _frontMaxRadius: 7
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
