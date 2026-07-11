@@ -10,7 +10,11 @@ namespace KakigoriTD.Gameplay
     ///
     /// コライダー不使用＝物理なしを維持し、Rigidbody ではなくスクリプト滑走で表現する（ADR-21）。
     /// <see cref="Factory.ObjectPool{T}"/> で使い回し、ホットパスで Instantiate しない（ADR-4）。
-    /// 見た目は <see cref="SnowPuff"/> に倣った軽量な cosmetic（純ロジックなし）。
+    ///
+    /// ADR-27 で撃破の駆動を担う: 発射時に渡された「先頭行の谷軸距離」に <see cref="_radius"/> が届いた瞬間、
+    /// 1 回だけ撃破コールバック（谷の先頭行を 1 行消す）を呼ぶ。撃破の起点を別フロントの模擬から
+    /// 「実際に流れている雪玉の到達」に一本化するため（見た目と撃破の同期・入力ちらつきへの頑健性）。
+    /// コールバック未指定（<see cref="Launch"/> の既定 null）なら従来どおり純 cosmetic として振る舞う。
     /// </summary>
     public class Snowball : MonoBehaviour
     {
@@ -31,6 +35,11 @@ namespace KakigoriTD.Gameplay
         private Func<float, float, float> _heightAt;
         private Vector3 _spin;     // 見た目の転がり
 
+        // 撃破駆動（ADR-27）: この雪玉が先頭行の敵の実位置に届いたら 1 回だけ撃破コールバックを呼ぶ。
+        private Func<float> _frontRowDistance; // 谷の先頭行の谷軸距離（毎フレーム再評価・敵の前進に追従）。null で純 cosmetic。
+        private Action _onReachFrontRow;       // 到達時に 1 回だけ呼ぶ（= 1 雪玉 1 行）。
+        private bool _reachedFront;            // 既に発火したか（多重撃破防止）。
+
         /// <summary>
         /// 山頂寄りの一点から谷の外向きへ射出する。完了時に onDone を呼ぶ（所有者がプール返却する）。
         /// </summary>
@@ -39,8 +48,11 @@ namespace KakigoriTD.Gameplay
         /// <param name="lateral">谷幅方向のオフセット（滑走中は保持）。</param>
         /// <param name="endRadius">麓の距離。ここに達したら返却する。</param>
         /// <param name="heightAt">(x,z)→world Y の斜面サンプラ。</param>
+        /// <param name="frontRowDistance">先頭行の敵の谷軸距離を返す関数（毎フレーム再評価）。null で撃破せず純 cosmetic（ADR-27）。</param>
+        /// <param name="onReachFrontRow">上記距離に届いた瞬間に 1 回だけ呼ぶ撃破コールバック（= 1 雪玉 1 行）。</param>
         public void Launch(Vector3 outwardDir, float startRadius, float lateral, float endRadius,
-            Func<float, float, float> heightAt, Action<Snowball> onDone)
+            Func<float, float, float> heightAt, Action<Snowball> onDone,
+            Func<float> frontRowDistance = null, Action onReachFrontRow = null)
         {
             _outwardDir = outwardDir;
             _perpDir = new Vector3(outwardDir.z, 0f, -outwardDir.x); // XZ 平面での直交（ChannelController と同基底）
@@ -49,6 +61,9 @@ namespace KakigoriTD.Gameplay
             _endRadius = endRadius;
             _heightAt = heightAt;
             _onDone = onDone;
+            _frontRowDistance = frontRowDistance;
+            _onReachFrontRow = onReachFrontRow;
+            _reachedFront = false;
             _speed = _startSpeed;
             _elapsed = 0f;
             _spin = UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(180f, 540f);
@@ -65,6 +80,14 @@ namespace KakigoriTD.Gameplay
             _radius += _speed * dt;
             transform.Rotate(_spin * dt, Space.Self);
             Apply();
+
+            // 撃破駆動（ADR-27）: 先頭行の敵の実位置に届いた瞬間、その谷の先頭行を 1 行だけ撃破。
+            // 1 雪玉につき 1 回のみ（_reachedFront）。谷が空なら距離は +∞ で発火しない＝純 cosmetic。
+            if (!_reachedFront && _frontRowDistance != null && _radius >= _frontRowDistance())
+            {
+                _reachedFront = true;
+                _onReachFrontRow?.Invoke();
+            }
 
             if (_radius >= _endRadius || _elapsed >= _maxLifetime)
             {

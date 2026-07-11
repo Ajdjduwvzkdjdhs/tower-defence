@@ -24,8 +24,9 @@
 | 敵の登場・静止位置 | 隊列を麓へ（_frontGap 数値のみ）＋入場を絶対半径 _entranceRadius から専用速度で歩かせる（cosmetic・Core 不変） | ADR-22 |
 | 発射タイミング | 敵は所定スロット到達後のみ発射（入場・繰り上がりの移動中は発射しない・IsInPosition ゲート） | ADR-23 |
 | 実機位置検知 | かき氷機の位置＝ファイル経由 Vision 入力（VisionInputProtocol＋VisionInputSource＋Composite の InputMode 合流。分類は Python・seq 原子的書き込み・config.json 単一真実・ロスト時 -1） | ADR-24 |
-| 雪崩の視覚＋撃破起点 | 白い雪玉ストリーム（pooled）＋撃破の起点を雪崩フロントの到達位置（位置ベース・Core 不変） | ADR-25 |
+| 雪崩の視覚＋撃破起点 | 白い雪玉ストリーム（pooled）＋撃破の起点を雪崩フロントの到達位置（位置ベース・Core 不変）→ **ADR-27 で撃破駆動を実雪玉の到達へ移管** | ADR-25 |
 | サウンド | 表現層のみ移植＝薄い AudioService＋AudioConfigSO＋additive cosmetic イベント（Core 無改修・3系統 AudioSource・雪崩は IsAvalanching gate ループ） | ADR-26 |
+| 撃破の駆動 | 実際に流れている Snowball(VFX) が先頭行の敵の実位置に届いた瞬間にその谷の先頭行を1行撃破（1雪玉=1行）。別フロントの模擬を廃止＝見た目と同期・入力ちらつきに頑健。後続行の即死は谷ごとの撃破クールダウン（TryApplyAvalanche・既定0.2s）でレート制御 | ADR-27 |
 
 ---
 
@@ -329,3 +330,17 @@
 - **hit / enemyAttack＝設定音量が小さすぎ**: クリップ自体は大（mean −13dB 前後）だが `AudioConfigSO` の音量 0.1（実効 −33dB）で BGM（−16.8dB）に約16dB 埋もれていた。→ `AudioConfig.asset` の `_hitVolume` **0.1→0.7**、`_enemyAttackVolume` **0.1→0.4**（enemyAttack は頻発のため中庸）。コード変更なし。
 - **avalanche＝設定 1.0 で正常だが素材が「頭無音のスウェル」**: `se_avalanche.mp3`（元15.7s）は頭0.5s −28dB→中盤 t=5-6s で最大→末尾減衰の一発音で、ループ gate が毎エッジで頭出しするため小刻み削りで静かな頭しか鳴らなかった（長押しでのみ聞こえる症状＝プレイで確認）。→ **最も大きい t=4〜8s を切り出し＋固定ゲイン＋リミッター（頭0.5s −9.4dB / 全体 −9.3dB / ピーク −0.3dB）** で作り直し、`.meta` 温存で上書き（GUID/参照維持・尺 8s）。頭出しから即・大音量になり小刻み削りでも鳴る。音量設定は 1.0 のまま素材強化で対応。
 - **不変**: コード（`AudioService`/イベント/購読）・EditMode 139本は無改修（アセット差し替え＋SO 音量のみ）。追加のバランス調整余地（BGM を 0.7 に下げる／enemyAttack を絞る／スロットリング追加）は `AudioConfigSO` で手戻りなく可能。
+
+## ADR-27: 撃破の駆動を「別フロントの模擬」から「実際に流れている雪玉(Snowball)の到達」へ移管（ADR-25 の撃破起点を改訂・Core ロジック不変）— Accepted
+
+- **背景**: ADR-25 は撃破の起点を「位置ベースの雪崩フロント到達」に定めたが、その実装は `AvalancheController` が **`Snowball` と別に**フロント（`_frontRadius`）を同一運動パラメータ（`startRadius`/`startSpeed`/`accel`/`maxSpeed`）で模擬し、先頭行の実位置に届いたら `AvalancheClock(delay=0, killInterval)` で **killInterval(0.4s) ごとに 1 行**消す方式だった。これは 2 つの実害を生んだ:
+  - **二重管理の脆さ**: フロントの運動パラメータを `Snowball`/`AvalancheVfx` と手で一致させ続ける必要があり（両ファイルにコメント警告あり）、ズレると「雪が敵に届いても消えない／届く前に消える」が再発する。
+  - **連続削り時間への依存＝位置検知ちらつきで撃破不能**: フロントは削り中のみ前進し、**谷変更・削り停止で山頂へリセット**（深さ制御）。かき氷機の位置検知（ADR-24 の Vision）は境界で隣接谷と一瞬入れ替わるため、フロントが先頭行（r≈5.0）へ到達する連続時間（≈0.8s）を溜められず、**「削っているのに敵が倒せない」**が頻発した（ユーザー報告）。デバウンス（ADR-24 の保険）で緩和はできるが、撃破が「連続時間の閾値」に依存する構造そのものが根本原因。
+- **決定**（dig で 2 点確定: 到達モデル＝「雪玉VFX到達」／到達後＝「先頭行1行を即撃破」）:
+  - **撃破の駆動を実 `Snowball` に一本化**: `AvalancheVfx` が射出する各雪玉に、その谷の「先頭行の谷軸距離」（`ChannelController.FrontRowDistance` を返す `Func<float>`・毎フレーム再評価）と撃破コールバック（`() => channel.ApplyAvalanche()`）を渡す。雪玉の `radius` がその距離に届いた瞬間、**1 雪玉につき 1 回だけ**（`_reachedFront` フラグ）先頭行を 1 行消す。谷が空なら距離は `+∞` で発火せず純 cosmetic に戻る。→ 撃破と雪の見た目が定義上つねに一致（別フロントの模擬・パラメータ二重管理を撤廃）。
+  - **`AvalancheController` を縮小**: 別フロント（`_frontRadius`/`_frontSpeed`/`_frontArrived`/`ResetFront`）・`AvalancheClock`・`killInterval` を撤去。残す責務は氷消費・`IsAvalanching`/`ActiveChannel` の公開・`OnAvalancheChanged` エッジ通知（音・VFX gate 用）のみ。撃破の権威（kill authority）は持たない。
+  - **旧 killInterval 刻み（持続削り 0.4s/行）は廃止し、谷ごとの撃破クールダウンに置換**: 到達後の「削り続けないと次行が消えない」ドリップは撤廃（1 雪玉 = 1 到達 = 1 行の即時撃破）。ただし `_spawnRate=24`/s の連続射出では麓に届く雪玉が高頻度で、放置すると先頭行に続いて**後続行まで一気に消えてしまう**（深さ制御の喪失）。→ `ChannelController` に**谷ごとの撃破クールダウン** `TryApplyAvalanche(killInterval)` を設け、前回撃破から `killInterval`（既定 0.2s・`AvalancheVfx._killInterval`）未満の到達は撃破しない。**先頭行は（前回から十分空いていれば）即時**・**後続行は killInterval 間隔**で消える。クールダウンは谷ごとに独立（`_lastKillTime`）なので複数谷が干渉しない。旧ドリップとの本質差: 連続削り時間に依存せず（発射済み雪玉が完走）、削りを止めても在庫雪玉が間隔を保って撃破する。
+  - **入力ちらつきへの頑健性**: いったん発射された雪玉は入力の一瞬の切替に**関係なく**麓まで滑って撃破するため、位置検知が隣接谷と一瞬入れ替わっても、主谷へ発射済みの雪玉が届いて撃破する。「連続時間の閾値」に依存しない構造になり、根本原因を解消（デバウンスは撃破の前提ではなく谷ハイライトの安定化としてのみ任意）。
+- **coupling の明記（ADR-25 からの反転）**: ADR-25 は「`AvalancheVfx`/`Snowball` は撃破に一切干渉しない純 cosmetic」としたが、本 ADR は **`Snowball` を撃破の駆動に昇格**させる（`Launch` に `frontRowDistance`/`onReachFrontRow` を追加。既定 null で従来の純 cosmetic も維持）。トレードオフ: 見た目と撃破の同期・パラメータ二重管理の解消・入力頑健性を得る代わりに、gameplay が VFX ストリームに依存する。撃破の粒度（先頭行 × `rowWidth` / 1 行 1 ヒット）・`ApplyAvalanche` の中身（`SnowPuff`・`OnEnemyKilled` 音・味方巻き込み `OnAllyCaught`）は不変。
+- **不変（覆さない）**: Core（`EnemyMatrix`/State/`Scoring`/各種 Clock の**ロジック**）・`ChannelController.ApplyAvalanche` の撃破解決と粒度・敵/弾/味方/変装の生成・`Projectile`・入力（`IInputSource`）・カメラ・座標系・EditMode テスト。物理不使用維持（`Snowball` は従来どおりコライダーなしのスクリプト滑走）。`AudioService` 連携（`OnEnemyKilled`＝行単位1回・`OnAvalancheChanged` gate）は `ApplyAvalanche`/`AvalancheController` を経由するため据え置きで機能。ADR-4（プール）・ADR-20・ADR-21・ADR-24 を踏襲。`AvalancheClock`（Core・EditMode 済）は本改訂で**未使用**になるが、Core ロジックとテストは残置（将来のペース制御拡張点／削除は別判断）。
+- **残タスク（MCP Play 検証）**: ①削り→雪玉が麓（先頭行）到達の瞬間に先頭行が消える（届く前に消えない・届いて消える）②**先頭行は即時・後続行は約 0.2s 間隔**で消える（クールダウンが効き、後ろの行まで一気に消えない）③位置検知ちらつき相当（谷を小刻みに切替）でも主谷へ発射済みの雪玉で撃破が成立④タップ（短い削り）でも発射された雪玉が届いて撃破＝連続長押し不要⑤氷枯渇で新規射出停止・在庫雪玉は完走⑥撃破音（Monster・行単位）/雪崩ループ音が従来どおり。`AvalancheController`/`AvalancheVfx`/`Snowball`/`ChannelController` の撃破まわりは薄いアダプタ／単純タイマー（ADR-11）のため EditMode テストは追加せず MCP Play で検証（ADR-11/25 と同方針）。
