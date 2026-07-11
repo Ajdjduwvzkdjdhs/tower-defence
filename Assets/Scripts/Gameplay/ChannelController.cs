@@ -42,6 +42,7 @@ namespace KakigoriTD.Gameplay
         private Vector3 _outwardDir;
         private Vector3 _perpDir;
         private Func<float, float, float> _heightAt; // (x,z)→world Y（斜面サンプラ・ADR-21）
+        private float _lastKillTime = float.NegativeInfinity; // 直近の撃破時刻（後続行の即死を防ぐクールダウン・ADR-27）
 
         /// <summary>谷ID（0:N / 1:W / 2:S / 3:E）。</summary>
         public int ChannelId { get; private set; }
@@ -169,6 +170,21 @@ namespace KakigoriTD.Gameplay
             _matrix.AddRow(disguised);
             RepositionAll(disguised); // 新規湧きはスナップ
             return disguised;
+        }
+
+        /// <summary>
+        /// 撃破クールダウン付きで先頭行を消す（ADR-27）。前回撃破から <paramref name="killInterval"/> 秒未満、
+        /// または敵が居なければ何もせず false を返す。撃破したら時刻を記録して true。
+        /// 先頭行は（前回から十分空いていれば）即時に消え、後続行は killInterval 間隔で消える——
+        /// 雪玉が連続到達しても後ろの行が一気に消えないようにするレート制御ゲート。
+        /// </summary>
+        public bool TryApplyAvalanche(float killInterval)
+        {
+            if (_matrix == null || _matrix.IsEmpty) return false;
+            if (Time.time - _lastKillTime < killInterval) return false;
+            _lastKillTime = Time.time;
+            ApplyAvalanche();
+            return true;
         }
 
         /// <summary>
