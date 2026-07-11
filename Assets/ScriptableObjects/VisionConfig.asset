@@ -18,4 +18,4 @@ MonoBehaviour:
   _pollIntervalSec: 0.05
   _lostTimeoutSec: 0.3
   _latched: 0
-  _debounceSec: 0
+  _debounceSec: 0.3
