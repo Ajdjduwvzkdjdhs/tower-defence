@@ -1,0 +1,5 @@
+﻿<Solution>
+  <Project Path="KakigoriTD.Runtime.csproj" />
+  <Project Path="KakigoriTD.Tests.EditMode.csproj" />
+  <Project Path="KakigoriTD.Core.csproj" />
+</Solution>
