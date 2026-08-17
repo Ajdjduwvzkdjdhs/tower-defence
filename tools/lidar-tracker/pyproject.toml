@@ -1,0 +1,12 @@
+[project]
+name = "lidar-tracker"
+version = "0.1.0"
+description = "Kakigori TD: LiDAR (YDLIDAR T-mini Plus) で落氷を検知し谷チャンネルへ（position-tracker の後継）"
+readme = "README.md"
+# 移植元（ydlidar-serial）の検証環境に合わせる。config.py が tomllib を使うため 3.11+ が必須。
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
+    "pyserial>=3.5",
+]

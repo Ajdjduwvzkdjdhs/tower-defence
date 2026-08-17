@@ -1,0 +1,12 @@
+# このファイルをコピーして config.toml を作成し、ご自身の環境に合わせて書き換えてください。
+#   cp config.example.toml config.toml
+# config.toml は Git 管理対象外（.gitignore 済み）なので、各自のマシンごとに設定できます。
+
+[serial]
+# 接続するシリアルポート
+#   Windows      : "COM5" など
+#   Mac / Linux  : "/dev/ttyUSB0" や "/dev/tty.usbserial-0001" など
+port = "/dev/tty.usbserial-0001"
+
+# ボーレート（通常は変更不要）
+baudrate = 230400
