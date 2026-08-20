@@ -158,7 +158,7 @@ SDK は Linux / Windows 向けで、素の macOS ではビルドが通らない�
 | `core/serial/impl/unix/list_ports_osx.cpp` | 新規。SDK には Linux/Windows 版しかなく `list_ports()` が未定義でリンクできない。IOKit を使わず `/dev` を glob するだけの最小実装 |
 | `core/network/CMakeLists.txt` | macOS に無い `librt` のリンクを外す |
 | `CMakeLists.txt` | C++ サンプルのビルドを既定 OFF（`librt` を要求する）。非推奨の `FindPythonInterp`/`FindPythonLibs` が `PYTHON_EXECUTABLE` を無視して別バージョンの libpython を掴む問題を `find_package(Python3)` で解消 |
-| `python/CMakeLists.txt` | 拡張モジュールを `-undefined dynamic_lookup` でリンク（libpython を焼き込まない） |
+| `python/CMakeLists.txt` | 拡張モジュールを `-undefined dynamic_lookup` でリンク（libpython を焼き込まない）。SWIG に `-threads` を渡し、ブロックする C++ 呼び出しの間 GIL を手放させる（下記） |
 
 さらに `pyproject.toml` 側で 2 つ手当てしている:
 
@@ -170,6 +170,22 @@ SDK は Linux / Windows 向けで、素の macOS ではビルドが通らない�
 
 SDK を別コミットへ上げるときは、`setup-sdk.sh` の `COMMIT` を書き換えて
 パッチが当たるか（`git apply`）を確認する。
+
+### SWIG の `-threads` が要る理由
+
+SWIG は既定で GIL を保持したまま C++ を呼ぶ。`doProcessSimple()` は 1 回転ぶんが
+揃うまで内部で最大 1 秒ブロックするので、読み取りスレッドが GIL を握りっぱなしになり、
+**メインスレッドの GUI イベントループが回らずウィンドウがグレーのまま描画されない**。
+
+実測（メインスレッドが 3 秒間に回れた回数 / 最大停止時間）:
+
+| | ループ回数 | 最大停止 |
+|---|---|---|
+| 読み取りスレッド無し（基準） | 726/秒 | 5.8 ms |
+| `-threads` 無し | 10/秒 | 105.0 ms |
+| `-threads` 有り | 704/秒 | 10.0 ms |
+
+105 ms は 1 回転（10 Hz）とちょうど一致する。
 
 ## 移植元との差分
 

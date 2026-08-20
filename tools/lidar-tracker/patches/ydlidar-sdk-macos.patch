@@ -215,10 +215,23 @@ index eae2cc8..2f1dff4 100644
  
  
 diff --git a/python/CMakeLists.txt b/python/CMakeLists.txt
-index 212da34..2de5242 100644
+index 212da34..082aa39 100644
 --- a/python/CMakeLists.txt
 +++ b/python/CMakeLists.txt
-@@ -36,6 +36,12 @@ else()
+@@ -25,7 +25,11 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
+ SET(CMAKE_SWIG_FLAGS "")
+ #set(CMAKE_SWIG_OUTDIR "${CMAKE_BINARY_DIR}")
+ SET(LIBRARY_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+-set_property(SOURCE ydlidar_sdk.i PROPERTY SWIG_FLAGS "-module" "ydlidar")
++# -threads: ブロックする C++ 呼び出し（doProcessSimple は 1 回転が揃うまで
++# 最大 1 秒待つ）の間 GIL を手放させる。これが無いと読み取りスレッドが GIL を
++# 握りっぱなしになり、メインスレッドの GUI イベントループが回らない
++# （matplotlib のウィンドウがグレーのまま描画されない）
++set_property(SOURCE ydlidar_sdk.i PROPERTY SWIG_FLAGS "-module" "ydlidar" "-threads")
+ SET_SOURCE_FILES_PROPERTIES(ydlidar_sdk.i PROPERTIES CPLUSPLUS ON)
+ ###############################################################################
+ # This is a CMake YDLIDAR SDK for Python
+@@ -36,6 +40,12 @@ else()
  endif()
  
  SWIG_LINK_LIBRARIES(${MODULE_NAME} ${PYTHON_LIBRARIES} ydlidar_sdk)
