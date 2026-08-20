@@ -17,7 +17,7 @@ uv 環境として自閉させたもの（現状は**可視化のみ**）。
 |----------|------|
 | `scan_plot_realtime.py` | エントリポイント。読み取りスレッド + matplotlib の極座標アニメーション |
 | `lidar.py` | `TMiniPlus`：公式 SDK（`ydlidar` モジュール）の薄いラッパ |
-| `config.py` | `config.toml` から `(port, baudrate)` と検出範囲を読む |
+| `config.py` | `config.toml` から `(port, baudrate)`・回転数・検出範囲を読む |
 | `config.example.toml` | 接続設定のテンプレート（`config.toml` は gitignore 済み） |
 | `setup-sdk.sh` | 公式 SDK を `vendor/` へ clone し、macOS 用パッチを当てる |
 | `patches/ydlidar-sdk-macos.patch` | その macOS 用パッチ（内容は下記） |
@@ -52,7 +52,7 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
 
 `scan_plot_realtime.py` 冒頭の「設定」定数で現物合わせする。
 
-検出範囲だけは設置場所ごとに変わるので、スクリプトではなく `config.toml` にある（下記）。
+回転数と検出範囲は設置場所ごとに変わるので、スクリプトではなく `config.toml` にある（下記）。
 
 - `DISPLAY_SCALE` — 表示範囲 = `RANGE_MAX` × 倍率。円外のコンテキストをどれだけ見せるか
 - `ANGLE_OFFSET_DEG` — センサー正面を画面上のどこへ向けるか（表示全体の回転）
@@ -63,6 +63,45 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
   SDK（`enableSunNoise` / `enableGlassNoise`）に渡している
 - `FILTER_BY_RANGE` — 距離による範囲外の除外
 - `COLOR_BY_INTENSITY` / `INTENSITY_COLORMAP` — Intensity（反射強度）で点を色分けするか
+
+## 回転数の設定（`config.toml`）
+
+```toml
+[scan]
+frequency_hz = 10.0
+```
+
+- 省略可能（既定 `10.0`）。**対応範囲は 5〜12 Hz**で、外れると起動時にメッセージを出して
+  終了する。範囲は SDK の `isSupportScanFrequency()`（`YDLIDAR_Tmini` は 5〜12）に合わせた。
+  SDK に範囲外の値を渡すと `out of range` を出しつつ既定の回転数で動いてしまうため、
+  こちら側で先に弾いている。
+- サンプリングレートは回転数に依らず **4 kHz** で一定なので、**1 回転あたりの点数は
+  回転数に反比例する**:
+
+  | 回転数 | 1 回転の最大点数 | 同じ場所を捉え直す間隔 |
+  |--------|------------------|------------------------|
+  | 5 Hz   | 800 点           | 200 ms |
+  | 10 Hz  | 400 点           | 100 ms |
+  | 12 Hz  | 333 点           | 83 ms |
+
+  落ちる氷を追うなら速く、点を密に取りたいなら遅く、というトレードオフ。
+
+### ウィンドウの表示
+
+タイトルの 2 行目に、合わせ込みに要る 3 つの値が出る:
+
+```
+LiDAR realtime  (range = 0-40 cm)
+10.0 Hz   max 400 pts/rev   detected   33 pts
+```
+
+- `10.0 Hz` — `config.toml` で**設定した**回転数
+- `max 400 pts/rev` — その回転数で 1 回転に取れる点数の理論値（4000 ÷ 回転数）
+- `detected 33 pts` — **直近 1 回転**でフィルタを通った点の数。無反射・ノイズ除去・
+  検出範囲外の棄却があるので必ず `max` 以下になる
+
+`detected` は点の数であって画面上の点の数ではない（同じ角度ビンに複数の点が入りうる）。
+実測では 10 Hz で 1 回転あたり約 400 点が返り、理論値とほぼ一致する。
 
 ## 検出範囲の制限（`config.toml`）
 

@@ -51,6 +51,16 @@ DEVICE_MAX_RANGE_M = 12.0
 MM_PER_M = 1000.0
 
 
+def max_points_per_rev(scan_frequency_hz, sample_rate_k=SAMPLE_RATE_K):
+    """その回転数で 1 回転に得られる点数の理論値。
+
+    サンプリングレートは回転数に依らず一定なので、回転を速くするとその分だけ
+    1 回転あたりの点数が減る（10Hz なら 4000/10 = 400 点）。実際に返ってくる数は
+    無反射やノイズ除去で必ずこれ以下になる。
+    """
+    return int(sample_rate_k * 1000 / scan_frequency_hz)
+
+
 class TMiniPlus:
     """CYdLidar の薄いラッパ。1 回転ぶんの点群を辞書のリストで返す。"""
 

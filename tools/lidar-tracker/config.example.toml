@@ -12,6 +12,17 @@ port = "/dev/tty.usbserial-0001"
 baudrate = 230400
 
 
+[scan]
+# LiDAR の回転数[Hz]。省略すると 10.0。T-mini Plus の対応範囲は 5〜12。
+#
+# 回転が速いほど同じ場所を捉え直す間隔が短くなる（落下する氷を追いやすい）が、
+# サンプリングレートは 4kHz で一定なので、1 回転あたりの点数は反比例して減る:
+#     1 回転の最大点数 = 4000 / frequency_hz
+#     5Hz → 800 点 / 10Hz → 400 点 / 12Hz → 333 点
+# 実際の点数はウィンドウのタイトルに出るので、見ながら合わせる。
+frequency_hz = 10.0
+
+
 [detection]
 # LiDAR の検出範囲[cm]。この外の点は破棄する（SDK の range_min / range_max 相当）。
 # セクションごと省略可能で、その場合は range_min_cm = 0, range_max_cm = 80 が使われる。

@@ -10,6 +10,14 @@ _CONFIG_PATH = Path(__file__).parent / "config.toml"
 DEFAULT_RANGE_MIN_CM = 0
 DEFAULT_RANGE_MAX_CM = 80
 
+# 回転数の既定値[Hz]と、T-mini Plus が受け付ける範囲。
+# 範囲は SDK の isSupportScanFrequency()（YDLIDAR_Tmini は 5〜12Hz）に合わせてある。
+# 外れた値を渡すと SDK が "Current scan frequency is out of range" を出して
+# 既定の回転数のまま動いてしまうので、起動前にこちらで弾く。
+DEFAULT_SCAN_FREQUENCY_HZ = 10.0
+MIN_SCAN_FREQUENCY_HZ = 5.0
+MAX_SCAN_FREQUENCY_HZ = 12.0
+
 
 def _load():
     """config.toml を読んで dict を返す。無ければ分かりやすく終了する。"""
@@ -41,6 +49,35 @@ def load_serial_config():
             f"config.toml に必須キー {e} がありません。"
             "config.example.toml を参考に設定してください。"
         )
+
+
+def load_scan_config():
+    """config.toml から回転数[Hz]を読み込んで返す。
+
+    回転数を上げるほど 1 回転が速くなる（＝落下する氷を捉え直す間隔が短くなる）が、
+    サンプリングレートは一定なので 1 回転あたりの点数は反比例して減る。
+    どちらを取るかは現物合わせなので、スクリプトではなく config.toml に置く。
+
+    [scan] セクションもキーも省略可能で、その場合は既定値を使う。
+    値が不正（数値でない・対応範囲外）なときは終了する。
+    """
+    value = _load().get("scan", {}).get("frequency_hz", DEFAULT_SCAN_FREQUENCY_HZ)
+
+    # bool は int のサブクラスなので明示的に弾く
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        sys.exit(
+            f"config.toml の [scan] frequency_hz は数値で指定してください"
+            f"（現在: {value!r}）。"
+        )
+
+    if not (MIN_SCAN_FREQUENCY_HZ <= value <= MAX_SCAN_FREQUENCY_HZ):
+        sys.exit(
+            f"config.toml の [scan] frequency_hz は "
+            f"{MIN_SCAN_FREQUENCY_HZ}〜{MAX_SCAN_FREQUENCY_HZ} Hz の範囲で"
+            f"指定してください（現在: {value}）。"
+        )
+
+    return float(value)
 
 
 def load_detection_config():

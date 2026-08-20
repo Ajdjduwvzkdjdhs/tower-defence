@@ -14,8 +14,11 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 センサーとの通信は公式 SDK（YDLidar-SDK）が担当する。lidar.py の TMiniPlus が
 その薄いラッパで、read_scan() は 1 回転ぶんの点をまとめて返す。
 
-接続情報は config.toml（config.load_serial_config）から読み込む。
-描画パラメータは下の「設定」定数で調整する。
+接続情報・回転数・検出範囲は config.toml から読み込む。
+それ以外の描画パラメータは下の「設定」定数で調整する。
+
+ウィンドウのタイトル 2 行目には、設定した回転数・その回転数で 1 回転に取れる
+点数の理論値・直近 1 回転で実際に検出できた点数を出す。
 """
 
 import threading
@@ -24,8 +27,8 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from config import load_detection_config, load_serial_config
-from lidar import TMiniPlus
+from config import load_detection_config, load_scan_config, load_serial_config
+from lidar import TMiniPlus, max_points_per_rev
 
 #=============================
 # 設定
@@ -33,6 +36,12 @@ from lidar import TMiniPlus
 
 # シリアルポート・ボーレートは config.toml から読み込む
 PORT, BAUDRATE = load_serial_config()
+
+# 回転数[Hz]も config.toml の [scan] から読み込む（既定 10.0、対応範囲 5〜12）。
+# サンプリングレートは一定なので、回転を速くすると 1 回転あたりの点数は反比例して減る。
+# MAX_POINTS_PER_REV はその理論値で、実際の検出数はノイズ除去や無反射で必ずこれ以下。
+SCAN_FREQUENCY_HZ = load_scan_config()
+MAX_POINTS_PER_REV = max_points_per_rev(SCAN_FREQUENCY_HZ)
 
 # 検出範囲（関心領域）の内外境界も config.toml の [detection] から読み込む。
 # 設置場所ごとに変わる現物合わせの値なので、マシンごとの config.toml に置く。
@@ -93,6 +102,9 @@ class ScanBuffer:
         self._distances = np.full(num_bins, np.nan, dtype=float)
         self._intensities = np.full(num_bins, np.nan, dtype=float)
         self._num_bins = num_bins
+        # 直近 1 回転で有効だった点の数（ビンではなく点の数。同じビンに複数の点が
+        # 入ることがあるので、画面上の点の数とは必ずしも一致しない）
+        self._valid_count = 0
 
     def update(self, samples):
         """1 パケットぶんの samples でビンを更新する。
@@ -100,7 +112,11 @@ class ScanBuffer:
         有効な点はその距離・強度で上書きし、無効な点（無反射・ノイズ）は
         そのビンを NaN でクリアする。こうすることで、ビームがその方向を
         通過したのに物体が無ければ、残っていた古い点が消える。
+
+        あわせて、この 1 回転で有効だった点の数を数えて持っておく（タイトル表示用）。
         """
+        valid_count = 0
+
         with self._lock:
             for p in samples:
                 idx = int(p["angle"] // BIN_RESOLUTION_DEG) % self._num_bins
@@ -108,14 +124,25 @@ class ScanBuffer:
                 if _is_valid(p):
                     self._distances[idx] = p["distance"]
                     self._intensities[idx] = p["intensity"]
+                    valid_count += 1
                 else:
                     self._distances[idx] = np.nan
                     self._intensities[idx] = np.nan
 
+            self._valid_count = valid_count
+
     def snapshot(self):
-        """(距離配列, 強度配列) のコピーを返す。2 本は必ず同じ瞬間の対で取る。"""
+        """(距離配列, 強度配列, 直近 1 回転の有効点数) を返す。
+
+        3 つは必ず同じ瞬間のものを一度のロックで取る（表示のズレを防ぐため）。
+        配列はコピーを返す。
+        """
         with self._lock:
-            return self._distances.copy(), self._intensities.copy()
+            return (
+                self._distances.copy(),
+                self._intensities.copy(),
+                self._valid_count,
+            )
 
 
 def _is_valid(p):
@@ -159,6 +186,7 @@ def main():
         BAUDRATE,
         filter_sun_noise=FILTER_AMBIENT,
         filter_glass_noise=FILTER_SPECULAR,
+        scan_frequency_hz=SCAN_FREQUENCY_HZ,
     )
     lidar.start_scan()
 
@@ -174,14 +202,28 @@ def main():
 
     # --- 描画の準備 ---
     fig = plt.figure()
+    # タイトルが 2 行あるぶん上に余白を取る。毎フレーム書き換えるので、
+    # constrained_layout のような都度計算だと軸がわずかに動いて目に付く
+    fig.subplots_adjust(top=0.86)
     ax = fig.add_subplot(projection="polar")
     ax.set_theta_zero_location("N")    # 0 度を画面上（真上）に
     ax.set_theta_direction(-1)         # 時計回り
     ax.set_rlabel_position(135)
     if FILTER_BY_RANGE:
-        ax.set_title(f"LiDAR realtime  (range = {RANGE_MIN_CM}-{RANGE_MAX_CM} cm)")
+        title = f"LiDAR realtime  (range = {RANGE_MIN_CM}-{RANGE_MAX_CM} cm)"
     else:
-        ax.set_title(f"LiDAR realtime  (range filter OFF, circle = {RANGE_MAX_CM} cm)")
+        title = f"LiDAR realtime  (range filter OFF, circle = {RANGE_MAX_CM} cm)"
+
+    # 2 行目は毎フレーム書き換える。点数は桁が変わってもタイトルが揺れないよう幅を固定。
+    def set_title(detected):
+        ax.set_title(
+            f"{title}\n"
+            f"{SCAN_FREQUENCY_HZ:.1f} Hz"
+            f"   max {MAX_POINTS_PER_REV} pts/rev"
+            f"   detected {detected:4d} pts"
+        )
+
+    set_title(0)
 
     # 各ビンの中心角[ラジアン]（オフセットで表示全体を回転）。以後固定。
     bin_centers_deg = (np.arange(NUM_BINS) + 0.5) * BIN_RESOLUTION_DEG
@@ -228,11 +270,12 @@ def main():
     ax.autoscale(False)
 
     def update(_frame):
-        distances, intensities = buffer.snapshot()
+        distances, intensities, detected = buffer.snapshot()
         offsets = np.column_stack((theta, distances))
         scat.set_offsets(offsets)
         if COLOR_BY_INTENSITY:
             scat.set_array(intensities)
+        set_title(detected)
         return (scat,)
 
     ani = animation.FuncAnimation(
