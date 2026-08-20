@@ -21,7 +21,7 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 点数の理論値・直近 1 回転で実際に検出できた点数を出す。
 
 ウィンドウ下部の Start/Reset ボタンを押すと、指定セクタ（既定 225〜315 度、
-図では薄く塗ってある）に点が現れた回数を数え始める。
+図では薄く塗ってある）に点が現れた回数と、そこに写った点数の累計を数え始める。
 """
 
 import threading
@@ -160,12 +160,17 @@ class ScanBuffer:
 
 
 class SectorCounter:
-    """計測セクタに点が「現れた」回数を数える（スレッド間で共有）。
+    """計測セクタの検出回数と点数を数える（スレッド間で共有）。
 
-    1 回転ごとに「セクタ内に有効な点があるか」を受け取り、無し → 有り に
-    変わった瞬間だけ 1 回と数える。氷が 1 個落ちて数回転映り続けても 1 回。
-    点滅で 1 回が 2 回に割れないよう、release_rotations 回転ぶん連続で
-    無くなるまでは「まだ同じ検出が続いている」とみなす。
+    1 回転ごとに「セクタ内にあった有効な点の数」を受け取り、2 つを数える:
+
+      - 回数 : 無し → 有り に変わった瞬間だけ 1 回。氷が 1 個落ちて数回転
+               映り続けても 1 回になる。点滅で 1 回が 2 回に割れないよう、
+               release_rotations 回転ぶん連続で無くなるまでは「まだ同じ検出が
+               続いている」とみなす。
+      - 点数 : ボタンを押してからセクタに写った点の累計。1 回の検出がどれだけ
+               濃かったか（何点で写ったか）を見るための値なので、回数と違って
+               映っている間ずっと積み上がる。
 
     ボタンを押すまでは数えない（active=False）。押すと 0 に戻して数え始める。
     """
@@ -175,6 +180,7 @@ class SectorCounter:
         self._release_rotations = release_rotations
         self._active = False
         self._count = 0
+        self._points = 0        # 押してからセクタに写った点の累計
         self._present = False   # いま検出中とみなしているか
         self._absent = 0        # 連続して「無し」だった回転数
 
@@ -183,16 +189,19 @@ class SectorCounter:
         with self._lock:
             self._active = True
             self._count = 0
+            self._points = 0
             self._present = False
             self._absent = 0
 
-    def feed(self, present):
-        """1 回転ぶんの結果を渡す。読み取りスレッドから呼ぶ。"""
+    def feed(self, point_count):
+        """1 回転ぶんの「セクタ内の有効点数」を渡す。読み取りスレッドから呼ぶ。"""
         with self._lock:
             if not self._active:
                 return
 
-            if present:
+            self._points += point_count
+
+            if point_count > 0:
                 if not self._present:
                     self._count += 1
                 self._present = True
@@ -203,9 +212,9 @@ class SectorCounter:
                     self._present = False
 
     def snapshot(self):
-        """(数えているか, 回数, いま検出中か) を一度のロックで返す。"""
+        """(数えているか, 回数, 点数, いま検出中か) を一度のロックで返す。"""
         with self._lock:
-            return self._active, self._count, self._present
+            return self._active, self._count, self._points, self._present
 
 
 def sector_spans():
@@ -233,13 +242,13 @@ def _in_count_sector(angle_deg):
     return any(lo <= display <= hi for lo, hi in sector_spans())
 
 
-def _sector_has_point(samples):
-    """この 1 回転で、計測セクタ内に有効な点が 1 つでもあったか。
+def _sector_point_count(samples):
+    """この 1 回転で、計測セクタ内にあった有効な点の数。
 
     有効判定は画面の点と同じ _is_valid() を使う。そうしないと、関心円の外にある
     壁や範囲外のノイズでも数えてしまう。
     """
-    return any(_is_valid(p) and _in_count_sector(p["angle"]) for p in samples)
+    return sum(1 for p in samples if _is_valid(p) and _in_count_sector(p["angle"]))
 
 
 def _is_valid(p):
@@ -273,7 +282,7 @@ def reader_loop(lidar, buffer, counter, stop_event):
         # 次の回転で戻ってくるので、表示はそのままにして読み続ける。
         if samples:
             buffer.update(samples)
-            counter.feed(_sector_has_point(samples))
+            counter.feed(_sector_point_count(samples))
 
 
 def main():
@@ -388,15 +397,17 @@ def main():
     sector_label = f"{COUNT_SECTOR_START_DEG:g}-{COUNT_SECTOR_END_DEG:g}"
     count_text = fig.text(0.26, 0.065, "", va="center", fontsize=10)
 
-    def set_count_text(active, count, present):
+    def set_count_text(active, count, points, present):
         if not active:
             count_text.set_text(f"{sector_label} deg:  press Start to count")
             return
         # 数字の桁が変わっても後ろがずれないよう幅を固定する
         marker = "DETECTING" if present else ""
-        count_text.set_text(f"{sector_label} deg:  {count:4d} hits   {marker}")
+        count_text.set_text(
+            f"{sector_label} deg:  {count:4d} hits   {points:6d} pts   {marker}"
+        )
 
-    set_count_text(False, 0, False)
+    set_count_text(False, 0, 0, False)
 
     def update(_frame):
         distances, intensities, detected = buffer.snapshot()
