@@ -50,6 +50,7 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
 - `BIN_RESOLUTION_DEG` — 角度ビンの解像度。1.0° → 360 ビン
 - `FILTER_ZERO_DISTANCE` / `FILTER_AMBIENT` / `FILTER_SPECULAR` — 無反射・外乱光・鏡面反射の除外
 - `FILTER_BY_RANGE` — 距離による範囲外の除外
+- `COLOR_BY_INTENSITY` / `INTENSITY_COLORMAP` — Intensity（反射強度）で点を色分けするか
 
 ## 検出範囲の制限（`config.toml`）
 
@@ -78,6 +79,29 @@ range_max_cm = 80
 
 現物合わせのときは `FILTER_BY_RANGE = False` にすると、範囲外の点が `DISPLAY_SCALE` の
 余白に見えるので、どこに壁があるか・`RANGE_MAX` をどこに置くべきかを確認できる。
+
+## Intensity（反射強度）の表示
+
+`T-mini Pro 開発マニュアル 3.1.2 Intensity Analysis` より:
+
+> Intensity calculation formula: `Intensity(i) = Intensity[7:0]`
+> サンプル `Si` の **1 バイト目**に格納され、値域は **0〜255**。
+
+`lidar.py` の `read_packet()` は既にこれを `samples[i]["intensity"]` として取り出しているので、
+`scan_plot_realtime.py` はその値を**散布図の色**として描く（右側にカラーバー）。
+
+- `COLOR_BY_INTENSITY = True`（既定）— 点を強度で色分けし、0〜255 固定スケールの
+  カラーバーを添える。`False` にすると従来どおりの単色（青）で、カラーバーも出ない。
+- `INTENSITY_COLORMAP = "viridis"` — 低強度＝紫、高強度＝黄。
+- `INTENSITY_MIN` / `INTENSITY_MAX` — カラースケールの下限・上限。マニュアルの値域 `0`/`255`
+  に合わせてある。フレームごとに自動スケールさせないので、色と強度の対応が時間で動かない。
+
+`ScanBuffer` は距離と強度を同じインデックスの 2 本の配列で持ち、`snapshot()` が
+`(距離, 強度)` の対を返す。無効な点はどちらの配列も NaN でクリアされるので、
+「点が消えるのに色だけ残る」ことはない。
+
+強度は**表示だけ**で、フィルタ（`_is_valid()`）には使っていない。氷とそれ以外の
+切り分けに使えそうなら、しきい値フィルタは後から `_is_valid()` に足す。
 
 ## 移植元との差分
 

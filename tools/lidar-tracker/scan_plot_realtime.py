@@ -4,8 +4,11 @@
 物体がある方向のビンには距離が入り、物体が消えた（無反射／ノイズの）方向の
 ビンは NaN でクリアされ点が消える。常に「直近 1 回転ぶんの最新点」が見える。
 
+各点は距離と同時に Intensity（反射強度 0〜255）も保持しており、
+COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバー付き）。
+
 構成（2 スレッド）:
-  - 読み取りスレッド : read_packet() を回し、共有の距離配列を更新し続ける
+  - 読み取りスレッド : read_packet() を回し、共有の距離／強度配列を更新し続ける
   - メインスレッド    : FuncAnimation が一定間隔で配列を読み、散布図を再描画
 
 接続情報は config.toml（config.load_serial_config）から読み込む。
@@ -54,6 +57,16 @@ NUM_BINS = int(round(360.0 / BIN_RESOLUTION_DEG))
 # 描画の更新間隔[ms]（読み取りとは独立）
 UPDATE_INTERVAL_MS = 50
 
+#--- Intensity（反射強度）の表示 -----------------------------------------
+# T-mini Pro 開発マニュアル 3.1.2 Intensity Analysis:
+#   Intensity(i) = Intensity[7:0] — サンプル Si の 1 バイト目に格納され、値域は 0〜255。
+# lidar.py の read_packet() が s[0] をそのまま samples[i]["intensity"] に入れている。
+# ここではその値を散布図の色として描く（強度そのものはフィルタに使っていない）。
+COLOR_BY_INTENSITY = True          # False にすると従来どおり単色（青）
+INTENSITY_MIN = 0                  # カラースケールの下限（マニュアルの値域）
+INTENSITY_MAX = 255                # カラースケールの上限（同上）
+INTENSITY_COLORMAP = "viridis"     # 低強度＝紫、高強度＝黄
+
 #--- フィルタの ON/OFF（現物合わせで切り替える）-------------------------
 FILTER_ZERO_DISTANCE = True        # 距離 0（無反射）を除外
 FILTER_AMBIENT = True              # 外乱光（flag == 3）を除外
@@ -62,20 +75,22 @@ FILTER_BY_RANGE = True             # RANGE_MIN..RANGE_MAX の外を除外
 
 
 class ScanBuffer:
-    """全周 360 ビンの最新距離を保持する共有バッファ（スレッド間で共有）。
+    """全周 360 ビンの最新値を保持する共有バッファ（スレッド間で共有）。
 
-    値は距離[mm]。無反射／ノイズ／未計測のビンは NaN。
+    距離[mm]と Intensity[0-255] を同じインデックスの 2 本の配列で持つ。
+    無反射／ノイズ／未計測のビンは、どちらの配列も NaN。
     """
 
     def __init__(self, num_bins):
         self._lock = threading.Lock()
         self._distances = np.full(num_bins, np.nan, dtype=float)
+        self._intensities = np.full(num_bins, np.nan, dtype=float)
         self._num_bins = num_bins
 
     def update(self, samples):
         """1 パケットぶんの samples でビンを更新する。
 
-        有効な点はその距離で上書きし、無効な点（無反射・ノイズ）は
+        有効な点はその距離・強度で上書きし、無効な点（無反射・ノイズ）は
         そのビンを NaN でクリアする。こうすることで、ビームがその方向を
         通過したのに物体が無ければ、残っていた古い点が消える。
         """
@@ -85,12 +100,15 @@ class ScanBuffer:
 
                 if _is_valid(p):
                     self._distances[idx] = p["distance"]
+                    self._intensities[idx] = p["intensity"]
                 else:
                     self._distances[idx] = np.nan
+                    self._intensities[idx] = np.nan
 
     def snapshot(self):
+        """(距離配列, 強度配列) のコピーを返す。2 本は必ず同じ瞬間の対で取る。"""
         with self._lock:
-            return self._distances.copy()
+            return self._distances.copy(), self._intensities.copy()
 
 
 def _is_valid(p):
@@ -153,8 +171,21 @@ def main():
     bin_centers_deg = (np.arange(NUM_BINS) + 0.5) * BIN_RESOLUTION_DEG
     theta = np.radians(bin_centers_deg + ANGLE_OFFSET_DEG)
 
-    # 物体点（散布図）。r は毎フレーム差し替える。NaN のビンは描画されない。
-    scat = ax.scatter(theta, np.full(NUM_BINS, np.nan), s=8, c="tab:blue")
+    # 物体点（散布図）。r と色は毎フレーム差し替える。NaN のビンは描画されない。
+    if COLOR_BY_INTENSITY:
+        # vmin/vmax を明示するので、全ビンが NaN の初期状態でも色スケールは固定。
+        scat = ax.scatter(
+            theta,
+            np.full(NUM_BINS, np.nan),
+            s=8,
+            c=np.full(NUM_BINS, np.nan),
+            cmap=INTENSITY_COLORMAP,
+            vmin=INTENSITY_MIN,
+            vmax=INTENSITY_MAX,
+        )
+        fig.colorbar(scat, ax=ax, pad=0.1, label="Intensity (0-255)")
+    else:
+        scat = ax.scatter(theta, np.full(NUM_BINS, np.nan), s=8, c="tab:blue")
 
     # 検出範囲の境界線を重ねる。外側＝赤、内側＝橙（RANGE_MIN=0 のときは描かない）。
     circle_theta = np.linspace(0, 2 * np.pi, 361)
@@ -181,9 +212,11 @@ def main():
     ax.autoscale(False)
 
     def update(_frame):
-        distances = buffer.snapshot()
+        distances, intensities = buffer.snapshot()
         offsets = np.column_stack((theta, distances))
         scat.set_offsets(offsets)
+        if COLOR_BY_INTENSITY:
+            scat.set_array(intensities)
         return (scat,)
 
     ani = animation.FuncAnimation(
