@@ -8,5 +8,25 @@ requires-python = ">=3.14"
 dependencies = [
     "matplotlib>=3.11.1",
     "numpy>=2.5.1",
-    "pyserial>=3.5",
+    "ydlidar",
 ]
+
+# 公式 SDK（YDLidar-SDK）の Python バインディング。PyPI には無く、SWIG + CMake で
+# ビルドする。素の macOS ではビルドが通らないので、./setup-sdk.sh が
+# vendor/ に clone してパッチを当てたものを、ここから path 依存として拾う
+# （git 依存にすると uv のキャッシュ上の clone にパッチを当てられない）。
+[tool.uv.sources]
+ydlidar = { path = "vendor/YDLidar-SDK" }
+
+# SDK の CMakeLists は cmake_minimum_required(VERSION 2.8) と、CMake 4 で
+# 削除された古いポリシー（CMP0053/0037/0043 の OLD）に依存している。
+# CMake 4 系だと configure が即エラーになるので、ビルド時だけ 3 系を使わせる。
+[tool.uv.extra-build-dependencies]
+ydlidar = ["cmake<4"]
+
+# SDK の socket 実装は macOS 用ヘッダを `_DARWIN` でガードしているのに、
+# CMakeLists がそれを定義してくれない（＝素の macOS ビルドは通らない）。
+# ビルド時だけ自分で立てる。Linux では立ててはいけない（net/if.h と
+# linux/if.h が衝突する）ので、macOS 以外では下の行ごと削ること。
+[tool.uv.extra-build-variables]
+ydlidar = { CXXFLAGS = "-D_DARWIN" }

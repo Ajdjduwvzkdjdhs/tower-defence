@@ -7,3 +7,6 @@ out/
 
 # 実機ごとのシリアルポート設定。テンプレは config.example.toml をコミット。
 config.toml
+
+# 公式 SDK の clone（setup-sdk.sh が作る）。パッチだけコミットする
+vendor/

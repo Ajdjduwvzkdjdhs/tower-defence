@@ -8,8 +8,11 @@
 COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバー付き）。
 
 構成（2 スレッド）:
-  - 読み取りスレッド : read_packet() を回し、共有の距離／強度配列を更新し続ける
+  - 読み取りスレッド : read_scan() を回し、共有の距離／強度配列を更新し続ける
   - メインスレッド    : FuncAnimation が一定間隔で配列を読み、散布図を再描画
+
+センサーとの通信は公式 SDK（YDLidar-SDK）が担当する。lidar.py の TMiniPlus が
+その薄いラッパで、read_scan() は 1 回転ぶんの点をまとめて返す。
 
 接続情報は config.toml（config.load_serial_config）から読み込む。
 描画パラメータは下の「設定」定数で調整する。
@@ -60,7 +63,8 @@ UPDATE_INTERVAL_MS = 50
 #--- Intensity（反射強度）の表示 -----------------------------------------
 # T-mini Pro 開発マニュアル 3.1.2 Intensity Analysis:
 #   Intensity(i) = Intensity[7:0] — サンプル Si の 1 バイト目に格納され、値域は 0〜255。
-# lidar.py の read_packet() が s[0] をそのまま samples[i]["intensity"] に入れている。
+# SDK が LaserPoint.intensity として復元した値を、lidar.py がそのまま
+# samples[i]["intensity"] に入れている。
 # ここではその値を散布図の色として描く（強度そのものはフィルタに使っていない）。
 COLOR_BY_INTENSITY = True          # False にすると従来どおり単色（青）
 INTENSITY_MIN = 0                  # カラースケールの下限（マニュアルの値域）
@@ -68,9 +72,12 @@ INTENSITY_MAX = 255                # カラースケールの上限（同上）
 INTENSITY_COLORMAP = "viridis"     # 低強度＝紫、高強度＝黄
 
 #--- フィルタの ON/OFF（現物合わせで切り替える）-------------------------
-FILTER_ZERO_DISTANCE = True        # 距離 0（無反射）を除外
-FILTER_AMBIENT = True              # 外乱光（flag == 3）を除外
-FILTER_SPECULAR = False            # 鏡面反射（flag == 2）を除外（既定は残す）
+# AMBIENT / SPECULAR は SDK 側（干渉フラグを見られるのは SDK の中だけ）、
+# それ以外は受信後の _is_valid() で効く。除外された点はどちらも同じ扱いで、
+# そのビンが NaN にクリアされる（SDK が落とした点は距離 0 で返るため）。
+FILTER_ZERO_DISTANCE = True        # 距離 0（無反射・SDK が落とした点）を除外
+FILTER_AMBIENT = True              # 外乱光（太陽光ノイズ）を SDK に除外させる
+FILTER_SPECULAR = False            # 鏡面反射（ガラスノイズ）を SDK に除外させる
 FILTER_BY_RANGE = True             # RANGE_MIN..RANGE_MAX の外を除外
 
 
@@ -114,15 +121,14 @@ class ScanBuffer:
 def _is_valid(p):
     """フィルタ設定に照らして、その点を「有効な物体点」とみなすか。
 
+    外乱光・鏡面反射は SDK 側で距離 0 に落とされてここへ来るので、
+    FILTER_ZERO_DISTANCE の一本で拾える。
+
     無効と判定された点はそのビンを NaN でクリアする（update 参照）。距離での棄却も
     同じ扱いにしてあるので、「関心円の外に壁がある方向」は点が出ない＝
     その方向の関心領域内には何も無い、と読める。
     """
     if FILTER_ZERO_DISTANCE and p["distance"] == 0:
-        return False
-    if FILTER_AMBIENT and p["flag"] == 3:
-        return False
-    if FILTER_SPECULAR and p["flag"] == 2:
         return False
     if FILTER_BY_RANGE and not (RANGE_MIN_MM <= p["distance"] <= RANGE_MAX_MM):
         return False
@@ -130,20 +136,30 @@ def _is_valid(p):
 
 
 def reader_loop(lidar, buffer, stop_event):
-    """読み取りスレッド本体。停止フラグが立つまでパケットを読み続ける。"""
+    """読み取りスレッド本体。停止フラグが立つまで 1 回転ぶんずつ読み続ける。"""
     while not stop_event.is_set():
         try:
-            samples = lidar.read_packet()
+            samples = lidar.read_scan()
         except Exception as e:
             if not stop_event.is_set():
-                print(f"read_packet error: {e}")
+                print(f"read_scan error: {e}")
             break
-        buffer.update(samples)
+
+        # 空 = SDK が 1 回転ぶんを揃えられなかった（タイムアウト・再接続中）。
+        # 次の回転で戻ってくるので、表示はそのままにして読み続ける。
+        if samples:
+            buffer.update(samples)
 
 
 def main():
 
-    lidar = TMiniPlus(PORT, BAUDRATE)
+    # 干渉フラグを見られるのは SDK の中だけなので、この 2 つは SDK へ渡す
+    lidar = TMiniPlus(
+        PORT,
+        BAUDRATE,
+        filter_sun_noise=FILTER_AMBIENT,
+        filter_glass_noise=FILTER_SPECULAR,
+    )
     lidar.start_scan()
 
     buffer = ScanBuffer(NUM_BINS)
@@ -232,7 +248,9 @@ def main():
         if stop_event.is_set():
             return
         stop_event.set()
-        reader.join(timeout=2.0)
+        # SDK の 1 回転待ちは最大 1 秒。読み取りスレッドがその中にいる間に
+        # turnOff すると危ないので、余裕を持って抜けきるのを待つ
+        reader.join(timeout=3.0)
         lidar.stop_scan()
         lidar.close()
 
