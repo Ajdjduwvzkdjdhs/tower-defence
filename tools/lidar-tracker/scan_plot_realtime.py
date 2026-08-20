@@ -19,6 +19,9 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 
 ウィンドウのタイトル 2 行目には、設定した回転数・その回転数で 1 回転に取れる
 点数の理論値・直近 1 回転で実際に検出できた点数を出す。
+
+ウィンドウ下部の Start/Reset ボタンを押すと、指定セクタ（既定 225〜315 度、
+図では薄く塗ってある）に点が現れた回数を数え始める。
 """
 
 import threading
@@ -26,6 +29,7 @@ import threading
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.widgets import Button
 
 from config import load_detection_config, load_scan_config, load_serial_config
 from lidar import TMiniPlus, max_points_per_rev
@@ -79,6 +83,16 @@ COLOR_BY_INTENSITY = True          # False にすると従来どおり単色（�
 INTENSITY_MIN = 0                  # カラースケールの下限（マニュアルの値域）
 INTENSITY_MAX = 255                # カラースケールの上限（同上）
 INTENSITY_COLORMAP = "viridis"     # 低強度＝紫、高強度＝黄
+
+#--- 計測セクタ（ボタンで数える範囲）-----------------------------------
+# 図に見えているとおりの角度[度]で指定する（ANGLE_OFFSET_DEG 適用後の表示角）。
+# 0 度をまたぐ指定（例 315 → 45）もできる。
+COUNT_SECTOR_START_DEG = 225.0
+COUNT_SECTOR_END_DEG = 315.0
+
+# 何回転ぶん連続で「点が無い」が続いたら、次の検出を新しい 1 回と数えるか。
+# 落ちる氷が点滅して 1 回の落下が 2 回に割れるのを防ぐ。10Hz なら 2 回転 = 0.2 秒。
+COUNT_RELEASE_ROTATIONS = 2
 
 #--- フィルタの ON/OFF（現物合わせで切り替える）-------------------------
 # AMBIENT / SPECULAR は SDK 側（干渉フラグを見られるのは SDK の中だけ）、
@@ -145,6 +159,89 @@ class ScanBuffer:
             )
 
 
+class SectorCounter:
+    """計測セクタに点が「現れた」回数を数える（スレッド間で共有）。
+
+    1 回転ごとに「セクタ内に有効な点があるか」を受け取り、無し → 有り に
+    変わった瞬間だけ 1 回と数える。氷が 1 個落ちて数回転映り続けても 1 回。
+    点滅で 1 回が 2 回に割れないよう、release_rotations 回転ぶん連続で
+    無くなるまでは「まだ同じ検出が続いている」とみなす。
+
+    ボタンを押すまでは数えない（active=False）。押すと 0 に戻して数え始める。
+    """
+
+    def __init__(self, release_rotations):
+        self._lock = threading.Lock()
+        self._release_rotations = release_rotations
+        self._active = False
+        self._count = 0
+        self._present = False   # いま検出中とみなしているか
+        self._absent = 0        # 連続して「無し」だった回転数
+
+    def start(self):
+        """数え始める（すでに数えていれば 0 にリセットして数え直す）。"""
+        with self._lock:
+            self._active = True
+            self._count = 0
+            self._present = False
+            self._absent = 0
+
+    def feed(self, present):
+        """1 回転ぶんの結果を渡す。読み取りスレッドから呼ぶ。"""
+        with self._lock:
+            if not self._active:
+                return
+
+            if present:
+                if not self._present:
+                    self._count += 1
+                self._present = True
+                self._absent = 0
+            elif self._present:
+                self._absent += 1
+                if self._absent >= self._release_rotations:
+                    self._present = False
+
+    def snapshot(self):
+        """(数えているか, 回数, いま検出中か) を一度のロックで返す。"""
+        with self._lock:
+            return self._active, self._count, self._present
+
+
+def sector_spans():
+    """計測セクタを [(開始角, 終了角), ...] で返す（表示角[度]）。
+
+    0 度をまたぐ指定は 2 つに割れる。描画にも判定にも同じ定義を使う。
+    """
+    start = COUNT_SECTOR_START_DEG % 360.0
+    end = COUNT_SECTOR_END_DEG % 360.0
+
+    if start <= end:
+        return [(start, end)]
+
+    return [(start, 360.0), (0.0, end)]
+
+
+def _in_count_sector(angle_deg):
+    """センサー角度が計測セクタに入るか。
+
+    セクタは図に見えているとおりの角度で指定してあるので、ANGLE_OFFSET_DEG で
+    表示を回している場合も画面と一致するよう、表示角に直してから判定する。
+    """
+    display = (angle_deg + ANGLE_OFFSET_DEG) % 360.0
+
+    return any(lo <= display <= hi for lo, hi in sector_spans())
+
+
+def _sector_has_point(samples):
+    """この 1 回転で、計測セクタ内に有効な点が 1 つでもあったか。
+
+    有効判定は画面の点と同じ _is_valid() を使う。そうしないと、関心円の外にある
+    壁や範囲外のノイズでも数えてしまう。
+    """
+    return any(_is_valid(p) and _in_count_sector(p["angle"]) for p in samples)
+
+
 def _is_valid(p):
     """フィルタ設定に照らして、その点を「有効な物体点」とみなすか。
 
@@ -162,7 +259,7 @@ def _is_valid(p):
     return True
 
 
-def reader_loop(lidar, buffer, stop_event):
+def reader_loop(lidar, buffer, counter, stop_event):
     """読み取りスレッド本体。停止フラグが立つまで 1 回転ぶんずつ読み続ける。"""
     while not stop_event.is_set():
         try:
@@ -176,6 +273,7 @@ def reader_loop(lidar, buffer, stop_event):
         # 次の回転で戻ってくるので、表示はそのままにして読み続ける。
         if samples:
             buffer.update(samples)
+            counter.feed(_sector_has_point(samples))
 
 
 def main():
@@ -191,20 +289,21 @@ def main():
     lidar.start_scan()
 
     buffer = ScanBuffer(NUM_BINS)
+    counter = SectorCounter(COUNT_RELEASE_ROTATIONS)
     stop_event = threading.Event()
 
     reader = threading.Thread(
         target=reader_loop,
-        args=(lidar, buffer, stop_event),
+        args=(lidar, buffer, counter, stop_event),
         daemon=True,
     )
     reader.start()
 
     # --- 描画の準備 ---
     fig = plt.figure()
-    # タイトルが 2 行あるぶん上に余白を取る。毎フレーム書き換えるので、
-    # constrained_layout のような都度計算だと軸がわずかに動いて目に付く
-    fig.subplots_adjust(top=0.86)
+    # タイトルが 2 行あるぶん上に、ボタンのぶん下に余白を取る。毎フレーム
+    # 書き換えるので、constrained_layout のような都度計算だと軸がわずかに動く
+    fig.subplots_adjust(top=0.86, bottom=0.14)
     ax = fig.add_subplot(projection="polar")
     ax.set_theta_zero_location("N")    # 0 度を画面上（真上）に
     ax.set_theta_direction(-1)         # 時計回り
@@ -245,6 +344,17 @@ def main():
     else:
         scat = ax.scatter(theta, np.full(NUM_BINS, np.nan), s=8, c="tab:blue")
 
+    # 計測セクタ（ボタンで数える範囲）を薄く塗って、どこを数えているか見せる。
+    for lo, hi in sector_spans():
+        sector_theta = np.radians(np.linspace(lo, hi, 91))
+        ax.fill_between(
+            sector_theta,
+            0,
+            DISPLAY_MAX_MM,
+            color="tab:blue",
+            alpha=0.08,
+        )
+
     # 検出範囲の境界線を重ねる。外側＝赤、内側＝橙（RANGE_MIN=0 のときは描かない）。
     circle_theta = np.linspace(0, 2 * np.pi, 361)
     ax.plot(
@@ -269,6 +379,25 @@ def main():
     ax.set_rlim(0, DISPLAY_MAX_MM)
     ax.autoscale(False)
 
+    # --- 計測セクタのカウンタ UI ---
+    # Button はローカル変数で参照を持ち続けないと GC されて反応しなくなる。
+    button_ax = fig.add_axes((0.03, 0.03, 0.20, 0.07))
+    start_button = Button(button_ax, "Start / Reset")
+    start_button.on_clicked(lambda _event: counter.start())
+
+    sector_label = f"{COUNT_SECTOR_START_DEG:g}-{COUNT_SECTOR_END_DEG:g}"
+    count_text = fig.text(0.26, 0.065, "", va="center", fontsize=10)
+
+    def set_count_text(active, count, present):
+        if not active:
+            count_text.set_text(f"{sector_label} deg:  press Start to count")
+            return
+        # 数字の桁が変わっても後ろがずれないよう幅を固定する
+        marker = "DETECTING" if present else ""
+        count_text.set_text(f"{sector_label} deg:  {count:4d} hits   {marker}")
+
+    set_count_text(False, 0, False)
+
     def update(_frame):
         distances, intensities, detected = buffer.snapshot()
         offsets = np.column_stack((theta, distances))
@@ -276,6 +405,7 @@ def main():
         if COLOR_BY_INTENSITY:
             scat.set_array(intensities)
         set_title(detected)
+        set_count_text(*counter.snapshot())
         return (scat,)
 
     ani = animation.FuncAnimation(

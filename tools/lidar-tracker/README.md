@@ -63,6 +63,8 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
   SDK（`enableSunNoise` / `enableGlassNoise`）に渡している
 - `FILTER_BY_RANGE` — 距離による範囲外の除外
 - `COLOR_BY_INTENSITY` / `INTENSITY_COLORMAP` — Intensity（反射強度）で点を色分けするか
+- `COUNT_SECTOR_START_DEG` / `COUNT_SECTOR_END_DEG` — 検出回数を数える範囲（下記）
+- `COUNT_RELEASE_ROTATIONS` — 何回転消えたら「次の検出」と見なすか（下記）
 
 ## 回転数の設定（`config.toml`）
 
@@ -133,6 +135,36 @@ range_max_cm = 80
 
 現物合わせのときは `FILTER_BY_RANGE = False` にすると、範囲外の点が `DISPLAY_SCALE` の
 余白に見えるので、どこに壁があるか・`RANGE_MAX` をどこに置くべきかを確認できる。
+
+## セクタの検出回数カウント（Start / Reset ボタン）
+
+ウィンドウ左下の **Start / Reset** ボタンを押すと、指定セクタ（既定 **225〜315 度**、
+図では薄い青で塗ってある）に点が現れた回数を数え始める。もう一度押すと 0 に戻して
+数え直す。回数はボタンの右に出る:
+
+```
+225-315 deg:     3 hits   DETECTING
+```
+
+- `3 hits` — ボタンを押してからの検出回数
+- `DETECTING` — いまセクタ内に点がある間だけ出る
+
+### 「1 回」の数え方
+
+**セクタが「点なし」→「点あり」に変わった回数**を数える（立ち上がりのみ）。氷が 1 個
+落ちて数回転映り続けても **1 回**で、映っている間ずっと加算されるわけではない。
+
+点滅で 1 回の落下が 2 回に割れるのを防ぐため、`COUNT_RELEASE_ROTATIONS` 回転ぶん
+連続で点が無くなるまでは「まだ同じ検出が続いている」と見なす（既定 2 回転＝10Hz で
+0.2 秒）。氷が速く連続で落ちて 1 回に丸められるようなら、この値を小さくする。
+
+### 数える点の条件
+
+散布図に出る点と同じ `_is_valid()` を通ったものだけを数える。つまり検出範囲
+（`config.toml` の `[detection]`）の外にある壁や、無反射・ノイズの点では増えない。
+
+セクタは**図に見えているとおりの角度**で指定する（`ANGLE_OFFSET_DEG` 適用後の表示角）。
+`315 → 45` のように 0 度をまたぐ指定もできる。
 
 ## Intensity（反射強度）の表示
 
