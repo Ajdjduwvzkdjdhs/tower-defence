@@ -18,7 +18,7 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from config import load_serial_config
+from config import load_detection_config, load_serial_config
 from lidar import TMiniPlus
 
 #=============================
@@ -28,13 +28,20 @@ from lidar import TMiniPlus
 # シリアルポート・ボーレートは config.toml から読み込む
 PORT, BAUDRATE = load_serial_config()
 
-RADIUS_CM = 80                     # 関心円（検出対象）の半径。ここを書き換える
-RADIUS_MM = RADIUS_CM * 10
+# 検出範囲（関心領域）の内外境界も config.toml の [detection] から読み込む。
+# 設置場所ごとに変わる現物合わせの値なので、マシンごとの config.toml に置く。
+# 外側 RANGE_MAX は「関心円」として赤線で描かれる。内側 RANGE_MIN は、センサー自身の
+# 筐体・治具・支柱など常に至近距離で返ってくる反射を切るためのもの（0 なら切らない）。
+# ここを外れた点は破棄する（FILTER_BY_RANGE）。
+RANGE_MIN_CM, RANGE_MAX_CM = load_detection_config()
+RANGE_MIN_MM = RANGE_MIN_CM * 10
+RANGE_MAX_MM = RANGE_MAX_CM * 10
 
-# 表示範囲 rmax = RADIUS × 倍率。円外のコンテキストも少し見えるようにする。
+# 表示範囲 rmax = RANGE_MAX × 倍率。円外のコンテキストも少し見えるようにする。
 # 大きくすると関心円が相対的に小さく、小さくすると円が画面いっぱいに寄る。
+# FILTER_BY_RANGE=False にすると、この余白に範囲外の点が見えるので現物合わせに使える。
 DISPLAY_SCALE = 1.2
-DISPLAY_MAX_MM = RADIUS_MM * DISPLAY_SCALE
+DISPLAY_MAX_MM = RANGE_MAX_MM * DISPLAY_SCALE
 
 # 現物合わせ用の角度オフセット[度]。センサー正面を画面上のどこに向けるか。
 # 0 度＝画面上・時計回りを基準に、この値だけ表示全体を回転させる。
@@ -51,6 +58,7 @@ UPDATE_INTERVAL_MS = 50
 FILTER_ZERO_DISTANCE = True        # 距離 0（無反射）を除外
 FILTER_AMBIENT = True              # 外乱光（flag == 3）を除外
 FILTER_SPECULAR = False            # 鏡面反射（flag == 2）を除外（既定は残す）
+FILTER_BY_RANGE = True             # RANGE_MIN..RANGE_MAX の外を除外
 
 
 class ScanBuffer:
@@ -86,12 +94,19 @@ class ScanBuffer:
 
 
 def _is_valid(p):
-    """フィルタ設定に照らして、その点を「有効な物体点」とみなすか。"""
+    """フィルタ設定に照らして、その点を「有効な物体点」とみなすか。
+
+    無効と判定された点はそのビンを NaN でクリアする（update 参照）。距離での棄却も
+    同じ扱いにしてあるので、「関心円の外に壁がある方向」は点が出ない＝
+    その方向の関心領域内には何も無い、と読める。
+    """
     if FILTER_ZERO_DISTANCE and p["distance"] == 0:
         return False
     if FILTER_AMBIENT and p["flag"] == 3:
         return False
     if FILTER_SPECULAR and p["flag"] == 2:
+        return False
+    if FILTER_BY_RANGE and not (RANGE_MIN_MM <= p["distance"] <= RANGE_MAX_MM):
         return False
     return True
 
@@ -129,7 +144,10 @@ def main():
     ax.set_theta_zero_location("N")    # 0 度を画面上（真上）に
     ax.set_theta_direction(-1)         # 時計回り
     ax.set_rlabel_position(135)
-    ax.set_title(f"LiDAR realtime  (radius = {RADIUS_CM} cm)")
+    if FILTER_BY_RANGE:
+        ax.set_title(f"LiDAR realtime  (range = {RANGE_MIN_CM}-{RANGE_MAX_CM} cm)")
+    else:
+        ax.set_title(f"LiDAR realtime  (range filter OFF, circle = {RANGE_MAX_CM} cm)")
 
     # 各ビンの中心角[ラジアン]（オフセットで表示全体を回転）。以後固定。
     bin_centers_deg = (np.arange(NUM_BINS) + 0.5) * BIN_RESOLUTION_DEG
@@ -138,15 +156,23 @@ def main():
     # 物体点（散布図）。r は毎フレーム差し替える。NaN のビンは描画されない。
     scat = ax.scatter(theta, np.full(NUM_BINS, np.nan), s=8, c="tab:blue")
 
-    # 関心円（目安線）を重ねる
+    # 検出範囲の境界線を重ねる。外側＝赤、内側＝橙（RANGE_MIN=0 のときは描かない）。
     circle_theta = np.linspace(0, 2 * np.pi, 361)
     ax.plot(
         circle_theta,
-        np.full_like(circle_theta, RADIUS_MM),
+        np.full_like(circle_theta, RANGE_MAX_MM),
         color="tab:red",
         linewidth=1.0,
         alpha=0.7,
     )
+    if RANGE_MIN_MM > 0:
+        ax.plot(
+            circle_theta,
+            np.full_like(circle_theta, RANGE_MIN_MM),
+            color="tab:orange",
+            linewidth=1.0,
+            alpha=0.7,
+        )
 
     # 全アーティストを追加した後に表示範囲を固定する。
     # 先に set_rmax しても、後から plot するとオートスケールが rmax を

@@ -43,11 +43,41 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
 
 `scan_plot_realtime.py` 冒頭の「設定」定数で現物合わせする。
 
-- `RADIUS_CM` — 関心円（検出対象）の半径。赤い目安線として描かれる
-- `DISPLAY_SCALE` — 表示範囲 = 半径 × 倍率。円外のコンテキストをどれだけ見せるか
+検出範囲だけは設置場所ごとに変わるので、スクリプトではなく `config.toml` にある（下記）。
+
+- `DISPLAY_SCALE` — 表示範囲 = `RANGE_MAX` × 倍率。円外のコンテキストをどれだけ見せるか
 - `ANGLE_OFFSET_DEG` — センサー正面を画面上のどこへ向けるか（表示全体の回転）
 - `BIN_RESOLUTION_DEG` — 角度ビンの解像度。1.0° → 360 ビン
 - `FILTER_ZERO_DISTANCE` / `FILTER_AMBIENT` / `FILTER_SPECULAR` — 無反射・外乱光・鏡面反射の除外
+- `FILTER_BY_RANGE` — 距離による範囲外の除外
+
+## 検出範囲の制限（`config.toml`）
+
+ROS を使わないので、SDK の `range_min` / `range_max` 相当を受信後の点群フィルタとして
+自前で持つ。判定は `_is_valid()` に集約してあり、`range_min_cm <= distance <= range_max_cm`
+（両端を含む）を外れた点は破棄する。
+
+設置場所ごとに変わる現物合わせの値なので、スクリプトではなく `config.toml` に置く:
+
+```toml
+[detection]
+range_min_cm = 0
+range_max_cm = 80
+```
+
+- 外側 `range_max_cm` — 関心円。**赤線**で描かれる。壁や周囲の人を落として、
+  かき氷機まわりの落氷だけを見るための主要なノブ。
+- 内側 `range_min_cm` — センサー筐体・治具・支柱など、常に至近距離で返る反射を切る。
+  `0` なら内側は切らない（既定）。`0` 以外なら**橙線**で描かれる。
+- T-mini Plus の実力値は約 0.02〜12 m。`range_max_cm` を 1200 より大きくしても意味はない。
+- `[detection]` はセクションごと省略可能（既定 `0` / `80`）。`range_min_cm < range_max_cm`
+  でない・負・数値でない場合は、起動時にメッセージを出して終了する。
+
+破棄された点は、そのビンを NaN に**クリアする**（残さない）。つまり「関心円の外に壁が
+ある方向」は点が消えるので、画面上の点は常に「関心領域内に今ある物体」だけになる。
+
+現物合わせのときは `FILTER_BY_RANGE = False` にすると、範囲外の点が `DISPLAY_SCALE` の
+余白に見えるので、どこに壁があるか・`RANGE_MAX` をどこに置くべきかを確認できる。
 
 ## 移植元との差分
 
