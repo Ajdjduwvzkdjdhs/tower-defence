@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using KakigoriTD.Core;
 using KakigoriTD.Data;
@@ -36,11 +36,16 @@ namespace KakigoriTD.Gameplay
         private ObjectPool<AllyNPC> _allyPool;
         private ObjectPool<DisguisedEnemy> _disguisedPool;
         private ObjectPool<SnowPuff> _puffPool;
+        private ObjectPool<DissolveBurst> _burstPool;
+
+        [Tooltip("撃破演出で身代わりが麓側へ吹き飛ぶ距離。見た目のみで撃破判定には影響しない。")]
+        [SerializeField] private float _knockbackDistance = 3f;
         private ProjectileFactory _projectileFactory;
         private Fort _fort;
         private Vector3 _center;
         private Vector3 _outwardDir;
         private Vector3 _perpDir;
+        private Quaternion _inwardRotation = Quaternion.identity; // 見た目の向き付け用（砦の方を向かせる）
         private Func<float, float, float> _heightAt; // (x,z)→world Y（斜面サンプラ・ADR-21）
         private float _lastKillTime = float.NegativeInfinity; // 直近の撃破時刻（後続行の即死を防ぐクールダウン・ADR-27）
 
@@ -100,7 +105,7 @@ namespace KakigoriTD.Gameplay
         /// </summary>
         public void Configure(int channelId, Vector3 center, ProjectileFactory projectileFactory,
             Fort fort, Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
-            Func<SnowPuff> createPuff, Func<float, float, float> heightAt = null)
+            Func<SnowPuff> createPuff, Func<DissolveBurst> createBurst = null, Func<float, float, float> heightAt = null)
         {
             ChannelId = channelId;
             _center = center;
@@ -110,11 +115,15 @@ namespace KakigoriTD.Gameplay
             _outwardDir = DirectionFor(channelId);
             // XZ 平面での外向きに直交する水平ベクトル（ADR-21：空間基底を XY→XZ）
             _perpDir = new Vector3(_outwardDir.z, 0f, -_outwardDir.x);
+            // 敵モデルは +Z が正面。麓から砦（内向き＝-outward）を向かせる。
+            // 見た目だけの回転で、位置・射撃・撃破判定はいずれも位置ベクトルのみを見るため影響しない。
+            _inwardRotation = Quaternion.LookRotation(-_outwardDir, Vector3.up);
             _matrix = new EnemyMatrix<Enemy>(_rowWidth);
             _pool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
             _disguisedPool = new ObjectPool<DisguisedEnemy>(createDisguised);
             _puffPool = new ObjectPool<SnowPuff>(createPuff);
+            if (createBurst != null) _burstPool = new ObjectPool<DissolveBurst>(createBurst);
         }
 
         /// <summary>放射状4方向（XZ 平面・ADR-21）。0:N(+z) / 1:W(-x) / 2:S(-z) / 3:E(+x)。</summary>
@@ -205,6 +214,16 @@ namespace KakigoriTD.Gameplay
                 // Kill / Release より前に位置を取得して雪しぶきを発生（ADR-20）
                 _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
 
+                // 同じく Release 前に見た目を複製し、身代わりを蒸発させる（純 cosmetic・ADR-27 不変）。
+                // 敵本体は従来どおり即座にプールへ返るため、撃破解決のタイミングは変わらない。
+                if (_burstPool != null)
+                {
+                    // 山へ進む向きの逆＝麓側へ押し出す。着地点は斜面に乗せる（ADR-21）。
+                    Vector3 landing = e.transform.position + _outwardDir * _knockbackDistance;
+                    if (_heightAt != null) landing.y = _heightAt(landing.x, landing.z);
+                    _burstPool.Get().Play(e.transform, landing, _burstPool.Release);
+                }
+
                 if (e is AllyNPC ally)
                 {
                     // 自走退場ハンドラの二重発火を防ぐ
@@ -288,6 +307,7 @@ namespace KakigoriTD.Gameplay
                 {
                     var e = members[slot];
                     if (e == null) continue;
+                    e.transform.rotation = _inwardRotation; // cosmetic のみ
                     if (e == justSpawned)
                     {
                         // 入場（案B・ADR-22）: 谷方向の絶対半径 _entranceRadius（カメラ縁の遠方ライン）へ snap し、
