@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace KakigoriTD.Audio
 {
@@ -23,8 +23,11 @@ namespace KakigoriTD.Audio
 
         [Header("戦闘 SE")]
         [SerializeField] private AudioClip _hit;         // 砦被弾
-        [SerializeField] private AudioClip _enemyKilled; // 敵撃破（行単位で1回）
+        [SerializeField] private AudioClip _enemyKilled; // 敵撃破（下の配列が空のときのフォールバック）
         [SerializeField] private AudioClip _enemyAttack; // 敵発射（毎発）
+
+        [Tooltip("敵撃破音。複数入れると鳴るたびに上から順番に切り替わる。空なら上の単発クリップを使う。")]
+        [SerializeField] private AudioClip[] _enemyKilledClips;
 
         [Header("雪崩（ループ gate・専用 source）")]
         [SerializeField] private AudioClip _avalanche;
@@ -53,6 +56,29 @@ namespace KakigoriTD.Audio
         public float HitVolume => _hitVolume;
         public AudioClip EnemyKilled => _enemyKilled;
         public float EnemyKilledVolume => _enemyKilledVolume;
+
+        /// <summary>
+        /// 敵撃破音を1つ返す。<c>_enemyKilledClips</c> に複数入っていれば呼ばれるたびに順送りし、
+        /// 同じ音が連続しないようにする（オープンキャンパスの「ヒット感が見えづらい」への対策）。
+        /// 未設定・全要素 null なら従来どおり <c>_enemyKilled</c> を返すので、差し替え前の挙動に戻せる。
+        /// </summary>
+        public AudioClip NextEnemyKilled()
+        {
+            if (_enemyKilledClips != null && _enemyKilledClips.Length > 0)
+            {
+                // null 要素は飛ばす。1周して全部 null ならフォールバックへ落ちる。
+                for (int i = 0; i < _enemyKilledClips.Length; i++)
+                {
+                    var clip = _enemyKilledClips[_enemyKilledIndex];
+                    _enemyKilledIndex = (_enemyKilledIndex + 1) % _enemyKilledClips.Length;
+                    if (clip != null) return clip;
+                }
+            }
+            return _enemyKilled;
+        }
+
+        // 再生位置。ScriptableObject の実行時状態だが、次に鳴る番号が持ち越されるだけで副作用はない。
+        private int _enemyKilledIndex;
         public AudioClip EnemyAttack => _enemyAttack;
         public float EnemyAttackVolume => _enemyAttackVolume;
 

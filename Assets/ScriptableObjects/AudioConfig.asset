@@ -19,12 +19,16 @@ MonoBehaviour:
   _hit: {fileID: 8300000, guid: 161707db5405747dd9a65f4606e7bf82, type: 3}
   _enemyKilled: {fileID: 8300000, guid: 8a0a37c6b0a3a42ca8af2eb5760d635a, type: 3}
   _enemyAttack: {fileID: 8300000, guid: 85c2c8a0a22ee4e9782e97d9b63b2266, type: 3}
+  _enemyKilledClips:
+  - {fileID: 8300000, guid: d2b5b0702c3c94e6194adb84522b4014, type: 3}
+  - {fileID: 8300000, guid: d3e72a49d62b844a9936757b77fc469a, type: 3}
+  - {fileID: 8300000, guid: dece56ebebc7c47f58aec6f8f90843dd, type: 3}
   _avalanche: {fileID: 8300000, guid: b016c78ffb3594daea3435ac800564bd, type: 3}
   _allyCaught: {fileID: 0}
   _clearVolume: 1
   _gameOverVolume: 1
   _hitVolume: 0.7
-  _enemyKilledVolume: 0.2
+  _enemyKilledVolume: 0.5
   _enemyAttackVolume: 0.4
   _avalancheVolume: 1
   _allyCaughtVolume: 1
