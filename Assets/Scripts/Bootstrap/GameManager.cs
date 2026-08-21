@@ -47,6 +47,7 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveLull = 5f;
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
+        [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
 
         private Fort _fort;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
@@ -287,12 +288,19 @@ namespace KakigoriTD.Bootstrap
         }
 
         // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
+        // private AllyNPC CreateAlly()
+        // {
+        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        //     go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+        //     DestroyCollider(go);
+        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+        //     return go.AddComponent<AllyNPC>();
+        // }
         private AllyNPC CreateAlly()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+            var go = GameObject.Instantiate(_tgsAllyPrefab);
+            go.name = "Ally";
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<AllyNPC>();
         }
 
