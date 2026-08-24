@@ -24,10 +24,11 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 それ以外の描画パラメータは下の「設定」定数で調整する。
 
 各プロットのタイトルには、どの台か（名前とポート）・設定した回転数・その回転数で
-1 回転に取れる点数の理論値・直近 1 回転で実際に検出できた点数・セクタのカウンタが出る。
+1 回転に取れる点数の理論値・直近 1 回転で実際に検出できた点数が出る。
 
 指定セクタ（既定 225〜315 度、図では薄く塗ってある）で検出された回数（立ち上がり）と
-点数の累計は、起動した時点から台ごとに数えていて、各プロットのタイトル 3 行目に出る。
+点数の累計は、起動した時点から台ごとに数えていて、ウィンドウ左の欄にその台の
+プロットと同じ高さで大きく出る（離れた所から読めるように、タイトルではなく左）。
 
 数え方は 2 モードあり、ウィンドウ下部の "Mode" ボタンで全台まとめて切り替える:
   - simple     : セクタ内に有効な点があれば「有り」。セクタに静止物が写らない前提の、
@@ -93,12 +94,42 @@ UPDATE_INTERVAL_MS = 50
 #--- ウィンドウの大きさ[インチ] -----------------------------------------
 # 縦は「1 台ぶんの高さ × 台数 + ボタン行」で決める。台数が増えても 1 枚あたりの
 # 大きさとボタン行の高さが変わらないよう、割合ではなくインチで持つ。
-FIGURE_WIDTH_IN = 7.0
-PANEL_HEIGHT_IN = 4.6      # プロット 1 枚ぶん（3 行のタイトルを含む）
-TOP_MARGIN_IN = 0.85        # 1 枚目の 3 行タイトルが収まるだけの厚み
-BOTTOM_ROW_HEIGHT_IN = 0.9  # 下端の Start/Reset ボタン行
+# matplotlib の位置指定はすべて「図に対する割合」なので、窓を広げると余白も
+# ボタンも一緒に間延びする。ここではすべてインチで持ち、リサイズのたびに
+# apply_layout() が割合へ換算し直す（＝窓を広げても各部の実寸は変わらない）。
+FIGURE_WIDTH_IN = 10.0
+PLOT_AREA_WIDTH_IN = 6.0    # プロット＋カラーバーに使う幅（左の欄の右どなり）
+PANEL_HEIGHT_IN = 4.6       # プロット 1 枚ぶん（2 行のタイトルを含む）
+TOP_MARGIN_IN = 0.75        # 1 枚目の 2 行タイトルが収まるだけの厚み
+BOTTOM_ROW_HEIGHT_IN = 0.9  # 下端のボタン行
 PANEL_GAP_RATIO = 0.45      # プロット間の余白（軸の高さに対する比）。
                             # 2 枚目以降のタイトルはこの隙間に入るので詰めすぎない
+
+#--- 下端のボタン行[インチ] ----------------------------------------------
+BUTTON_BOTTOM_IN = 0.28
+BUTTON_HEIGHT_IN = 0.36
+BUTTON_LEFT_IN = 0.35        # 左端から Reset ボタンまで
+BUTTON_GAP_IN = 0.15         # ボタン同士の間隔
+RESET_BUTTON_WIDTH_IN = 1.5
+MODE_BUTTON_WIDTH_IN = 1.9
+HELP_TEXT_LEFT_IN = 4.1      # ボタンの右に置く説明文
+HELP_TEXT_BOTTOM_IN = 0.46
+
+#--- 左のカウンタ欄 ------------------------------------------------------
+# セクタのカウンタは、タイトルの小さな 1 行ではなくウィンドウ左端に大きく出す
+# （計測中に離れた所から読むため）。台ごとに 1 ブロックで、その台のプロットと
+# 同じ高さに置く。プロットはこの幅ぶん右に寄る。
+LEFT_COLUMN_WIDTH_IN = 2.9   # プロットの左に空ける、カウンタ用の幅
+COUNT_TEXT_LEFT_IN = 0.35    # ウィンドウ左端からカウンタ文字までの距離
+
+# プロットの縦中心からの高さ[インチ]。3 つのブロックが重ならない間隔にする。
+COUNT_HEAD_OFFSET_IN = 1.05    # 台名とセクタ・モード
+COUNT_VALUE_OFFSET_IN = 0.15   # hits / pts（大きい数字）
+COUNT_NOW_OFFSET_IN = -0.85    # 直近 1 回転の点数、または学習の進み具合
+
+COUNT_HEAD_FONTSIZE = 13
+COUNT_VALUE_FONTSIZE = 26
+COUNT_NOW_FONTSIZE = 11
 
 #--- Intensity（反射強度）の表示 -----------------------------------------
 # T-mini Pro 開発マニュアル 3.1.2 Intensity Analysis:
@@ -510,6 +541,9 @@ class LidarPanel:
         self._scat = None
         self._threshold_line = None
         self._theta = None
+        self._head_text = None
+        self._value_text = None
+        self._now_text = None
 
     #--- センサー ---------------------------------------------------------
 
@@ -577,7 +611,16 @@ class LidarPanel:
             )
             # カラーバーは台ごとに付ける。共有にすると軸の幅が台ごとに変わって
             # 上下のプロットの大きさが揃わない。
-            fig.colorbar(self._scat, ax=ax, pad=0.1, label="Intensity (0-255)")
+            # panchor は「軸が正方形に潰れたとき、余った幅のどちら側に寄せるか」。
+            # 既定の東（カラーバー側）だと窓が細いときにプロットが右へ逃げて、
+            # 左のカウンタ欄から離れてしまうので西に寄せる。
+            fig.colorbar(
+                self._scat,
+                ax=ax,
+                pad=0.1,
+                label="Intensity (0-255)",
+                panchor=(0.0, 0.5),
+            )
         else:
             self._scat = ax.scatter(
                 self._theta, np.full(NUM_BINS, np.nan), s=8, c="tab:blue"
@@ -630,7 +673,10 @@ class LidarPanel:
         ax.set_rlim(0, DISPLAY_MAX_MM)
         ax.autoscale(False)
 
-        self._set_title(0, self.counter.snapshot())
+        self._build_count_text(fig)
+
+        self._set_title(0)
+        self._set_counts(self.counter.snapshot())
 
     def refresh(self):
         """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。"""
@@ -642,43 +688,78 @@ class LidarPanel:
 
         self._threshold_line.set_data(self._theta, self.counter.threshold())
 
-        self._set_title(detected, self.counter.snapshot())
+        self._set_title(detected)
+        self._set_counts(self.counter.snapshot())
 
         return self._scat
 
-    def _set_title(self, detected, count_state):
-        """3 行のタイトルを書き替える（どの台か / 点の出方 / セクタのカウンタ）。
+    def _build_count_text(self, fig):
+        """ウィンドウ左端のカウンタ欄の文字を作る（1 度だけ呼ぶ）。
 
-        台が増えるとボタン横の 1 行には収まらないので、カウンタもここに出す。
-        数字は桁が変わってもタイトルが揺れないよう幅を固定する。
+        置き場所は決めない。窓の大きさで変わるので place_count_text() が持つ。
+        中身は毎フレーム _set_counts() が差し替える。
         """
+        def block(fontsize, **kwargs):
+            return fig.text(
+                0.0, 0.0, "", va="center", ha="left", fontsize=fontsize, **kwargs
+            )
+
+        self._head_text = block(COUNT_HEAD_FONTSIZE)
+        # 数字は桁が変わっても左端が動かないよう、等幅で右詰めにする
+        self._value_text = block(COUNT_VALUE_FONTSIZE, family="monospace")
+        self._now_text = block(COUNT_NOW_FONTSIZE, family="monospace")
+
+    def place_count_text(self, fig):
+        """左のカウンタ欄を、自分のプロットと同じ高さに置き直す。
+
+        軸の縦中心を基準にするので、プロットとカウンタの対応は窓の大きさに
+        よらず崩れない。位置は図に対する割合なので、リサイズのたびに呼ぶ。
+        """
+        box = self._ax.get_position()
+        center_y = (box.y0 + box.y1) / 2
+        left = COUNT_TEXT_LEFT_IN / fig.get_figwidth()
+        height_in = fig.get_figheight()
+
+        for text, offset_in in (
+            (self._head_text, COUNT_HEAD_OFFSET_IN),
+            (self._value_text, COUNT_VALUE_OFFSET_IN),
+            (self._now_text, COUNT_NOW_OFFSET_IN),
+        ):
+            text.set_position((left, center_y + offset_in / height_in))
+
+    def _set_counts(self, count_state):
+        """左のカウンタ欄を書き替える。毎フレーム呼ぶ。"""
         mode, count, points, last, present, remaining = count_state
+
+        self._head_text.set_text(f"{self.name}\n{SECTOR_LABEL} deg  /  {mode}")
 
         if remaining > 0:
             # 学習中はまだ数えていない。0 のままの数字を出すと「動いていない」に
-            # 見えるので、学習中であることと残り回転数をそのまま出す。
-            count_line = (
-                f"{SECTOR_LABEL} deg [{mode}]:"
-                f"  learning background ... {remaining:3d} rev left"
+            # 見えるので、数字は伏せて、学習中であることと残り回転数を出す。
+            self._value_text.set_text("   -- hits\n   -- pts")
+            self._now_text.set_text(
+                f"learning background ... {remaining:3d} rev left"
             )
         else:
+            self._value_text.set_text(f"{count:5d} hits\n{points:5d} pts")
+
             # now は直近 1 回転で「有り」と数えた点数。hits が増えないときに、点が
             # 入っていないのか（now も 0）、入っているのに立ち上がらないのか
             # （now > 0）を、その場で切り分けるために出している。
-            marker = "DETECTING" if present else ""
-            count_line = (
-                f"{SECTOR_LABEL} deg [{mode}]:"
-                f"  {count:4d} hits"
-                f"  {points:6d} pts"
-                f"  now {last:3d}  {marker}"
-            )
+            marker = "   DETECTING" if present else ""
+            self._now_text.set_text(f"now {last:3d}{marker}")
 
+    def _set_title(self, detected):
+        """2 行のタイトルを書き替える（どの台か / 点の出方）。
+
+        セクタのカウンタは左の欄に出すので、ここには出さない。数字は桁が
+        変わってもタイトルが揺れないよう幅を固定する。
+        """
         self._ax.set_title(
             f"{self.name}   {self.port}   ({RANGE_LABEL})\n"
             f"{SCAN_FREQUENCY_HZ:.1f} Hz"
             f"   max {MAX_POINTS_PER_REV} pts/rev"
-            f"   detected {detected:4d} pts\n"
-            f"{count_line}",
+            f"   detected {detected:4d} pts",
             fontsize=10,
         )
 
@@ -714,15 +795,6 @@ def main():
     )
     fig = plt.figure(figsize=(FIGURE_WIDTH_IN, figure_height_in))
 
-    # 余白は割合ではなくインチ換算で指定する（台数が増えても上下の余白は同じ厚み）。
-    # タイトルが 3 行あるぶん上に、ボタンのぶん下に取る。毎フレーム書き換えるので、
-    # constrained_layout のような都度計算だと軸がわずかに動く。
-    fig.subplots_adjust(
-        top=1.0 - TOP_MARGIN_IN / figure_height_in,
-        bottom=BOTTOM_ROW_HEIGHT_IN / figure_height_in,
-        hspace=PANEL_GAP_RATIO,
-    )
-
     manager = fig.canvas.manager
     if manager is not None:
         manager.set_window_title("LiDAR realtime")
@@ -733,19 +805,28 @@ def main():
     # --- 計測セクタのカウンタ UI ---
     # カウントは起動時から動いている。ボタンはどちらも全台まとめて効く（同じ落下を
     # 各台がどう捉えたか比べたいので、台ごとにばらばらの区切り・ばらばらのモードで
-    # 数えても読めない）。数字は各プロットのタイトル 3 行目に出る。
+    # 数えても読めない）。数字はウィンドウ左の欄に出る。
     # Button はローカル変数で参照を持ち続けないと GC されて反応しなくなる。
-    def button_axes(left, width):
-        return fig.add_axes((
-            left,
-            0.28 / figure_height_in,
-            width,
-            0.36 / figure_height_in,
-        ))
+    # 位置は apply_layout() が入れ直すので、ここでは仮置きでよい
+    button_boxes = []
+
+    def button_axes(left_in, width_in):
+        ax = fig.add_axes((0.0, 0.0, 0.1, 0.1))
+        button_boxes.append((ax, left_in, width_in))
+
+        return ax
 
     mode = COUNT_MODE_SIMPLE
-    reset_button = Button(button_axes(0.03, 0.17), "Reset counts")
-    mode_button = Button(button_axes(0.22, 0.24), f"Mode: {mode}")
+    reset_button = Button(
+        button_axes(BUTTON_LEFT_IN, RESET_BUTTON_WIDTH_IN), "Reset counts"
+    )
+    mode_button = Button(
+        button_axes(
+            BUTTON_LEFT_IN + RESET_BUTTON_WIDTH_IN + BUTTON_GAP_IN,
+            MODE_BUTTON_WIDTH_IN,
+        ),
+        f"Mode: {mode}",
+    )
 
     def reset_counts(_event):
         for panel in panels:
@@ -767,14 +848,59 @@ def main():
     reset_button.on_clicked(reset_counts)
     mode_button.on_clicked(toggle_mode)
 
-    fig.text(
-        0.49,
-        0.46 / figure_height_in,
+    help_text = fig.text(
+        0.0,
+        0.0,
         "both buttons apply to all LiDARs at once\n"
         "background mode ignores statics in the sector",
         va="center",
         fontsize=9,
     )
+
+    def apply_layout(_event=None):
+        """インチで決めた配置を、いまの窓の大きさに合わせて割合へ換算し直す。
+
+        これをしないと、窓を広げた分だけ左のカウンタ欄・プロット・ボタンが
+        一緒に間延びして、カウンタとプロットが遠く離れてしまう。窓が小さすぎて
+        インチどおりに置けないときのために、割合は 0〜1 の内側へ収める。
+        """
+        width_in = fig.get_figwidth()
+        height_in = fig.get_figheight()
+
+        left = min(LEFT_COLUMN_WIDTH_IN / width_in, 0.6)
+        right = min(
+            max((LEFT_COLUMN_WIDTH_IN + PLOT_AREA_WIDTH_IN) / width_in, left + 0.2),
+            0.98,
+        )
+        bottom = min(BOTTOM_ROW_HEIGHT_IN / height_in, 0.4)
+        top = max(1.0 - TOP_MARGIN_IN / height_in, bottom + 0.2)
+
+        fig.subplots_adjust(
+            left=left,
+            right=right,
+            top=top,
+            bottom=bottom,
+            hspace=PANEL_GAP_RATIO,
+        )
+
+        for panel in panels:
+            panel.place_count_text(fig)
+
+        for button_ax, button_left_in, button_width_in in button_boxes:
+            button_ax.set_position((
+                button_left_in / width_in,
+                BUTTON_BOTTOM_IN / height_in,
+                button_width_in / width_in,
+                BUTTON_HEIGHT_IN / height_in,
+            ))
+
+        help_text.set_position((
+            HELP_TEXT_LEFT_IN / width_in,
+            HELP_TEXT_BOTTOM_IN / height_in,
+        ))
+
+    apply_layout()
+    fig.canvas.mpl_connect("resize_event", apply_layout)
 
     def update(_frame):
         return [panel.refresh() for panel in panels]
