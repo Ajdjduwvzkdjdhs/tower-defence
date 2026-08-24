@@ -36,7 +36,11 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private bool _visionFlipVertical;
 
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
-        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
+        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのフォールバック
+
+        [Tooltip("見えている斜面の Collider（山メッシュ）。設定すると高さはこちらを優先し、"
+               + "未設定・レイが外れた場合だけ Terrain に落ちる。")]
+        [SerializeField] private Collider _groundSurface;
 
         [Header("サウンド（Phase 6 / ADR-26。未割り当てなら全音無音でエラーなし）")]
         [SerializeField] private AudioConfigSO _audioConfig;
@@ -220,8 +224,21 @@ namespace KakigoriTD.Bootstrap
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
         // Terrain 未割り当て時は 0（平面フォールバック）。
+        /// <summary>斜面の高さを取るレイの発射高度。山メッシュの最上部より十分高くしておく。</summary>
+        private const float GroundRayHeight = 100f;
+
         private float HeightAt(float x, float z)
         {
+            // 見た目の斜面を正とする。Terrain と山メッシュは形が違い、Terrain 基準だと
+            // 敵や雪玉がメッシュに埋まって見えなくなるため（半径5で最大約3.9のずれ）。
+            // Physics.Raycast ではなく Collider.Raycast を使い、敵や砦のコライダーを拾わないようにする。
+            if (_groundSurface != null)
+            {
+                var ray = new Ray(new Vector3(x, GroundRayHeight, z), Vector3.down);
+                if (_groundSurface.Raycast(ray, out var hit, GroundRayHeight * 2f)) return hit.point.y;
+            }
+
+            // 山メッシュの外側（24x24 しかない）はここに落ちる
             if (_terrain == null) return 0f;
             return _terrain.transform.position.y + _terrain.SampleHeight(new Vector3(x, 0f, z));
         }
@@ -533,8 +550,8 @@ namespace KakigoriTD.Bootstrap
         }
 
         // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
-        private const float AimNearAlong = 3.5f; // 砦寄り端（麓の先頭行 5.0 の手前・Phase4.5）
-        private const float AimFarAlong = 7.0f;  // 麓側端（最奥行 6.65 の少し外・Phase4.5）
+        private const float AimNearAlong = 6.5f; // 砦寄り端（先頭行 8.0 の手前）
+        private const float AimFarAlong = 10.0f; // 麓側端（最奥行 9.65 の少し外）
         private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
 
         // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。

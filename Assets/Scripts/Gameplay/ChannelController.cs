@@ -20,15 +20,15 @@ namespace KakigoriTD.Gameplay
     {
         [Header("配置（砦中心からの外向き）")]
         // Phase4.5: 隊列を山の麓（斜面基部）に静止させる。先頭行(index0)=山頂寄り(up-slope)、後続は麓の平地側。
-        // 先頭 r=5.0(y≈0.39) 〜 最奥 r=5.0+3*0.55=6.65(y≈0)。俯瞰カメラ(y=20/fov46)の N谷可視半径≈8.0 内。
-        // 斜面高さ実測: r=5→0.39 / r=6→0.06 / r=6.5→0.01 / r≥7→0（斜面が平地に着く＝麓は r≈6.5）。
-        [SerializeField] private float _frontGap = 5.0f;    // 先頭行(index0)の砦中心からの距離（＝麓・斜面基部）
+        // 先頭 r=8.0 〜 最奥 r=8.0+3*0.55=9.65。俯瞰カメラ(y=27.5/fov46)の可視半径≈11.7 内。
+        // 高さは山メッシュのレイキャストから取得（ADR-21）。r=8.0→約1.1〜2.2 / r=9.65→約0.4〜1.0。
+        [SerializeField] private float _frontGap = 8.0f;    // 先頭行(index0)の砦中心からの距離（＝麓・斜面基部）
         [SerializeField] private float _rowSpacing = 0.55f; // 行間（奥行き方向）
         [SerializeField] private float _slotSpacing = 0.7f;  // 行内の体の間隔（横方向）
         [SerializeField] private int _rowWidth = 3;          // 1行の最大体数（rowWidth）
         [SerializeField] private int _maxRows = 4;           // 画面内に収まる最大行数
         [SerializeField] private float _advanceSpeed = 3.5f;  // 繰り上がり前進速度（lerp、ADR-20）
-        [SerializeField] private float _entranceRadius = 10f; // 入場開始の絶対半径＝カメラ縁の遠方ライン（案B・Phase4.5/ADR-22）
+        [SerializeField] private float _entranceRadius = 11f; // 入場開始の絶対半径＝カメラ縁の遠方ライン（案B・Phase4.5/ADR-22）
         [SerializeField] private float _entranceSpeed = 6f;   // 入場の歩行速度（繰り上がり _advanceSpeed とは独立・Phase4.5）
 
         private EnemyMatrix<Enemy> _matrix;
