@@ -45,12 +45,6 @@ namespace KakigoriTD.Bootstrap
         [Header("サウンド（Phase 6 / ADR-26。未割り当てなら全音無音でエラーなし）")]
         [SerializeField] private AudioConfigSO _audioConfig;
 
-        [Header("敵の見た目（未割り当てならプリミティブ Cube にフォールバック）")]
-        [Tooltip("敵として使う FBX（例: TGS_兵士赤）。原点や実寸はモデル任せでよく、下の高さに正規化される。")]
-        [SerializeField] private GameObject _enemyModel;
-        [Tooltip("敵モデルのワールド高さ。足元が接地するよう自動でスケール・オフセットする。")]
-        [SerializeField] private float _enemyModelHeight = 3.2f;
-
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
         [SerializeField] private float _iceTotal = 50f;
@@ -319,51 +313,6 @@ namespace KakigoriTD.Bootstrap
             go.name = "Enemy";
             DestroyCollider(go);
             return go.AddComponent<Enemy>();
-        }
-
-        /// <summary>
-        /// FBX を「足元が原点・_enemyModelHeight の高さ」に正規化して器の子に入れる。
-        ///
-        /// 器（ルート）に Renderer を置かないのが要点。Enemy.Init の tint（ADR-16）は
-        /// GetComponent&lt;Renderer&gt;() が null のとき何もしないので、モデル本来の配色がそのまま残る。
-        /// 位置合わせは器の transform に対して行われるため、移動・撃破ロジックは Cube のときと同一。
-        /// </summary>
-        private T CreateModelActor<T>(string name, GameObject model) where T : Component
-        {
-            var root = new GameObject(name);
-            root.transform.SetParent(transform);
-
-            var view = Instantiate(model, root.transform);
-            view.name = "View";
-            view.transform.localPosition = Vector3.zero;
-            view.transform.localRotation = Quaternion.identity;
-            view.transform.localScale = Vector3.one;
-
-            var b = ModelBounds(view);
-            float scale = b.size.y > 0.0001f ? _enemyModelHeight / b.size.y : 1f;
-            view.transform.localScale = Vector3.one * scale;
-
-            // 最下点を y=0 へ。X/Z はモデルの原点を尊重する（剣などで bounds 中心がずれるため寄せない）。
-            float footOffset = -(b.center.y - b.size.y * 0.5f) * scale;
-            view.transform.localPosition = new Vector3(0f, footOffset, 0f);
-
-            foreach (var c in view.GetComponentsInChildren<Collider>(true)) Destroy(c);
-
-            return root.AddComponent<T>();
-        }
-
-        // スケール1・原点配置の状態でのローカル境界。Renderer が無ければゼロ。
-        private static Bounds ModelBounds(GameObject view)
-        {
-            var rends = view.GetComponentsInChildren<Renderer>(true);
-            if (rends.Length == 0) return new Bounds(Vector3.zero, Vector3.one);
-
-            var b = rends[0].bounds;
-            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
-
-            var origin = view.transform.position;
-            b.center -= origin;
-            return b;
         }
 
         // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
