@@ -579,14 +579,17 @@ MonoBehaviour:
   _visionFlipHorizontal: 0
   _visionFlipVertical: 0
   _terrain: {fileID: 147147102}
+  _groundSurface: {fileID: 0}
   _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
+  _enemyModel: {fileID: 0}
+  _enemyModelHeight: 3.2
   _fortHpMax: 1000
   _iceTotal: 50
   _waveLull: 5
   _waveIntroDuration: 1.2
   _allyHitPenalty: 50
-  _tgsAllyPrefab: {fileID: 919132149155446097, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
-  _enemyPrefab: {fileID: 919132149155446097, guid: f029bb714eb16432591ebb5915397b22, type: 3}
+  _tgsAllyPrefab: {fileID: 7452610469403989624, guid: b1471bc5a50df43b49917172345934aa, type: 3}
+  _enemyPrefab: {fileID: 313258556148709987, guid: 608a8d6ac4baa4723bbd7d3065e4eb2c, type: 3}
 --- !u!4 &1489555324
 Transform:
   m_ObjectHideFlags: 0
