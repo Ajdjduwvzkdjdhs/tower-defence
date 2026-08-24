@@ -26,9 +26,17 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 各プロットのタイトルには、どの台か（名前とポート）・設定した回転数・その回転数で
 1 回転に取れる点数の理論値・直近 1 回転で実際に検出できた点数・セクタのカウンタが出る。
 
-指定セクタ（既定 225〜315 度、図では薄く塗ってある）に点が現れた回数（立ち上がり）と、
-そこに写った点数の累計は、起動した時点から台ごとに数えていて、各プロットの
-タイトル 3 行目に出る。ウィンドウ下部のボタンは 0 に戻すだけ（全台同時）。
+指定セクタ（既定 225〜315 度、図では薄く塗ってある）で検出された回数（立ち上がり）と
+点数の累計は、起動した時点から台ごとに数えていて、各プロットのタイトル 3 行目に出る。
+
+数え方は 2 モードあり、ウィンドウ下部の "Mode" ボタンで全台まとめて切り替える:
+  - simple     : セクタ内に有効な点があれば「有り」。セクタに静止物が写らない前提の、
+                 いちばん素直な数え方（既定）
+  - background : 起動直後にビンごとの静止背景を学習し、そこより手前を通った点だけを
+                 「有り」とする。セクタに壁・床・機体が写っていて simple では hits が
+                 1 で張り付くときに使う（灰色の破線がそのしきい線）
+
+"Reset counts" ボタンはカウンタを 0 に戻す（全台同時。background では背景も学習し直す）。
 """
 
 import threading
@@ -113,6 +121,17 @@ COUNT_SECTOR_END_DEG = 315.0
 # 落ちる氷が点滅して 1 回の落下が 2 回に割れるのを防ぐ。10Hz なら 2 回転 = 0.2 秒。
 COUNT_RELEASE_ROTATIONS = 2
 
+#--- 数え方のモード（"Mode" ボタンで全台まとめて切り替える）----------------
+# 既定は simple。2 つの違いは SectorCounter の docstring を参照。
+COUNT_MODE_SIMPLE = "simple"           # セクタ内に点があれば「有り」
+COUNT_MODE_BACKGROUND = "background"   # 静止背景より手前の点だけ「有り」
+
+# background モードのパラメータ。
+# margin は「背景のばらつき」と「拾いたい氷の手前具合」の折り合い。大きくすると
+# 背景の揺れを拾わなくなるが、背景ぎりぎりを通る氷も落とす。小さくするとその逆。
+COUNT_BACKGROUND_ROTATIONS = 20    # 学習に使う回転数（10Hz なら 2 秒）。この間は数えない
+COUNT_FOREGROUND_MARGIN_MM = 100   # 背景より何 mm 手前なら「前を通った」とみなすか
+
 #--- フィルタの ON/OFF（現物合わせで切り替える）-------------------------
 # AMBIENT / SPECULAR は SDK 側（干渉フラグを見られるのは SDK の中だけ）、
 # それ以外は受信後の _is_valid() で効く。除外された点はどちらも同じ扱いで、
@@ -189,64 +208,190 @@ class ScanBuffer:
 class SectorCounter:
     """計測セクタの検出回数と点数を数える（スレッド間で共有）。
 
-    LiDAR 1 台につき 1 つ持つ（数える範囲の定義は全台共通だが、数えるのは
-    その台に写った点だけ）。1 回転ごとに「セクタ内にあった有効な点の数」を
-    受け取り、3 つを持つ:
+    LiDAR 1 台につき 1 つ持つ。数える範囲（COUNT_SECTOR_*）とモードは全台で共通だが、
+    数えるのはその台に写った点だけなので、状態は台ごとに独立している。
+
+    読み取りスレッドが 1 回転ぶんの samples を feed() で流し込み、メインスレッドが
+    snapshot() で表示用の値を取る。持っている数字は 3 つ:
 
       - 回数 : 無し → 有り に変わった瞬間だけ 1 回。氷が 1 個落ちて数回転
                映り続けても 1 回になる。点滅で 1 回が 2 回に割れないよう、
                release_rotations 回転ぶん連続で無くなるまでは「まだ同じ検出が
                続いている」とみなす。
-      - 点数 : セクタに写った点の累計。1 回の検出がどれだけ濃かったか
+      - 点数 : 「有り」と数えた点の累計。1 回の検出がどれだけ濃かったか
                （何点で写ったか）を見るための値なので、回数と違って
                映っている間ずっと積み上がる。
-      - 直近 : 最後の 1 回転でセクタ内にあった点の数。累計と違って増減するので、
+      - 直近 : 最後の 1 回転で「有り」と数えた点の数。累計と違って増減するので、
                「そもそもセクタに点が入ってきているのか」がその場で分かる
                （回数が増えないときの切り分け用）。
+
+    「有り」の判定は 2 モードあり、ボタンで切り替える:
+
+      simple     : セクタ内に有効な点があれば、それで「有り」。セクタに静止物が
+                   写らない前提の、いちばん素直な数え方（既定）。
+      background : セクタに壁・床・機体のような静止物が入っていると、そのビンには
+                   毎回転ずっと点が入る。simple だと最初の 1 回で立ち上がりが
+                   張り付き、以後どれだけ氷が落ちても増えない（hits = 1 のまま
+                   pts だけ増える形で出る）。落ちる氷は静止物より手前を通って
+                   背景を遮るので、learn_rotations 回転ぶん背景をビンごとに学習し、
+                   そこから margin_mm 以上手前の点だけを「有り」とする。背景は
+                   ビンごとの距離の中位値なので、学習中に氷が 1 個落ちても
+                   引っぱられにくい。学習中に何も写らなかったビンは背景なしとして
+                   扱い、そこへ来た点はすべて「有り」（何も無い方向に来たものは、
+                   それ自体が検出）。
 
     起動した時点から数え始める。ボタンはリセット専用で、押すと 0 に戻して
     数え直す（＝1 回の計測の区切り）。「押すまで数えない」にはしていない。
     押し忘れると何も数えず、それが「カウントが動かない」に見えるため。
     """
 
-    def __init__(self, release_rotations):
+    def __init__(self, num_bins, release_rotations, learn_rotations, margin_mm):
         self._lock = threading.Lock()
+        self._num_bins = num_bins
         self._release_rotations = release_rotations
-        self._count = 0
-        self._points = 0        # セクタに写った点の累計
-        self._last = 0          # 直近 1 回転でセクタ内にあった点の数
-        self._present = False   # いま検出中とみなしているか
-        self._absent = 0        # 連続して「無し」だった回転数
+        self._learn_rotations = learn_rotations
+        self._margin_mm = margin_mm
+        self._mode = COUNT_MODE_SIMPLE
+        # スレッドが走り出す前なので、ここだけロック無しで初期化してよい
+        self._clear()
+
+    #--- 読み取りスレッドから呼ぶ -----------------------------------------
+
+    def feed(self, samples):
+        """1 回転ぶんの samples を渡す。
+
+        新しい検出が立ち上がった回転だけ True を返す。画面を見ていなくても
+        数えられているか分かるよう、呼び出し側がログに出すために使う。
+        background の学習中は数えないので、必ず False。
+        """
+        points = _sector_points(samples)
+
+        with self._lock:
+            if self._is_learning():
+                self._learn(points)
+
+                return False
+
+            return self._accumulate(self._hit_count(points))
+
+    #--- メインスレッドから呼ぶ -------------------------------------------
 
     def reset(self):
-        """0 に戻して数え直す（1 回の計測の区切り）。"""
-        with self._lock:
-            self._count = 0
-            self._points = 0
-            self._last = 0
-            self._present = False
-            self._absent = 0
+        """0 に戻して数え直す（1 回の計測の区切り）。背景も学習し直す。
 
-    def feed(self, point_count):
-        """1 回転ぶんの「セクタ内の有効点数」を渡す。読み取りスレッドから呼ぶ。"""
+        背景も引き直すのは、置き直し・氷の山の変化のあとに古い背景で数え続けると、
+        あるはずの検出が出ない／無いはずの検出が出るのに気づけないため。
+        """
         with self._lock:
-            self._points += point_count
-            self._last = point_count
+            self._clear()
 
-            if point_count > 0:
-                if not self._present:
-                    self._count += 1
-                self._present = True
-                self._absent = 0
-            elif self._present:
-                self._absent += 1
-                if self._absent >= self._release_rotations:
-                    self._present = False
+    def set_mode(self, mode):
+        """数え方を切り替える。前のモードの数字と混ざって読めなくなるので 0 に戻す。"""
+        with self._lock:
+            self._mode = mode
+            self._clear()
 
     def snapshot(self):
-        """(回数, 点数, 直近 1 回転の点数, いま検出中か) を一度のロックで返す。"""
+        """(モード, 回数, 点数, 直近 1 回転の点数, 検出中か, 学習の残り回転数) を返す。
+
+        表示がズレないよう、すべて一度のロックで取る。
+        """
         with self._lock:
-            return self._count, self._points, self._last, self._present
+            remaining = 0
+            if self._is_learning():
+                remaining = self._learn_rotations - self._learned
+
+            return (
+                self._mode,
+                self._count,
+                self._points,
+                self._last,
+                self._present,
+                remaining,
+            )
+
+    def threshold(self):
+        """ビンごとのしきい距離[mm]（背景 - margin）の配列を返す（描画用）。
+
+        simple のとき・学習中・背景が無かったビンは NaN なので、線は描かれない。
+        """
+        with self._lock:
+            if self._mode == COUNT_MODE_SIMPLE:
+                return np.full(self._num_bins, np.nan)
+
+            return self._background - self._margin_mm
+
+    #--- 内部（すべてロックを持ったまま呼ぶ）------------------------------
+
+    def _clear(self):
+        """カウンタと背景をまっさらにする。"""
+        self._count = 0
+        self._points = 0
+        self._last = 0
+        self._present = False   # いま検出中とみなしているか
+        self._absent = 0        # 連続して「無し」だった回転数
+        self._background = np.full(self._num_bins, np.nan, dtype=float)
+        self._observed = [[] for _ in range(self._num_bins)]
+        self._learned = 0
+
+    def _is_learning(self):
+        """background で、まだ背景を学習し終えていないか。"""
+        return (
+            self._mode == COUNT_MODE_BACKGROUND
+            and self._learned < self._learn_rotations
+        )
+
+    def _hit_count(self, points):
+        """この 1 回転で「有り」と数える点の数（モードで判定が変わる）。"""
+        if self._mode == COUNT_MODE_SIMPLE:
+            return len(points)
+
+        return sum(
+            1 for idx, distance in points if self._is_foreground(idx, distance)
+        )
+
+    def _accumulate(self, hit_count):
+        """回数・点数を 1 回転ぶん進める。立ち上がった回転だけ True。"""
+        self._points += hit_count
+        self._last = hit_count
+        started = False
+
+        if hit_count > 0:
+            if not self._present:
+                self._count += 1
+                started = True
+            self._present = True
+            self._absent = 0
+        elif self._present:
+            self._absent += 1
+            if self._absent >= self._release_rotations:
+                self._present = False
+
+        return started
+
+    def _learn(self, points):
+        """背景の学習に 1 回転ぶん取り込み、規定回転に達したら背景を確定する。"""
+        for idx, distance in points:
+            self._observed[idx].append(distance)
+
+        self._learned += 1
+
+        if self._learned >= self._learn_rotations:
+            for idx, distances in enumerate(self._observed):
+                if distances:
+                    self._background[idx] = float(np.median(distances))
+
+            # 学習後は溜めない（回転ごとに増え続けてしまうので）
+            self._observed = [[] for _ in range(self._num_bins)]
+
+    def _is_foreground(self, idx, distance):
+        """その点が静止背景より手前か。背景が無いビンに来た点はすべて手前扱い。"""
+        background = self._background[idx]
+
+        if np.isnan(background):
+            return True
+
+        return distance < background - self._margin_mm
 
 
 def sector_spans():
@@ -274,13 +419,18 @@ def _in_count_sector(angle_deg):
     return any(lo <= display <= hi for lo, hi in sector_spans())
 
 
-def _sector_point_count(samples):
-    """この 1 回転で、計測セクタ内にあった有効な点の数。
+def _sector_points(samples):
+    """この 1 回転でセクタ内にあった有効な点を [(ビン番号, 距離mm), ...] で返す。
 
     有効判定は画面の点と同じ _is_valid() を使う。そうしないと、関心円の外にある
-    壁や範囲外のノイズでも数えてしまう。
+    壁や範囲外のノイズでも数えてしまう。ビンの刻みは ScanBuffer と同じなので、
+    background モードでビンごとに学習した静止背景とそのまま突き合わせられる。
     """
-    return sum(1 for p in samples if _is_valid(p) and _in_count_sector(p["angle"]))
+    return [
+        (int(p["angle"] // BIN_RESOLUTION_DEG) % NUM_BINS, p["distance"])
+        for p in samples
+        if _is_valid(p) and _in_count_sector(p["angle"])
+    ]
 
 
 def _is_valid(p):
@@ -318,7 +468,10 @@ def reader_loop(name, lidar, buffer, counter, stop_event):
         # 次の回転で戻ってくるので、表示はそのままにして読み続ける。
         if samples:
             buffer.update(samples)
-            counter.feed(_sector_point_count(samples))
+
+            if counter.feed(samples):
+                _, hits, points, last, _, _ = counter.snapshot()
+                print(f"[{name}] hit {hits}  ({last} pts, total {points} pts)")
 
 
 class LidarPanel:
@@ -334,7 +487,12 @@ class LidarPanel:
         self.name = name
         self.port = port
         self.buffer = ScanBuffer(NUM_BINS)
-        self.counter = SectorCounter(COUNT_RELEASE_ROTATIONS)
+        self.counter = SectorCounter(
+            NUM_BINS,
+            COUNT_RELEASE_ROTATIONS,
+            COUNT_BACKGROUND_ROTATIONS,
+            COUNT_FOREGROUND_MARGIN_MM,
+        )
 
         # コンストラクタは SDK に設定を積むだけで、まだ接続しない
         # （接続は start() の start_scan()）。
@@ -350,6 +508,7 @@ class LidarPanel:
         self._thread = None
         self._ax = None
         self._scat = None
+        self._threshold_line = None
         self._theta = None
 
     #--- センサー ---------------------------------------------------------
@@ -379,6 +538,16 @@ class LidarPanel:
 
         self._lidar.stop_scan()
         self._lidar.close()
+
+    #--- カウンタ ---------------------------------------------------------
+
+    def reset(self):
+        """カウンタを 0 に戻す（1 回の計測の区切り）。"""
+        self.counter.reset()
+
+    def set_mode(self, mode):
+        """数え方を切り替える（0 から数え直す）。"""
+        self.counter.set_mode(mode)
 
     #--- 描画 -------------------------------------------------------------
 
@@ -425,6 +594,18 @@ class LidarPanel:
                 alpha=0.08,
             )
 
+        # background モードで学習した静止背景のしきい線（背景 - margin）。この線より
+        # 手前（内側）を通った点だけを数える。中身は毎フレーム差し替える。simple の
+        # ときと、学習中・背景が無かったビンは NaN なので描かれない。
+        self._threshold_line, = ax.plot(
+            [],
+            [],
+            color="tab:gray",
+            linewidth=1.0,
+            alpha=0.8,
+            linestyle="--",
+        )
+
         # 検出範囲の境界線を重ねる。外側＝赤、内側＝橙（RANGE_MIN=0 のときは描かない）。
         circle_theta = np.linspace(0, 2 * np.pi, 361)
         ax.plot(
@@ -459,6 +640,8 @@ class LidarPanel:
         if COLOR_BY_INTENSITY:
             self._scat.set_array(intensities)
 
+        self._threshold_line.set_data(self._theta, self.counter.threshold())
+
         self._set_title(detected, self.counter.snapshot())
 
         return self._scat
@@ -469,18 +652,26 @@ class LidarPanel:
         台が増えるとボタン横の 1 行には収まらないので、カウンタもここに出す。
         数字は桁が変わってもタイトルが揺れないよう幅を固定する。
         """
-        count, points, last, present = count_state
+        mode, count, points, last, present, remaining = count_state
 
-        # now は直近 1 回転の点数。hits が増えないときに、セクタに点が入って
-        # いないのか（now も 0）、入っているのに立ち上がらないのか（now > 0）を
-        # その場で切り分けるために出している。
-        marker = "DETECTING" if present else ""
-        count_line = (
-            f"{SECTOR_LABEL} deg:"
-            f"  {count:4d} hits"
-            f"  {points:6d} pts"
-            f"  now {last:3d}  {marker}"
-        )
+        if remaining > 0:
+            # 学習中はまだ数えていない。0 のままの数字を出すと「動いていない」に
+            # 見えるので、学習中であることと残り回転数をそのまま出す。
+            count_line = (
+                f"{SECTOR_LABEL} deg [{mode}]:"
+                f"  learning background ... {remaining:3d} rev left"
+            )
+        else:
+            # now は直近 1 回転で「有り」と数えた点数。hits が増えないときに、点が
+            # 入っていないのか（now も 0）、入っているのに立ち上がらないのか
+            # （now > 0）を、その場で切り分けるために出している。
+            marker = "DETECTING" if present else ""
+            count_line = (
+                f"{SECTOR_LABEL} deg [{mode}]:"
+                f"  {count:4d} hits"
+                f"  {points:6d} pts"
+                f"  now {last:3d}  {marker}"
+            )
 
         self._ax.set_title(
             f"{self.name}   {self.port}   ({RANGE_LABEL})\n"
@@ -540,28 +731,47 @@ def main():
         panel.build(fig, fig.add_subplot(len(panels), 1, i + 1, projection="polar"))
 
     # --- 計測セクタのカウンタ UI ---
-    # カウントは起動時から動いている。ボタンはリセット専用で、1 つで全台ぶんを
-    # 0 に戻す（同じ落下を各台がどう捉えたか比べたいので、台ごとにばらばらの
-    # 区切りで数えても読めない）。
+    # カウントは起動時から動いている。ボタンはどちらも全台まとめて効く（同じ落下を
+    # 各台がどう捉えたか比べたいので、台ごとにばらばらの区切り・ばらばらのモードで
+    # 数えても読めない）。数字は各プロットのタイトル 3 行目に出る。
     # Button はローカル変数で参照を持ち続けないと GC されて反応しなくなる。
-    button_ax = fig.add_axes((
-        0.03,
-        0.25 / figure_height_in,
-        0.20,
-        0.40 / figure_height_in,
-    ))
-    reset_button = Button(button_ax, "Reset counts")
+    def button_axes(left, width):
+        return fig.add_axes((
+            left,
+            0.28 / figure_height_in,
+            width,
+            0.36 / figure_height_in,
+        ))
+
+    mode = COUNT_MODE_SIMPLE
+    reset_button = Button(button_axes(0.03, 0.17), "Reset counts")
+    mode_button = Button(button_axes(0.22, 0.24), f"Mode: {mode}")
 
     def reset_counts(_event):
         for panel in panels:
-            panel.counter.reset()
+            panel.reset()
+
+    def toggle_mode(_event):
+        nonlocal mode
+        mode = (
+            COUNT_MODE_BACKGROUND
+            if mode == COUNT_MODE_SIMPLE
+            else COUNT_MODE_SIMPLE
+        )
+
+        for panel in panels:
+            panel.set_mode(mode)
+
+        mode_button.label.set_text(f"Mode: {mode}")
 
     reset_button.on_clicked(reset_counts)
+    mode_button.on_clicked(toggle_mode)
 
     fig.text(
-        0.26,
-        0.45 / figure_height_in,
-        "counting from launch; this zeroes all LiDARs (counts are in each title)",
+        0.49,
+        0.46 / figure_height_in,
+        "both buttons apply to all LiDARs at once\n"
+        "background mode ignores statics in the sector",
         va="center",
         fontsize=9,
     )
