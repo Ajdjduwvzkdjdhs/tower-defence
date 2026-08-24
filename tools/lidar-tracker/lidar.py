@@ -78,6 +78,8 @@ class TMiniPlus:
         # ydlidar.os_init() はあえて呼ばない。SDK の SIGINT ハンドラが入ると
         # Python に KeyboardInterrupt が飛ばなくなり、Ctrl-C での終了処理が
         # 動かなくなる。停止は呼び出し側のフラグ（stop_event）で行う。
+        # 複数台を同時に開くので、ログにどのポートの話か出せるよう持っておく
+        self._port = str(port)
         self._laser = ydlidar.CYdLidar()
         self._scan = ydlidar.LaserScan()
         self._scanning = False
@@ -87,7 +89,7 @@ class TMiniPlus:
         # 型を取り違えると例外ではなく False が返るだけで黙って既定値のまま
         # 動いてしまうので、明示的にキャストしたうえで戻り値を全部検査する。
         options = [
-            ("SerialPort", ydlidar.LidarPropSerialPort, str(port)),
+            ("SerialPort", ydlidar.LidarPropSerialPort, self._port),
             ("SerialBaudrate", ydlidar.LidarPropSerialBaudrate, int(baudrate)),
             ("LidarType", ydlidar.LidarPropLidarType, int(ydlidar.TYPE_TRIANGLE)),
             ("DeviceType", ydlidar.LidarPropDeviceType, int(ydlidar.YDLIDAR_TYPE_SERIAL)),
@@ -109,7 +111,8 @@ class TMiniPlus:
         ]
         if rejected:
             raise RuntimeError(
-                "LiDAR の設定が拒否されました: " + ", ".join(rejected)
+                f"LiDAR ({self._port}) の設定が拒否されました: "
+                + ", ".join(rejected)
             )
 
         # 旧実装が受信後に flag で落としていた外乱光・鏡面反射の除去に相当する。
@@ -120,16 +123,22 @@ class TMiniPlus:
     def start_scan(self):
         """接続してスキャンを開始する。失敗したら SDK のエラー文言で例外にする。"""
         if not self._laser.initialize():
-            raise RuntimeError(f"LiDAR に接続できません: {self._laser.DescribeError()}")
+            raise RuntimeError(
+                f"LiDAR ({self._port}) に接続できません: "
+                f"{self._laser.DescribeError()}"
+            )
 
         if not self._laser.turnOn():
             self._laser.disconnecting()
             self._closed = True
-            raise RuntimeError(f"スキャンを開始できません: {self._laser.DescribeError()}")
+            raise RuntimeError(
+                f"LiDAR ({self._port}) のスキャンを開始できません: "
+                f"{self._laser.DescribeError()}"
+            )
 
         self._scanning = True
 
-        print("Scan Started")
+        print(f"Scan Started  ({self._port})")
 
     def read_scan(self):
         """1 回転ぶんの点群を読む。取りこぼしたときは空リストを返す。
@@ -165,7 +174,7 @@ class TMiniPlus:
         self._laser.turnOff()
         self._scanning = False
 
-        print("Scan Stopped")
+        print(f"Scan Stopped  ({self._port})")
 
     def close(self):
         """接続を閉じる。二重呼び出しは無害。"""

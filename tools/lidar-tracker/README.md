@@ -1,6 +1,8 @@
 # lidar-tracker（落氷の LiDAR 検知 / position-tracker の後継）
 
 YDLIDAR T-mini Plus の測距値を読み、リアルタイムに極座標散布図へ描画する。
+`config.toml` に並べたぶんだけ**複数台を同時に**読み、1 つのウィンドウへ上から順
+（LiDAR1, LiDAR2 …）に縦に並べて描く。
 `~/work/ydlidar-serial` の `scan_plot_realtime.py` を、この Unity プロジェクト配下で
 uv 環境として自閉させたもの（現状は**可視化のみ**）。
 センサーとの通信は**公式 SDK（[YDLidar-SDK](https://github.com/YDLIDAR/YDLidar-SDK)）**が担う。
@@ -15,9 +17,9 @@ uv 環境として自閉させたもの（現状は**可視化のみ**）。
 
 | ファイル | 役割 |
 |----------|------|
-| `scan_plot_realtime.py` | エントリポイント。読み取りスレッド + matplotlib の極座標アニメーション |
+| `scan_plot_realtime.py` | エントリポイント。台数ぶんの読み取りスレッド + matplotlib の極座標アニメーション。`LidarPanel` が 1 台ぶん（センサー・点群バッファ・カウンタ・プロット）を持つ |
 | `lidar.py` | `TMiniPlus`：公式 SDK（`ydlidar` モジュール）の薄いラッパ |
-| `config.py` | `config.toml` から `(port, baudrate)`・回転数・検出範囲を読む |
+| `config.py` | `config.toml` から `(ports, baudrate)`・回転数・検出範囲を読む |
 | `config.example.toml` | 接続設定のテンプレート（`config.toml` は gitignore 済み） |
 | `setup-sdk.sh` | 公式 SDK を `vendor/` へ clone し、macOS 用パッチを当てる |
 | `patches/ydlidar-sdk-macos.patch` | その macOS 用パッチ（内容は下記） |
@@ -29,7 +31,7 @@ brew install cmake swig                  # SDK のビルドに必要（初回の
 cd tools/lidar-tracker
 ./setup-sdk.sh                           # SDK を vendor/ に取得しパッチを当てる（初回のみ）
 uv sync                                  # .venv を作り依存を導入。SDK もここでビルドされる。Python は 3.14
-cp config.example.toml config.toml       # 済みなら不要。port を実機に合わせて書き換える
+cp config.example.toml config.toml       # 済みなら不要。ports を実機に合わせて書き換える
 ```
 
 `uv sync` は `vendor/YDLidar-SDK` を **path 依存**としてビルドする（`pyproject.toml` の
@@ -42,11 +44,43 @@ cp config.example.toml config.toml       # 済みなら不要。port を実機�
 ls /dev/tty.usb* /dev/cu.usb*            # 例: /dev/tty.usbserial-0001
 ```
 
+2 台つなぐと `-0001` と `-0002` のように 2 つ出る。どちらがどの機体かは、片方だけ挿して
+確認するのが確実（挿す順で番号が入れ替わることがある）。
+
 ## 実行
 
 ```sh
 uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C で安全停止（stop_scan → close）
 ```
+
+ウィンドウは `config.toml` の台数ぶんの段になる（1 台なら 1 段、2 台なら上下 2 段）。
+起動時に 1 台でも開けなければ、先に開いた台を閉じてから終了する。
+
+## 複数台の LiDAR（`config.toml`）
+
+```toml
+[serial]
+ports = [
+    "/dev/tty.usbserial-0001",   # LiDAR1（画面の上）
+    "/dev/tty.usbserial-0002",   # LiDAR2（画面の下）
+]
+baudrate = 230400
+```
+
+- **並び順がそのまま画面の上から下**（先頭が LiDAR1）。どちらが上か変えたいときは
+  この 2 行を入れ替える。
+- 1 台だけなら `port = "/dev/tty.usbserial-0001"` と 1 行で書いてもよい（従来の書き方。
+  既存の `config.toml` はそのまま動く）。`ports` と両方あるときは `ports` を採る。
+- `baudrate` は全台共通。同じポートを 2 つ書くと、起動時にメッセージを出して終了する
+  （後から開いた方が黙って失敗するのを防ぐため）。
+
+台ごとに独立しているのは**センサー・点群バッファ・セクタカウンタ**だけで、
+**回転数・検出範囲・計測セクタ・角度オフセット・各フィルタは全台で共通**。
+台ごとに違う値にしたくなったら、`LidarPanel` に持たせて `config.toml` を台ごとの
+テーブルにする（現状はその必要が出ていないので共通にしてある）。
+
+読み取りは**台ごとに 1 スレッド**。片方の読み取りが落ちても、そのループが抜けるだけで
+もう片方の表示は動き続ける（どの台かは `[LiDAR2] read_scan error: ...` の形で出る）。
 
 ## 調整パラメータ
 
@@ -55,7 +89,7 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
 回転数と検出範囲は設置場所ごとに変わるので、スクリプトではなく `config.toml` にある（下記）。
 
 - `DISPLAY_SCALE` — 表示範囲 = `RANGE_MAX` × 倍率。円外のコンテキストをどれだけ見せるか
-- `ANGLE_OFFSET_DEG` — センサー正面を画面上のどこへ向けるか（表示全体の回転）
+- `ANGLE_OFFSET_DEG` — センサー正面を画面上のどこへ向けるか（表示全体の回転。全台に効く）
 - `BIN_RESOLUTION_DEG` — 角度ビンの解像度。1.0° → 360 ビン
 - `FILTER_ZERO_DISTANCE` — 無反射（距離 0）の除外
 - `FILTER_AMBIENT` / `FILTER_SPECULAR` — 外乱光（太陽光）・鏡面反射（ガラス）の除外。
@@ -65,6 +99,9 @@ uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C
 - `COLOR_BY_INTENSITY` / `INTENSITY_COLORMAP` — Intensity（反射強度）で点を色分けするか
 - `COUNT_SECTOR_START_DEG` / `COUNT_SECTOR_END_DEG` — 検出回数を数える範囲（下記）
 - `COUNT_RELEASE_ROTATIONS` — 何回転消えたら「次の検出」と見なすか（下記）
+- `FIGURE_WIDTH_IN` / `PANEL_HEIGHT_IN` — ウィンドウの幅と、プロット 1 枚ぶんの高さ[インチ]。
+  全体の高さは「1 枚ぶん × 台数 + ボタン行」で決まるので、台数が増えても 1 枚あたりの
+  大きさは変わらない（画面に入りきらないときは `PANEL_HEIGHT_IN` を下げる）
 
 ## 回転数の設定（`config.toml`）
 
@@ -90,12 +127,16 @@ frequency_hz = 10.0
 
 ### ウィンドウの表示
 
-タイトルの 2 行目に、合わせ込みに要る 3 つの値が出る:
+各プロットのタイトルは 3 行で、2 行目に合わせ込みに要る 3 つの値が出る:
 
 ```
-LiDAR realtime  (range = 0-40 cm)
+LiDAR1   /dev/tty.usbserial-0001   (range = 0-40 cm)
 10.0 Hz   max 400 pts/rev   detected   33 pts
+225-315 deg:     3 hits      127 pts   DETECTING
 ```
+
+- 1 行目 — どの台か（名前とポート）と検出範囲
+- 3 行目 — セクタのカウンタ（下記）
 
 - `10.0 Hz` — `config.toml` で**設定した**回転数
 - `max 400 pts/rev` — その回転数で 1 回転に取れる点数の理論値（4000 ÷ 回転数）
@@ -140,11 +181,15 @@ range_max_cm = 80
 
 ウィンドウ左下の **Start / Reset** ボタンを押すと、指定セクタ（既定 **225〜315 度**、
 図では薄い青で塗ってある）の検出回数と点数を数え始める。もう一度押すと 0 に戻して
-数え直す。数値はボタンの右に出る:
+数え直す。数値は**各プロットのタイトル 3 行目**に出る:
 
 ```
 225-315 deg:     3 hits      127 pts   DETECTING
 ```
+
+ボタンは 1 つで、**全台のカウンタを同時に**リセットして数え始める（同じ落下を各台が
+どう捉えたか比べたいので、台ごとにばらばらに数え始めても読めないため）。数える範囲の
+定義も全台共通だが、数えるのはその台に写った点だけなので、値は台ごとに別々に増える。
 
 - `3 hits` — ボタンを押してからの**検出回数**（立ち上がりの数。下記）
 - `127 pts` — ボタンを押してからセクタに**写った点数の累計**

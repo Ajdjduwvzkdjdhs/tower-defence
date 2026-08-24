@@ -3,12 +3,17 @@
 # config.toml は Git 管理対象外（.gitignore 済み）なので、各自のマシンごとに設定できます。
 
 [serial]
-# 接続するシリアルポート
+# 接続するシリアルポート。並び順がそのまま LiDAR1, LiDAR2 …（＝画面の上から下）になる。
 #   Windows      : "COM5" など
 #   Mac / Linux  : "/dev/ttyUSB0" や "/dev/tty.usbserial-0001" など
-port = "/dev/tty.usbserial-0001"
+# 接続中のポートは `ls /dev/tty.usb*`（macOS）で確認できる。
+# 1 台だけなら port = "/dev/tty.usbserial-0001" と 1 行で書いてもよい。
+ports = [
+    "/dev/tty.usbserial-0001",
+    "/dev/tty.usbserial-0002",
+]
 
-# ボーレート（通常は変更不要）
+# ボーレート（通常は変更不要）。全台共通。
 baudrate = 230400
 
 

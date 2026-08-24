@@ -34,21 +34,65 @@ def _load():
 
 
 def load_serial_config():
-    """config.toml からシリアル接続設定を読み込み、(port, baudrate) を返す。
+    """config.toml からシリアル接続設定を読み込み、(ports, baudrate) を返す。
 
-    ファイルが存在しない／必須キーが欠けている場合は、
+    ports は接続する LiDAR のポートのリストで、並び順がそのまま LiDAR1, LiDAR2 …
+    （＝画面の上から下）になる。書き方は 2 通りで、
+
+        port  = "/dev/tty.usbserial-0001"                 # 1 台だけ
+        ports = ["/dev/tty.usbserial-0001", "...0002"]    # 複数台
+
+    どちらでもよい（両方あるときは ports を採る）。1 台用の port を残してあるのは、
+    既存の config.toml をそのまま使い続けられるようにするため。
+
+    ボーレートは全台共通。機種を混ぜる想定は無いので台数ぶん持たせていない。
+
+    ファイルが存在しない／必須キーが欠けている・値が不正な場合は、
     分かりやすいメッセージを表示して終了する。
     """
     data = _load()
 
     try:
         serial_cfg = data["serial"]
-        return serial_cfg["port"], serial_cfg["baudrate"]
+        baudrate = serial_cfg["baudrate"]
     except KeyError as e:
         sys.exit(
             f"config.toml に必須キー {e} がありません。"
             "config.example.toml を参考に設定してください。"
         )
+
+    if "ports" in serial_cfg:
+        ports = serial_cfg["ports"]
+
+        if not isinstance(ports, list) or not ports:
+            sys.exit(
+                "config.toml の [serial] ports は 1 つ以上の文字列のリストで"
+                f"指定してください（現在: {ports!r}）。"
+            )
+        if not all(isinstance(port, str) for port in ports):
+            sys.exit(
+                "config.toml の [serial] ports の要素は文字列で指定してください"
+                f"（現在: {ports!r}）。"
+            )
+    elif "port" in serial_cfg:
+        # 1 台だけの旧来の書き方。リストに包んで以降を共通化する
+        ports = [serial_cfg["port"]]
+    else:
+        sys.exit(
+            "config.toml の [serial] に port（1 台）か ports（複数台）が"
+            "ありません。config.example.toml を参考に設定してください。"
+        )
+
+    # 同じポートを 2 度開くと後から開いた方が失敗するので、起動前に弾く。
+    # 台数ぶんウィンドウを分割してしまう前に気づける。
+    duplicates = {port for port in ports if ports.count(port) > 1}
+    if duplicates:
+        sys.exit(
+            "config.toml の [serial] ports に同じポートが複数あります: "
+            + ", ".join(sorted(duplicates))
+        )
+
+    return ports, baudrate
 
 
 def load_scan_config():
