@@ -48,6 +48,7 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
+        [SerializeField] private GameObject _enemyPrefab;
 
         private Fort _fort;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
@@ -278,12 +279,19 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = cur;
         }
 
+        // private Enemy CreateEnemy()
+        // {
+        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        //     go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
+        //     DestroyCollider(go);
+        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+        //     return go.AddComponent<Enemy>();
+        // }
         private Enemy CreateEnemy()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
+            var go = GameObject.Instantiate(_enemyPrefab);
+            go.name = "Enemy";
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<Enemy>();
         }
 
