@@ -14,8 +14,8 @@ COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバ
 
 各点は干渉フラグ（flag）も持つ。FILTER_AMBIENT を切っているとき、SDK が
 「太陽光ノイズ」と判定した点（flag = 0x03）も捨てられずに届くので、その数を
-左の欄の最下段に出す（＝フィルタを切ったことで増えた点の数）。こちらは
-セクタではなく全周が対象。
+左の欄の最下段に出す（＝フィルタを切ったことで増えた点の数）。数える範囲は
+hits/pts と同じ（同じセクタ・同じ有効判定の点から数える）。
 
 構成（台数 + 1 スレッド）:
   - 読み取りスレッド : 台ごとに 1 本。read_scan() を回し、その台の距離／強度配列を
@@ -198,9 +198,6 @@ class ScanBuffer:
 
     LiDAR 1 台につき 1 つ持つ。距離[mm]と Intensity[0-255] を同じインデックスの
     2 本の配列で持ち、無反射／ノイズ／未計測のビンは、どちらの配列も NaN。
-
-    あわせて、干渉フラグが 0x03（太陽光ノイズ）だった有効点の数も数える。
-    セクタのカウンタと違って全周が対象で、こちらはビンに関係なく点を数える。
     """
 
     def __init__(self, num_bins):
@@ -211,11 +208,6 @@ class ScanBuffer:
         # 直近 1 回転で有効だった点の数（ビンではなく点の数。同じビンに複数の点が
         # 入ることがあるので、画面上の点の数とは必ずしも一致しない）
         self._valid_count = 0
-        # 太陽光ノイズと判定された有効点。直近 1 回転ぶんと、起動／リセットからの累計。
-        # FILTER_AMBIENT が True だと SDK がこれらを距離 0 に落とすので _is_valid() で
-        # 全部弾かれ、常に 0 になる（＝この数字はフィルタを切ったときだけ意味を持つ）。
-        self._flagged_count = 0
-        self._flagged_total = 0
 
     def update(self, samples):
         """1 パケットぶんの samples でビンを更新する。
@@ -224,11 +216,9 @@ class ScanBuffer:
         そのビンを NaN でクリアする。こうすることで、ビームがその方向を
         通過したのに物体が無ければ、残っていた古い点が消える。
 
-        あわせて、この 1 回転で有効だった点の数と、そのうち太陽光ノイズと
-        判定されていた点の数を数えて持っておく（表示用）。
+        あわせて、この 1 回転で有効だった点の数を数えて持っておく（タイトル表示用）。
         """
         valid_count = 0
-        flagged_count = 0
 
         with self._lock:
             for p in samples:
@@ -238,26 +228,16 @@ class ScanBuffer:
                     self._distances[idx] = p["distance"]
                     self._intensities[idx] = p["intensity"]
                     valid_count += 1
-
-                    if p["flag"] == FLAG_SUN_NOISE:
-                        flagged_count += 1
                 else:
                     self._distances[idx] = np.nan
                     self._intensities[idx] = np.nan
 
             self._valid_count = valid_count
-            self._flagged_count = flagged_count
-            self._flagged_total += flagged_count
-
-    def reset_flagged(self):
-        """太陽光フラグの累計を 0 に戻す（1 回の計測の区切り）。"""
-        with self._lock:
-            self._flagged_total = 0
 
     def snapshot(self):
-        """(距離配列, 強度配列, 有効点数, フラグ点数, フラグ累計) を返す。
+        """(距離配列, 強度配列, 直近 1 回転の有効点数) を返す。
 
-        すべて必ず同じ瞬間のものを一度のロックで取る（表示のズレを防ぐため）。
+        3 つは必ず同じ瞬間のものを一度のロックで取る（表示のズレを防ぐため）。
         配列はコピーを返す。
         """
         with self._lock:
@@ -265,8 +245,6 @@ class ScanBuffer:
                 self._distances.copy(),
                 self._intensities.copy(),
                 self._valid_count,
-                self._flagged_count,
-                self._flagged_total,
             )
 
 
@@ -289,6 +267,12 @@ class SectorCounter:
       - 直近 : 最後の 1 回転で「有り」と数えた点の数。累計と違って増減するので、
                「そもそもセクタに点が入ってきているのか」がその場で分かる
                （回数が増えないときの切り分け用）。
+
+    これとは別に、干渉フラグが 0x03（太陽光ノイズ）だった点も数える。上の 3 つと
+    まったく同じ点の集合（_sector_points の結果）から数えるので、セクタも有効判定も
+    必ず一致する。FILTER_AMBIENT を切ったことで増えた点がどれだけあるかを見るための
+    数字なので、モードにも background の学習中かどうかにも左右されず、常に数える。
+    FILTER_AMBIENT が True のときは SDK が該当点を距離 0 に落とすので必ず 0 になる。
 
     「有り」の判定は 2 モードあり、ボタンで切り替える:
 
@@ -330,8 +314,12 @@ class SectorCounter:
         background の学習中は数えないので、必ず False。
         """
         points = _sector_points(samples)
+        flagged = sum(1 for _, _, flag in points if flag == FLAG_SUN_NOISE)
 
         with self._lock:
+            self._flagged = flagged
+            self._flagged_total += flagged
+
             if self._is_learning():
                 self._learn(points)
 
@@ -357,7 +345,10 @@ class SectorCounter:
             self._clear()
 
     def snapshot(self):
-        """(モード, 回数, 点数, 直近 1 回転の点数, 検出中か, 学習の残り回転数) を返す。
+        """表示に要る値をまとめて返す。
+
+        (モード, 回数, 点数, 直近 1 回転の点数, 検出中か, 学習の残り回転数,
+         直近 1 回転のフラグ点数, フラグ点数の累計)
 
         表示がズレないよう、すべて一度のロックで取る。
         """
@@ -373,6 +364,8 @@ class SectorCounter:
                 self._last,
                 self._present,
                 remaining,
+                self._flagged,
+                self._flagged_total,
             )
 
     def threshold(self):
@@ -395,6 +388,8 @@ class SectorCounter:
         self._last = 0
         self._present = False   # いま検出中とみなしているか
         self._absent = 0        # 連続して「無し」だった回転数
+        self._flagged = 0       # 直近 1 回転で flag=0x03 だった点の数
+        self._flagged_total = 0 # その累計
         self._background = np.full(self._num_bins, np.nan, dtype=float)
         self._observed = [[] for _ in range(self._num_bins)]
         self._learned = 0
@@ -412,7 +407,7 @@ class SectorCounter:
             return len(points)
 
         return sum(
-            1 for idx, distance in points if self._is_foreground(idx, distance)
+            1 for idx, distance, _ in points if self._is_foreground(idx, distance)
         )
 
     def _accumulate(self, hit_count):
@@ -436,7 +431,7 @@ class SectorCounter:
 
     def _learn(self, points):
         """背景の学習に 1 回転ぶん取り込み、規定回転に達したら背景を確定する。"""
-        for idx, distance in points:
+        for idx, distance, _ in points:
             self._observed[idx].append(distance)
 
         self._learned += 1
@@ -485,14 +480,17 @@ def _in_count_sector(angle_deg):
 
 
 def _sector_points(samples):
-    """この 1 回転でセクタ内にあった有効な点を [(ビン番号, 距離mm), ...] で返す。
+    """この 1 回転でセクタ内にあった有効な点を [(ビン番号, 距離mm, flag), ...] で返す。
 
     有効判定は画面の点と同じ _is_valid() を使う。そうしないと、関心円の外にある
     壁や範囲外のノイズでも数えてしまう。ビンの刻みは ScanBuffer と同じなので、
     background モードでビンごとに学習した静止背景とそのまま突き合わせられる。
+
+    hits/pts も干渉フラグの集計もすべてこの 1 つのリストから数える。別々に
+    集めると、片方だけ範囲や有効判定がズレても気づけないため。
     """
     return [
-        (int(p["angle"] // BIN_RESOLUTION_DEG) % NUM_BINS, p["distance"])
+        (int(p["angle"] // BIN_RESOLUTION_DEG) % NUM_BINS, p["distance"], p["flag"])
         for p in samples
         if _is_valid(p) and _in_count_sector(p["angle"])
     ]
@@ -535,7 +533,7 @@ def reader_loop(name, lidar, buffer, counter, stop_event):
             buffer.update(samples)
 
             if counter.feed(samples):
-                _, hits, points, last, _, _ = counter.snapshot()
+                _, hits, points, last, _, _, _, _ = counter.snapshot()
                 print(f"[{name}] hit {hits}  ({last} pts, total {points} pts)")
 
 
@@ -613,11 +611,10 @@ class LidarPanel:
     def reset(self):
         """カウンタを 0 に戻す（1 回の計測の区切り）。
 
-        セクタのカウンタと、全周の太陽光フラグ累計の両方を戻す。片方だけ残ると
-        「どの区間の数字なのか」が分からなくなるため。
+        hits/pts も干渉フラグの累計も SectorCounter が持っているので、
+        まとめて 0 に戻る。
         """
         self.counter.reset()
-        self.buffer.reset_flagged()
 
     def set_mode(self, mode):
         """数え方を切り替える（0 から数え直す）。"""
@@ -717,13 +714,10 @@ class LidarPanel:
 
         self._set_title(0)
         self._set_counts(self.counter.snapshot())
-        self._set_flagged(0, 0)
 
     def refresh(self):
         """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。"""
-        distances, intensities, detected, flagged, flagged_total = (
-            self.buffer.snapshot()
-        )
+        distances, intensities, detected = self.buffer.snapshot()
 
         self._scat.set_offsets(np.column_stack((self._theta, distances)))
         if COLOR_BY_INTENSITY:
@@ -733,7 +727,6 @@ class LidarPanel:
 
         self._set_title(detected)
         self._set_counts(self.counter.snapshot())
-        self._set_flagged(flagged, flagged_total)
 
         return self._scat
 
@@ -775,7 +768,9 @@ class LidarPanel:
 
     def _set_counts(self, count_state):
         """左のカウンタ欄を書き替える。毎フレーム呼ぶ。"""
-        mode, count, points, last, present, remaining = count_state
+        mode, count, points, last, present, remaining, flagged, flagged_total = (
+            count_state
+        )
 
         self._head_text.set_text(f"{self.name}\n{SECTOR_LABEL} deg  /  {mode}")
 
@@ -795,18 +790,12 @@ class LidarPanel:
             marker = "   DETECTING" if present else ""
             self._now_text.set_text(f"now {last:3d}{marker}")
 
-    def _set_flagged(self, flagged, total):
-        """太陽光ノイズと判定された点の数を書き替える。毎フレーム呼ぶ。
-
-        上の hits/pts はセクタの数字だが、これは全周が対象。範囲が違うので
-        取り違えないよう、見出しに「all 360 deg」と書いてある。
-
-        FILTER_AMBIENT が True のときは SDK がこれらを距離 0 に落とすので、
-        必ず 0 のまま動かない（＝フィルタを切っているときだけ意味のある数字）。
-        """
+        # 干渉フラグは hits/pts と同じ点の集合から数えているので、範囲の但し書きは
+        # 要らない（見出しの "225-315 deg" がそのまま効く）。学習中も数え続けるので、
+        # 上が "--" の間もこちらは動く。
         self._flag_text.set_text(
-            f"flag 0x{FLAG_SUN_NOISE:02x} sun  (all 360 deg)\n"
-            f"{flagged:5d} /rev {total:8d} total"
+            f"flag 0x{FLAG_SUN_NOISE:02x} sun\n"
+            f"{flagged:5d} /rev {flagged_total:8d} total"
         )
 
     def _set_title(self, detected):
