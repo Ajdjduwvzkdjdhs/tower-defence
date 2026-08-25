@@ -1,0 +1,246 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 28a111a..f0f7787 100755
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -68,15 +68,28 @@ endif()
+ #############################################################################
+ # option
+ option( BUILD_SHARED_LIBS "Build shared libraries." OFF)
+-option( BUILD_EXAMPLES "Build Example." ON)
++option( BUILD_EXAMPLES "Build Example." OFF) # C++ サンプルは librt を要求し macOS でリンクできない
+ option( BUILD_CSHARP "Build CSharp." OFF)
+ option( BUILD_TEST "Build Test." OFF)
+ 
+ ############################################################################
+ # find package
+ find_package(SWIG)
+-find_package(PythonInterp)
+-find_package(PythonLibs)
++# FindPythonInterp / FindPythonLibs は非推奨で、setup.py が渡した
++# PYTHON_EXECUTABLE を無視してシステム側の別バージョンの libpython を拾う。
++# （3.13 の Framework をリンクした .so を 3.14 で import すると
++#  "initialization of _ydlidar did not return an extension module"）
++# 渡された実行ファイルを正としてヘッダを引く。
++if(PYTHON_EXECUTABLE)
++  set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
++  set(Python3_FIND_STRATEGY LOCATION)
++endif()
++find_package(Python3 COMPONENTS Interpreter Development.Module)
++set(PYTHONLIBS_FOUND ${Python3_FOUND})
++set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
++set(PYTHON_INCLUDE_PATH "${Python3_INCLUDE_DIRS}")
++# 拡張モジュールは libpython をリンクしない（実行時に解決させる）
++set(PYTHON_LIBRARIES "")
+ find_package(GTest)
+ 
+ ############################################################################
+diff --git a/core/base/locker.h b/core/base/locker.h
+index e038491..34c4f6e 100644
+--- a/core/base/locker.h
++++ b/core/base/locker.h
+@@ -92,7 +92,7 @@ class Locker {
+         wait_time.tv_nsec -= 1000000000;
+       }
+ 
+-#if !defined(__ANDROID__)
++#if !defined(__ANDROID__) && !defined(__APPLE__)
+ 
+       switch (pthread_mutex_timedlock(&_lock, &wait_time)) {
+         case 0:
+@@ -212,7 +212,10 @@ class Event {
+       fflush(stderr);
+     }
+ 
++#if !defined(__APPLE__)
++    // macOS には pthread_condattr_setclock が無い。既定の CLOCK_REALTIME のまま使う
+     ret = pthread_condattr_setclock(&_cond_cattr, CLOCK_MONOTONIC);
++#endif
+     pthread_mutex_init(&_cond_locker, NULL);
+     ret =  pthread_cond_init(&_cond_var, &_cond_cattr);
+ #endif
+@@ -273,7 +276,15 @@ class Event {
+         pthread_cond_wait(&_cond_var, &_cond_locker);
+       } else {
+         struct timespec wait_time;
++#if defined(__APPLE__)
++        // 条件変数の時計は CLOCK_REALTIME なので、待ち終わり時刻もそれで作る
++        struct timeval now;
++        gettimeofday(&now, NULL);
++        wait_time.tv_sec = now.tv_sec;
++        wait_time.tv_nsec = now.tv_usec * 1000;
++#else
+         clock_gettime(CLOCK_MONOTONIC, &wait_time);
++#endif
+ 
+         wait_time.tv_sec += timeout / 1000;
+         wait_time.tv_nsec += (timeout % 1000) * 1000000ULL;
+diff --git a/core/network/CMakeLists.txt b/core/network/CMakeLists.txt
+index a664baa..5817272 100644
+--- a/core/network/CMakeLists.txt
++++ b/core/network/CMakeLists.txt
+@@ -6,5 +6,7 @@ add_to_ydlidar_sources(${SRCS})
+ IF (WIN32)
+ add_to_ydlidar_libraries(setupapi ws2_32)
+ ELSE()
++if(NOT APPLE) # macOS に librt は無い（clock_gettime 等は libSystem 内）
+ add_to_ydlidar_libraries(rt)
++endif()
+ ENDIF()                                            
+diff --git a/core/serial/impl/unix/list_ports_osx.cpp b/core/serial/impl/unix/list_ports_osx.cpp
+new file mode 100644
+index 0000000..a791b44
+--- /dev/null
++++ b/core/serial/impl/unix/list_ports_osx.cpp
+@@ -0,0 +1,62 @@
++#if defined(__APPLE__)
++
++/*
++ * macOS 版の list_ports()。
++ * 本家 SDK には Linux 版（list_ports_linux.cpp）と Windows 版しかなく、
++ * macOS では ydlidar::core::serial::list_ports() が未定義のままリンクに失敗する。
++ * IOKit を引っ張らずに済むよう、/dev のデバイスファイルを glob で拾うだけの
++ * 最小実装にしてある（USB シリアル変換の port 一覧が得られれば十分）。
++ */
++
++#include <glob.h>
++
++#include <string>
++#include <vector>
++
++#include <core/serial/serial.h>
++
++namespace ydlidar {
++namespace core {
++namespace serial {
++
++std::vector<PortInfo> list_ports()
++{
++  static const char *kPatterns[] = {
++    "/dev/tty.usb*",     // CP210x / FTDI / CDC など一般的な USB シリアル
++    "/dev/cu.usb*",
++    "/dev/tty.SLAB*",    // Silicon Labs の古いドライバ
++    "/dev/tty.wchusb*",  // WCH CH34x
++  };
++
++  std::vector<PortInfo> results;
++
++  glob_t paths;
++  int flags = GLOB_NOSORT;
++
++  for (size_t i = 0; i < sizeof(kPatterns) / sizeof(kPatterns[0]); ++i) {
++    glob(kPatterns[i], flags, NULL, &paths);
++    flags |= GLOB_APPEND;  // 2 回目以降は結果を追記していく
++  }
++
++  for (size_t i = 0; i < paths.gl_pathc; ++i) {
++    std::string device(paths.gl_pathv[i]);
++    std::string name = device.substr(device.find_last_of('/') + 1);
++
++    PortInfo entry;
++    entry.port = device;
++    entry.description = name;
++    entry.hardware_id = "n/a";  // IOKit を使わないので VID:PID は取れない
++    entry.device_id = name;
++    results.push_back(entry);
++  }
++
++  globfree(&paths);
++
++  return results;
++}
++
++}  // namespace serial
++}  // namespace core
++}  // namespace ydlidar
++
++#endif  // defined(__APPLE__)
+diff --git a/core/serial/impl/unix/lock.c b/core/serial/impl/unix/lock.c
+index 87f4891..673dbf2 100644
+--- a/core/serial/impl/unix/lock.c
++++ b/core/serial/impl/unix/lock.c
+@@ -15,7 +15,9 @@
+ #include <errno.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#if !defined(__APPLE__)
+ #include <sys/sysmacros.h>
++#endif
+ #include <fcntl.h>
+ #include <string.h>
+ #include <limits.h>
+diff --git a/core/serial/impl/unix/unix_serial.cpp b/core/serial/impl/unix/unix_serial.cpp
+index eae2cc8..2f1dff4 100644
+--- a/core/serial/impl/unix/unix_serial.cpp
++++ b/core/serial/impl/unix/unix_serial.cpp
+@@ -19,7 +19,9 @@
+ #include <poll.h>
+ #include <sys/utsname.h>
+ 
++#if defined(__linux__)
+ #include <asm/ioctls.h>
++#endif
+ 
+ #if defined(__linux__) &&!defined(__ANDROID__)
+ # include <linux/serial.h>
+@@ -1288,6 +1290,10 @@ bool Serial::SerialImpl::setBaudrate(unsigned long baudrate) {
+     return false;
+   }
+ 
++  // 本家はここで return せず関数末尾まで落ちる（戻り値が不定）。
++  // そのせいで open() が失敗し、ポートを開けない
++  return true;
++
+   // Linux Support
+ #elif defined(__linux__) && defined (TIOCSSERIAL)
+   speed_t baud;
+@@ -1366,6 +1372,12 @@ bool Serial::SerialImpl::setStandardBaudRate(speed_t baudrate) {
+ 
+ 
+ bool Serial::SerialImpl::setCustomBaudRate(unsigned long baudrate) {
++#if !defined(__linux__)
++  // termios2 / serial_struct は Linux 専用。macOS では setBaudrate() が
++  // IOSSIOSPEED で任意ボーレートを直接設定するので、ここへは来ない
++  (void)baudrate;
++  return false;
++#else
+   struct termios2 tio2;
+ 
+   if (::ioctl(fd_, TCGETS2, &tio2) != -1) {
+@@ -1420,6 +1432,7 @@ bool Serial::SerialImpl::setCustomBaudRate(unsigned long baudrate) {
+   }
+ 
+   return setStandardBaudRate(B38400);
++#endif
+ }
+ 
+ 
+diff --git a/python/CMakeLists.txt b/python/CMakeLists.txt
+index 212da34..082aa39 100644
+--- a/python/CMakeLists.txt
++++ b/python/CMakeLists.txt
+@@ -25,7 +25,11 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
+ SET(CMAKE_SWIG_FLAGS "")
+ #set(CMAKE_SWIG_OUTDIR "${CMAKE_BINARY_DIR}")
+ SET(LIBRARY_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+-set_property(SOURCE ydlidar_sdk.i PROPERTY SWIG_FLAGS "-module" "ydlidar")
++# -threads: ブロックする C++ 呼び出し（doProcessSimple は 1 回転が揃うまで
++# 最大 1 秒待つ）の間 GIL を手放させる。これが無いと読み取りスレッドが GIL を
++# 握りっぱなしになり、メインスレッドの GUI イベントループが回らない
++# （matplotlib のウィンドウがグレーのまま描画されない）
++set_property(SOURCE ydlidar_sdk.i PROPERTY SWIG_FLAGS "-module" "ydlidar" "-threads")
+ SET_SOURCE_FILES_PROPERTIES(ydlidar_sdk.i PROPERTIES CPLUSPLUS ON)
+ ###############################################################################
+ # This is a CMake YDLIDAR SDK for Python
+@@ -36,6 +40,12 @@ else()
+ endif()
+ 
+ SWIG_LINK_LIBRARIES(${MODULE_NAME} ${PYTHON_LIBRARIES} ydlidar_sdk)
++if(APPLE)
++  # macOS の拡張モジュールの流儀。Python 本体のシンボルは import した
++  # プロセス側で解決させる
++  set_target_properties(_${MODULE_NAME} PROPERTIES
++    LINK_FLAGS "-undefined dynamic_lookup")
++endif()
+ 
+ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/__init__.py "__all__ = ['${MODULE_NAME}']")
+ 

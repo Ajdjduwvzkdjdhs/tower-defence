@@ -1,0 +1,160 @@
+import sys
+import tomllib
+from pathlib import Path
+
+# config.py 自身の場所を基準にするため、実行ディレクトリに依存しない
+_CONFIG_PATH = Path(__file__).parent / "config.toml"
+
+# 検出範囲の既定値[cm]。config.toml に [detection] が無いときに使う。
+# セクションごと省略できるので、既存の config.toml をそのまま使い続けられる。
+DEFAULT_RANGE_MIN_CM = 0
+DEFAULT_RANGE_MAX_CM = 80
+
+# 回転数の既定値[Hz]と、T-mini Plus が受け付ける範囲。
+# 範囲は SDK の isSupportScanFrequency()（YDLIDAR_Tmini は 5〜12Hz）に合わせてある。
+# 外れた値を渡すと SDK が "Current scan frequency is out of range" を出して
+# 既定の回転数のまま動いてしまうので、起動前にこちらで弾く。
+DEFAULT_SCAN_FREQUENCY_HZ = 10.0
+MIN_SCAN_FREQUENCY_HZ = 5.0
+MAX_SCAN_FREQUENCY_HZ = 12.0
+
+
+def _load():
+    """config.toml を読んで dict を返す。無ければ分かりやすく終了する。"""
+    if not _CONFIG_PATH.exists():
+        sys.exit(
+            "config.toml が見つかりません。\n"
+            "config.example.toml をコピーして config.toml を作成し、"
+            "ご自身の環境に合わせて設定してください:\n"
+            "    cp config.example.toml config.toml"
+        )
+
+    with open(_CONFIG_PATH, "rb") as f:
+        return tomllib.load(f)
+
+
+def load_serial_config():
+    """config.toml からシリアル接続設定を読み込み、(ports, baudrate) を返す。
+
+    ports は接続する LiDAR のポートのリストで、並び順がそのまま LiDAR1, LiDAR2 …
+    （＝画面の上から下）になる。書き方は 2 通りで、
+
+        port  = "/dev/tty.usbserial-0001"                 # 1 台だけ
+        ports = ["/dev/tty.usbserial-0001", "...0002"]    # 複数台
+
+    どちらでもよい（両方あるときは ports を採る）。1 台用の port を残してあるのは、
+    既存の config.toml をそのまま使い続けられるようにするため。
+
+    ボーレートは全台共通。機種を混ぜる想定は無いので台数ぶん持たせていない。
+
+    ファイルが存在しない／必須キーが欠けている・値が不正な場合は、
+    分かりやすいメッセージを表示して終了する。
+    """
+    data = _load()
+
+    try:
+        serial_cfg = data["serial"]
+        baudrate = serial_cfg["baudrate"]
+    except KeyError as e:
+        sys.exit(
+            f"config.toml に必須キー {e} がありません。"
+            "config.example.toml を参考に設定してください。"
+        )
+
+    if "ports" in serial_cfg:
+        ports = serial_cfg["ports"]
+
+        if not isinstance(ports, list) or not ports:
+            sys.exit(
+                "config.toml の [serial] ports は 1 つ以上の文字列のリストで"
+                f"指定してください（現在: {ports!r}）。"
+            )
+        if not all(isinstance(port, str) for port in ports):
+            sys.exit(
+                "config.toml の [serial] ports の要素は文字列で指定してください"
+                f"（現在: {ports!r}）。"
+            )
+    elif "port" in serial_cfg:
+        # 1 台だけの旧来の書き方。リストに包んで以降を共通化する
+        ports = [serial_cfg["port"]]
+    else:
+        sys.exit(
+            "config.toml の [serial] に port（1 台）か ports（複数台）が"
+            "ありません。config.example.toml を参考に設定してください。"
+        )
+
+    # 同じポートを 2 度開くと後から開いた方が失敗するので、起動前に弾く。
+    # 台数ぶんウィンドウを分割してしまう前に気づける。
+    duplicates = {port for port in ports if ports.count(port) > 1}
+    if duplicates:
+        sys.exit(
+            "config.toml の [serial] ports に同じポートが複数あります: "
+            + ", ".join(sorted(duplicates))
+        )
+
+    return ports, baudrate
+
+
+def load_scan_config():
+    """config.toml から回転数[Hz]を読み込んで返す。
+
+    回転数を上げるほど 1 回転が速くなる（＝落下する氷を捉え直す間隔が短くなる）が、
+    サンプリングレートは一定なので 1 回転あたりの点数は反比例して減る。
+    どちらを取るかは現物合わせなので、スクリプトではなく config.toml に置く。
+
+    [scan] セクションもキーも省略可能で、その場合は既定値を使う。
+    値が不正（数値でない・対応範囲外）なときは終了する。
+    """
+    value = _load().get("scan", {}).get("frequency_hz", DEFAULT_SCAN_FREQUENCY_HZ)
+
+    # bool は int のサブクラスなので明示的に弾く
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        sys.exit(
+            f"config.toml の [scan] frequency_hz は数値で指定してください"
+            f"（現在: {value!r}）。"
+        )
+
+    if not (MIN_SCAN_FREQUENCY_HZ <= value <= MAX_SCAN_FREQUENCY_HZ):
+        sys.exit(
+            f"config.toml の [scan] frequency_hz は "
+            f"{MIN_SCAN_FREQUENCY_HZ}〜{MAX_SCAN_FREQUENCY_HZ} Hz の範囲で"
+            f"指定してください（現在: {value}）。"
+        )
+
+    return float(value)
+
+
+def load_detection_config():
+    """config.toml から検出範囲を読み込み、(range_min_cm, range_max_cm) を返す。
+
+    SDK の range_min / range_max 相当。設置場所ごとに変わる現物合わせの値なので、
+    スクリプトではなくマシンごとの config.toml に置く。
+
+    [detection] セクションもキーも省略可能で、その場合は既定値を使う。
+    値が不正（数値でない・負・min >= max）なときは終了する。
+    """
+    det = _load().get("detection", {})
+
+    range_min = det.get("range_min_cm", DEFAULT_RANGE_MIN_CM)
+    range_max = det.get("range_max_cm", DEFAULT_RANGE_MAX_CM)
+
+    for key, value in (("range_min_cm", range_min), ("range_max_cm", range_max)):
+        # bool は int のサブクラスなので明示的に弾く（range_max_cm = true を通さない）
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            sys.exit(
+                f"config.toml の [detection] {key} は数値で指定してください"
+                f"（現在: {value!r}）。"
+            )
+        if value < 0:
+            sys.exit(
+                f"config.toml の [detection] {key} に負の値は指定できません"
+                f"（現在: {value}）。"
+            )
+
+    if range_min >= range_max:
+        sys.exit(
+            "config.toml の [detection] は range_min_cm < range_max_cm である必要が"
+            f"あります（現在: range_min_cm = {range_min}, range_max_cm = {range_max}）。"
+        )
+
+    return range_min, range_max

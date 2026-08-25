@@ -1,0 +1,42 @@
+# このファイルをコピーして config.toml を作成し、ご自身の環境に合わせて書き換えてください。
+#   cp config.example.toml config.toml
+# config.toml は Git 管理対象外（.gitignore 済み）なので、各自のマシンごとに設定できます。
+
+[serial]
+# 接続するシリアルポート。並び順がそのまま LiDAR1, LiDAR2 …（＝画面の上から下）になる。
+#   Windows      : "COM5" など
+#   Mac / Linux  : "/dev/ttyUSB0" や "/dev/tty.usbserial-0001" など
+# 接続中のポートは `ls /dev/tty.usb*`（macOS）で確認できる。
+# 1 台だけなら port = "/dev/tty.usbserial-0001" と 1 行で書いてもよい。
+ports = [
+    "/dev/tty.usbserial-0001",
+    "/dev/tty.usbserial-0002",
+]
+
+# ボーレート（通常は変更不要）。全台共通。
+baudrate = 230400
+
+
+[scan]
+# LiDAR の回転数[Hz]。省略すると 10.0。T-mini Plus の対応範囲は 5〜12。
+#
+# 回転が速いほど同じ場所を捉え直す間隔が短くなる（落下する氷を追いやすい）が、
+# サンプリングレートは 4kHz で一定なので、1 回転あたりの点数は反比例して減る:
+#     1 回転の最大点数 = 4000 / frequency_hz
+#     5Hz → 800 点 / 10Hz → 400 点 / 12Hz → 333 点
+# 実際の点数はウィンドウのタイトルに出るので、見ながら合わせる。
+frequency_hz = 10.0
+
+
+[detection]
+# LiDAR の検出範囲[cm]。この外の点は破棄する（SDK の range_min / range_max 相当）。
+# セクションごと省略可能で、その場合は range_min_cm = 0, range_max_cm = 80 が使われる。
+
+# 内側の境界。センサー筐体・治具・支柱など、常に至近距離で返る反射を切る。
+# 0 なら内側は切らない。0 以外にすると橙色の円で描画される。
+range_min_cm = 0
+
+# 外側の境界＝「関心円」。赤い円で描画される。
+# 壁や周囲の人を落として、かき氷機まわりの落氷だけを見るための主要なノブ。
+# T-mini Plus の実力値は約 0.02〜12 m なので、1200 より大きくしても意味はない。
+range_max_cm = 80
