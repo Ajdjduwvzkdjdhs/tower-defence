@@ -113,3 +113,6 @@ InitTestScene*.unity*
 # Claude Code / Unity-MCP local config & generated skill docs
 /.claude/
 /.mcp.json
+
+# macOS
+.DS_Store
