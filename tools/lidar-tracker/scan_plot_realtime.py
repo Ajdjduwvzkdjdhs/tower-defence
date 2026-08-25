@@ -248,6 +248,63 @@ class ScanBuffer:
             )
 
 
+class RisingEdgeCounter:
+    """1 回転ごとの点数を受け取り、「無し → 有り」の変わり目を数える。
+
+    数え方の本体だけを切り出したもの。SectorCounter がこれを 2 つ持ち、
+    「モードで判定した検出」と「干渉フラグ 0x03 の点」を同じ規則で数える。
+    持っている数字は 3 つ:
+
+      - count  : 無し → 有り に変わった瞬間だけ 1 回。氷が 1 個落ちて数回転
+                 映り続けても 1 回になる。点滅で 1 回が 2 回に割れないよう、
+                 release_rotations 回転ぶん連続で無くなるまでは「まだ同じ検出が
+                 続いている」とみなす。
+      - points : 「有り」と数えた点の累計。1 回の検出がどれだけ濃かったか
+                 （何点で写ったか）を見るための値なので、count と違って
+                 映っている間ずっと積み上がる。
+      - last   : 最後の 1 回転で「有り」と数えた点の数。累計と違って増減するので、
+                 「そもそも点が入ってきているのか」がその場で分かる
+                 （count が増えないときの切り分け用）。
+
+    ロックは持たない。呼び出し側（SectorCounter）のロックの下で使う。
+    """
+
+    def __init__(self, release_rotations):
+        self._release_rotations = release_rotations
+        self.clear()
+
+    def clear(self):
+        """0 に戻す。"""
+        self.count = 0
+        self.points = 0
+        self.last = 0
+        self.present = False   # いま検出中とみなしているか
+        self._absent = 0       # 連続して「無し」だった回転数
+
+    def feed(self, point_count):
+        """1 回転ぶんの点数を渡す。立ち上がった回転だけ True を返す。"""
+        self.points += point_count
+        self.last = point_count
+        started = False
+
+        if point_count > 0:
+            if not self.present:
+                self.count += 1
+                started = True
+            self.present = True
+            self._absent = 0
+        elif self.present:
+            self._absent += 1
+            if self._absent >= self._release_rotations:
+                self.present = False
+
+        return started
+
+    def snapshot(self):
+        """(回数, 点数, 直近 1 回転の点数, 検出中か) を返す。"""
+        return self.count, self.points, self.last, self.present
+
+
 class SectorCounter:
     """計測セクタの検出回数と点数を数える（スレッド間で共有）。
 
@@ -255,24 +312,22 @@ class SectorCounter:
     数えるのはその台に写った点だけなので、状態は台ごとに独立している。
 
     読み取りスレッドが 1 回転ぶんの samples を feed() で流し込み、メインスレッドが
-    snapshot() で表示用の値を取る。持っている数字は 3 つ:
+    snapshot() で表示用の値を取る。中身は RisingEdgeCounter を 2 つで、どちらも
+    回数（立ち上がり）・点数の累計・直近 1 回転の点数を同じ規則で数える:
 
-      - 回数 : 無し → 有り に変わった瞬間だけ 1 回。氷が 1 個落ちて数回転
-               映り続けても 1 回になる。点滅で 1 回が 2 回に割れないよう、
-               release_rotations 回転ぶん連続で無くなるまでは「まだ同じ検出が
-               続いている」とみなす。
-      - 点数 : 「有り」と数えた点の累計。1 回の検出がどれだけ濃かったか
-               （何点で写ったか）を見るための値なので、回数と違って
-               映っている間ずっと積み上がる。
-      - 直近 : 最後の 1 回転で「有り」と数えた点の数。累計と違って増減するので、
-               「そもそもセクタに点が入ってきているのか」がその場で分かる
-               （回数が増えないときの切り分け用）。
+      - hits : 下記のモードで「有り」と判定した点。氷の検出そのもの。
+      - flag : 干渉フラグが 0x03（太陽光ノイズ）だった点。FILTER_AMBIENT を
+               切ったことで増えた点がどれだけあるかを見るためのもの。
 
-    これとは別に、干渉フラグが 0x03（太陽光ノイズ）だった点も数える。上の 3 つと
-    まったく同じ点の集合（_sector_points の結果）から数えるので、セクタも有効判定も
-    必ず一致する。FILTER_AMBIENT を切ったことで増えた点がどれだけあるかを見るための
-    数字なので、モードにも background の学習中かどうかにも左右されず、常に数える。
-    FILTER_AMBIENT が True のときは SDK が該当点を距離 0 に落とすので必ず 0 になる。
+    2 つはまったく同じ点の集合（_sector_points の結果）から数えるので、セクタも
+    有効判定も必ず一致する。違うのは 2 点だけ:
+
+      - flag はモードに左右されない（background でも静止背景で絞り込まない）。
+      - flag は background の学習中も数え続ける。信号の質を見るための数字で、
+        検出の数え上げとは別だから。
+
+    FILTER_AMBIENT が True のときは SDK が該当点を距離 0 に落とすので、flag 側は
+    必ず 0 のまま動かない（＝フィルタを切っているときだけ意味を持つ）。
 
     「有り」の判定は 2 モードあり、ボタンで切り替える:
 
@@ -297,10 +352,11 @@ class SectorCounter:
     def __init__(self, num_bins, release_rotations, learn_rotations, margin_mm):
         self._lock = threading.Lock()
         self._num_bins = num_bins
-        self._release_rotations = release_rotations
         self._learn_rotations = learn_rotations
         self._margin_mm = margin_mm
         self._mode = COUNT_MODE_SIMPLE
+        self._hits = RisingEdgeCounter(release_rotations)
+        self._flag = RisingEdgeCounter(release_rotations)
         # スレッドが走り出す前なので、ここだけロック無しで初期化してよい
         self._clear()
 
@@ -317,15 +373,14 @@ class SectorCounter:
         flagged = sum(1 for _, _, flag in points if flag == FLAG_SUN_NOISE)
 
         with self._lock:
-            self._flagged = flagged
-            self._flagged_total += flagged
+            self._flag.feed(flagged)
 
             if self._is_learning():
                 self._learn(points)
 
                 return False
 
-            return self._accumulate(self._hit_count(points))
+            return self._hits.feed(self._hit_count(points))
 
     #--- メインスレッドから呼ぶ -------------------------------------------
 
@@ -345,11 +400,9 @@ class SectorCounter:
             self._clear()
 
     def snapshot(self):
-        """表示に要る値をまとめて返す。
+        """(モード, 学習の残り回転数, hits の状態, flag の状態) を返す。
 
-        (モード, 回数, 点数, 直近 1 回転の点数, 検出中か, 学習の残り回転数,
-         直近 1 回転のフラグ点数, フラグ点数の累計)
-
+        後ろ 2 つはどちらも (回数, 点数, 直近 1 回転の点数, 検出中か)。
         表示がズレないよう、すべて一度のロックで取る。
         """
         with self._lock:
@@ -359,13 +412,9 @@ class SectorCounter:
 
             return (
                 self._mode,
-                self._count,
-                self._points,
-                self._last,
-                self._present,
                 remaining,
-                self._flagged,
-                self._flagged_total,
+                self._hits.snapshot(),
+                self._flag.snapshot(),
             )
 
     def threshold(self):
@@ -382,14 +431,9 @@ class SectorCounter:
     #--- 内部（すべてロックを持ったまま呼ぶ）------------------------------
 
     def _clear(self):
-        """カウンタと背景をまっさらにする。"""
-        self._count = 0
-        self._points = 0
-        self._last = 0
-        self._present = False   # いま検出中とみなしているか
-        self._absent = 0        # 連続して「無し」だった回転数
-        self._flagged = 0       # 直近 1 回転で flag=0x03 だった点の数
-        self._flagged_total = 0 # その累計
+        """カウンタ 2 つと背景をまっさらにする。"""
+        self._hits.clear()
+        self._flag.clear()
         self._background = np.full(self._num_bins, np.nan, dtype=float)
         self._observed = [[] for _ in range(self._num_bins)]
         self._learned = 0
@@ -409,25 +453,6 @@ class SectorCounter:
         return sum(
             1 for idx, distance, _ in points if self._is_foreground(idx, distance)
         )
-
-    def _accumulate(self, hit_count):
-        """回数・点数を 1 回転ぶん進める。立ち上がった回転だけ True。"""
-        self._points += hit_count
-        self._last = hit_count
-        started = False
-
-        if hit_count > 0:
-            if not self._present:
-                self._count += 1
-                started = True
-            self._present = True
-            self._absent = 0
-        elif self._present:
-            self._absent += 1
-            if self._absent >= self._release_rotations:
-                self._present = False
-
-        return started
 
     def _learn(self, points):
         """背景の学習に 1 回転ぶん取り込み、規定回転に達したら背景を確定する。"""
@@ -533,7 +558,7 @@ def reader_loop(name, lidar, buffer, counter, stop_event):
             buffer.update(samples)
 
             if counter.feed(samples):
-                _, hits, points, last, _, _, _, _ = counter.snapshot()
+                _, _, (hits, points, last, _), _ = counter.snapshot()
                 print(f"[{name}] hit {hits}  ({last} pts, total {points} pts)")
 
 
@@ -768,9 +793,9 @@ class LidarPanel:
 
     def _set_counts(self, count_state):
         """左のカウンタ欄を書き替える。毎フレーム呼ぶ。"""
-        mode, count, points, last, present, remaining, flagged, flagged_total = (
-            count_state
-        )
+        mode, remaining, hits_state, flag_state = count_state
+        count, points, last, present = hits_state
+        flag_count, flag_points, flag_last, _ = flag_state
 
         self._head_text.set_text(f"{self.name}\n{SECTOR_LABEL} deg  /  {mode}")
 
@@ -790,12 +815,14 @@ class LidarPanel:
             marker = "   DETECTING" if present else ""
             self._now_text.set_text(f"now {last:3d}{marker}")
 
-        # 干渉フラグは hits/pts と同じ点の集合から数えているので、範囲の但し書きは
-        # 要らない（見出しの "225-315 deg" がそのまま効く）。学習中も数え続けるので、
+        # 干渉フラグも hits/pts とまったく同じ数え方（立ち上がり／累計／直近）で
+        # 出す。同じ点の集合から数えているので、範囲の但し書きは要らない
+        # （見出しの "225-315 deg" がそのまま効く）。学習中も数え続けるので、
         # 上が "--" の間もこちらは動く。
         self._flag_text.set_text(
             f"flag 0x{FLAG_SUN_NOISE:02x} sun\n"
-            f"{flagged:5d} /rev {flagged_total:8d} total"
+            f"{flag_count:5d} hits {flag_points:6d} pts\n"
+            f"now {flag_last:3d}"
         )
 
     def _set_title(self, detected):
