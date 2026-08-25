@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
-public class SceneTransition : MonoBehaviour
+public class TitleScene : MonoBehaviour
 {
     [SerializeField] private CanvasGroup fadeCanvas;
     [SerializeField] private float fadeDuration = 1.0f;
