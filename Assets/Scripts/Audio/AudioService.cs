@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace KakigoriTD.Audio
 {
@@ -84,7 +84,7 @@ namespace KakigoriTD.Audio
         public void PlayClear() { if (_cfg != null) PlaySe(_cfg.Clear, _cfg.ClearVolume); }
         public void PlayGameOver() { if (_cfg != null) PlaySe(_cfg.GameOver, _cfg.GameOverVolume); }
         public void PlayHit() { if (_cfg != null) PlaySe(_cfg.Hit, _cfg.HitVolume); }
-        public void PlayEnemyKilled() { if (_cfg != null) PlaySe(_cfg.EnemyKilled, _cfg.EnemyKilledVolume); }
+        public void PlayEnemyKilled() { if (_cfg != null) PlaySe(_cfg.NextEnemyKilled(), _cfg.EnemyKilledVolume); }
         public void PlayEnemyAttack() { if (_cfg != null) PlaySe(_cfg.EnemyAttack, _cfg.EnemyAttackVolume); }
         public void PlayAllyCaught() { if (_cfg != null) PlaySe(_cfg.AllyCaught, _cfg.AllyCaughtVolume); }
     }

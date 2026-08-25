@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using KakigoriTD.Audio;
 using KakigoriTD.Core;
 using KakigoriTD.Data;
@@ -36,7 +36,11 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private bool _visionFlipVertical;
 
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
-        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのサンプル元
+        [SerializeField] private Terrain _terrain; // 雪山。斜面高さのフォールバック
+
+        [Tooltip("見えている斜面の Collider（山メッシュ）。設定すると高さはこちらを優先し、"
+               + "未設定・レイが外れた場合だけ Terrain に落ちる。")]
+        [SerializeField] private Collider _groundSurface;
 
         [Header("サウンド（Phase 6 / ADR-26。未割り当てなら全音無音でエラーなし）")]
         [SerializeField] private AudioConfigSO _audioConfig;
@@ -47,6 +51,8 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveLull = 5f;
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
+        [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
+        [SerializeField] private GameObject _enemyPrefab;
 
         private Fort _fort;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
@@ -67,6 +73,7 @@ namespace KakigoriTD.Bootstrap
         private float _waveStartTime;
 
         private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat, _snowballMat;
+        private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
         private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
@@ -79,6 +86,8 @@ namespace KakigoriTD.Bootstrap
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
             _snowballMat = MakeUnlit(new Color(0.97f, 0.98f, 1.0f)); // 雪玉（斜面を流れる雪崩の粒）
+            _dissolveMat = MakeDissolve(new Color(0.75f, 1.90f, 2.60f, 1f)); // 発光帯：白〜水色
+            _emberMat = MakeEmber(new Color(0.55f, 0.85f, 1.00f, 1f));       // 立ち上る粒
 
             // 山は Terrain（シーン配置・ADR-21）。手続き Quad は廃止。
             BuildFort();
@@ -211,8 +220,21 @@ namespace KakigoriTD.Bootstrap
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
         // Terrain 未割り当て時は 0（平面フォールバック）。
+        /// <summary>斜面の高さを取るレイの発射高度。山メッシュの最上部より十分高くしておく。</summary>
+        private const float GroundRayHeight = 100f;
+
         private float HeightAt(float x, float z)
         {
+            // 見た目の斜面を正とする。Terrain と山メッシュは形が違い、Terrain 基準だと
+            // 敵や雪玉がメッシュに埋まって見えなくなるため（半径5で最大約3.9のずれ）。
+            // Physics.Raycast ではなく Collider.Raycast を使い、敵や砦のコライダーを拾わないようにする。
+            if (_groundSurface != null)
+            {
+                var ray = new Ray(new Vector3(x, GroundRayHeight, z), Vector3.down);
+                if (_groundSurface.Raycast(ray, out var hit, GroundRayHeight * 2f)) return hit.point.y;
+            }
+
+            // 山メッシュの外側（24x24 しかない）はここに落ちる
             if (_terrain == null) return 0f;
             return _terrain.transform.position.y + _terrain.SampleHeight(new Vector3(x, 0f, z));
         }
@@ -238,7 +260,7 @@ namespace KakigoriTD.Bootstrap
             {
                 var cgo = NewChild("Channel_" + names[id]);
                 var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, HeightAt);
+                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, CreateDissolveBurst, HeightAt);
                 ch.OnAllyCaught += OnAllyCaughtHandler;
                 _channels[id] = ch;
             }
@@ -277,22 +299,36 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = cur;
         }
 
+        // private Enemy CreateEnemy()
+        // {
+        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        //     go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
+        //     DestroyCollider(go);
+        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+        //     return go.AddComponent<Enemy>();
+        // }
         private Enemy CreateEnemy()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
+            var go = GameObject.Instantiate(_enemyPrefab);
+            go.name = "Enemy";
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<Enemy>();
         }
 
         // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
+        // private AllyNPC CreateAlly()
+        // {
+        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        //     go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+        //     DestroyCollider(go);
+        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+        //     return go.AddComponent<AllyNPC>();
+        // }
         private AllyNPC CreateAlly()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
+            var go = GameObject.Instantiate(_tgsAllyPrefab);
+            go.name = "Ally";
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<AllyNPC>();
         }
 
@@ -313,6 +349,17 @@ namespace KakigoriTD.Bootstrap
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _snowPuffMat;
             return go.AddComponent<SnowPuff>();
+        }
+
+        // 撃破時の身代わり。メッシュもパーツ構成も Play 時に敵から複製するので、ここでは空の器だけ用意する
+        // （敵が Cube でも多パーツ FBX でも本メソッドは変更不要）。
+        private DissolveBurst CreateDissolveBurst()
+        {
+            var go = new GameObject("DissolveBurst");
+            go.transform.SetParent(transform);
+            var burst = go.AddComponent<DissolveBurst>();
+            burst.Configure(_dissolveMat, _emberMat);
+            return burst;
         }
 
         private Snowball CreateSnowball()
@@ -407,9 +454,67 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
+        // 蒸発シェーダー（Shader Graphs/Dissolve）。_DissolveAmount を 0→1 にすると
+        // ノイズしきい値で Alpha Clip され、境界に edge 色の発光帯が出る。
+        private static Material MakeDissolve(Color edge)
+        {
+            var shader = Shader.Find("Shader Graphs/Dissolve");
+            if (shader == null)
+            {
+                Debug.LogWarning("Shader Graphs/Dissolve が見つかりません。蒸発演出は Unlit で代替します。");
+                return MakeUnlit(edge);
+            }
+            var m = new Material(shader);
+            m.SetColor("_EdgeColor", edge);
+            m.SetFloat("_NoiseScale", 8f); // ワールド座標基準なので UV 時代より小さい値
+            m.SetFloat("_EdgeWidth", 0.07f);
+            m.SetFloat("_Smoothness", 0.2f);
+            m.SetFloat("_DissolveAmount", 0f);
+            m.SetFloat("_AlphaClip", 1f);
+            m.EnableKeyword("_ALPHATEST_ON");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
+            return m;
+        }
+
+        // 立ち上る粒。加算合成の Unlit に、コード生成した放射状グラデーションを貼る
+        // （素材アセットに依存しない＝Phase1 の方針どおり）。
+        private static Material MakeEmber(Color c)
+        {
+            var m = MakeUnlitAdditive(c);
+            m.SetTexture("_BaseMap", DotTexture());
+
+            // MakeUnlitAdditive は _SrcBlend=One のためアルファが無視され、ドットが四角く出てしまう。
+            // 粒子は減衰とフェードをアルファで表現するので SrcAlpha に差し替える（加算合成のまま）。
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            return m;
+        }
+
+        private static Texture2D _dotTex;
+
+        private static Texture2D DotTexture()
+        {
+            if (_dotTex != null) return _dotTex;
+
+            const int N = 32;
+            _dotTex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < N; y++)
+            {
+                for (int x = 0; x < N; x++)
+                {
+                    float dx = (x + 0.5f) / N * 2f - 1f;
+                    float dy = (y + 0.5f) / N * 2f - 1f;
+                    float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
+                    a = a * a * (3f - 2f * a);  // smoothstep
+                    _dotTex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
+                }
+            }
+            _dotTex.Apply();
+            return _dotTex;
+        }
+
         // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
-        private const float AimNearAlong = 3.5f; // 砦寄り端（麓の先頭行 5.0 の手前・Phase4.5）
-        private const float AimFarAlong = 7.0f;  // 麓側端（最奥行 6.65 の少し外・Phase4.5）
+        private const float AimNearAlong = 6.5f; // 砦寄り端（先頭行 8.0 の手前）
+        private const float AimFarAlong = 10.0f; // 麓側端（最奥行 9.65 の少し外）
         private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
 
         // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。

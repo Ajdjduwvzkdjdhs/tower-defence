@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using KakigoriTD.Factory;
 
@@ -20,7 +20,7 @@ namespace KakigoriTD.Gameplay
         [Header("ストリーム")]
         [SerializeField] private float _spawnRate = 24f;      // 1 秒あたりの雪玉射出数
         [SerializeField] private float _startRadius = 1.2f;   // 射出開始の中心からの距離（砦の外側）
-        [SerializeField] private float _endRadius = 6.6f;     // 麓（斜面が平地に着く付近）
+        [SerializeField] private float _endRadius = 10.0f;    // 滑走終了。隊列（先頭 8.0〜最奥 9.65）を覆う必要がある
         [SerializeField] private float _laneHalfWidth = 1.0f; // 谷幅方向のばらつき（±）
         [SerializeField] private float _startJitter = 0.4f;   // 射出半径の前後ゆらぎ
 

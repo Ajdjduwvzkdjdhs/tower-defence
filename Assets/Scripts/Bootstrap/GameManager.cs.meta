@@ -1,2 +1,16 @@
 fileFormatVersion: 2
 guid: 0e613aace93a1419f87346a747f791db
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - _serialConfig: {instanceID: 0}
+  - _visionConfig: {instanceID: 0}
+  - _terrain: {instanceID: 0}
+  - _audioConfig: {instanceID: 0}
+  - _tgsAllyPrefab: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
