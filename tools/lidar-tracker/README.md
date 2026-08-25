@@ -21,8 +21,9 @@ uv 環境として自閉させたもの（現状は**可視化のみ**）。
 | `lidar.py` | `TMiniPlus`：公式 SDK（`ydlidar` モジュール）の薄いラッパ |
 | `config.py` | `config.toml` から `(ports, baudrate)`・回転数・検出範囲を読む |
 | `config.example.toml` | 接続設定のテンプレート（`config.toml` は gitignore 済み） |
-| `setup-sdk.sh` | 公式 SDK を `vendor/` へ clone し、macOS 用パッチを当てる |
-| `patches/ydlidar-sdk-macos.patch` | その macOS 用パッチ（内容は下記） |
+| `setup-sdk.sh` | 公式 SDK を `vendor/` へ clone し、パッチ 2 本を当てる |
+| `patches/ydlidar-sdk-macos.patch` | macOS でビルドを通すためのパッチ（内容は下記） |
+| `patches/ydlidar-sdk-expose-flag.patch` | 干渉フラグを `LaserPoint` に通すパッチ（同上） |
 
 ## セットアップ
 
@@ -290,7 +291,36 @@ SDK は Linux / Windows 向けで、素の macOS ではビルドが通らない�
   **Linux で動かすときはこの指定を外すこと**（`net/if.h` と `linux/if.h` が衝突する）。
 
 SDK を別コミットへ上げるときは、`setup-sdk.sh` の `COMMIT` を書き換えて
-パッチが当たるか（`git apply`）を確認する。
+パッチ 2 本が当たるか（`git apply`）を確認する。
+
+## 干渉フラグのパッチ（`patches/ydlidar-sdk-expose-flag.patch`）
+
+T-mini 系は距離値の下位 2bit に干渉フラグを載せてくる（`3` = 太陽光ノイズ、
+`2` = ガラス／鏡面反射）。SDK はこれを `node.is` に取り出したあと、
+`enableSunNoise()` / `enableGlassNoise()` が有効なら距離を 0 に潰し、**フラグ自体は
+捨ててしまう**。`LaserPoint` は `angle` / `range` / `intensity` しか持たないので、
+呼び出し側からは「どの点が疑わしいと判定されたか」が分からない。
+
+そこで 2 箇所だけ足している:
+
+| 対象 | 直したこと |
+|------|-----------|
+| `core/common/ydlidar_def.h` | `LaserPoint` に `uint8_t flag` を追加。SWIG が `%include` しているので Python から `point.flag` で読める |
+| `src/CYdLidar.cpp` | `doProcessSimple()` が点を組み立てるところで `point.flag = node.is` を積む |
+
+これで `FILTER_AMBIENT = False`（＝太陽光フィルタ off）のときに、SDK が疑わしいと
+判定していた点を捨てずに受け取りつつ、その数だけを別に数えられる。
+画面では左の欄の最下段に `flag 0x03 sun (all 360 deg)` として出る。
+
+注意点:
+
+- フラグが入るのは `IntenstiyBit = 8` のときだけ。SDK は 10bit 強度のとき
+  同じ 2bit を強度の上位ビットに使うので、フラグは復号されず常に 0 になる。
+- `setAutoIntensity` は SDK 既定で有効。チェックサムエラーが 2 回続くと強度ビットを
+  8 → 0 → 16 と勝手に切り替えるため、そのときはフラグが来なくなる
+  （SDK が `The intensity has been automatically adjusted to[N]bit` とログを出す）。
+- `#pragma pack(1)` 下の構造体を変えるので、SDK を作り直したら
+  `uv sync --reinstall-package ydlidar` で Python バインディングも必ず入れ直すこと。
 
 ### SWIG の `-threads` が要る理由
 

@@ -12,6 +12,11 @@ config.toml に書いた台数ぶんの LiDAR を同時に読み、1 つのウ�
 各点は距離と同時に Intensity（反射強度 0〜255）も保持しており、
 COLOR_BY_INTENSITY = True のとき点の色として描かれる（カラーバー付き）。
 
+各点は干渉フラグ（flag）も持つ。FILTER_AMBIENT を切っているとき、SDK が
+「太陽光ノイズ」と判定した点（flag = 0x03）も捨てられずに届くので、その数を
+左の欄の最下段に出す（＝フィルタを切ったことで増えた点の数）。こちらは
+セクタではなく全周が対象。
+
 構成（台数 + 1 スレッド）:
   - 読み取りスレッド : 台ごとに 1 本。read_scan() を回し、その台の距離／強度配列を
                        更新し続ける
@@ -48,7 +53,7 @@ import numpy as np
 from matplotlib.widgets import Button
 
 from config import load_detection_config, load_scan_config, load_serial_config
-from lidar import TMiniPlus, max_points_per_rev
+from lidar import FLAG_SUN_NOISE, TMiniPlus, max_points_per_rev
 
 #=============================
 # 設定
@@ -126,10 +131,12 @@ COUNT_TEXT_LEFT_IN = 0.35    # ウィンドウ左端からカウンタ文字ま�
 COUNT_HEAD_OFFSET_IN = 1.05    # 台名とセクタ・モード
 COUNT_VALUE_OFFSET_IN = 0.15   # hits / pts（大きい数字）
 COUNT_NOW_OFFSET_IN = -0.85    # 直近 1 回転の点数、または学習の進み具合
+COUNT_FLAG_OFFSET_IN = -1.45   # 太陽光フラグの点数（全周が対象）
 
 COUNT_HEAD_FONTSIZE = 13
 COUNT_VALUE_FONTSIZE = 26
 COUNT_NOW_FONTSIZE = 11
+COUNT_FLAG_FONTSIZE = 11
 
 #--- Intensity（反射強度）の表示 -----------------------------------------
 # T-mini Pro 開発マニュアル 3.1.2 Intensity Analysis:
@@ -167,8 +174,13 @@ COUNT_FOREGROUND_MARGIN_MM = 100   # 背景より何 mm 手前なら「前を通
 # AMBIENT / SPECULAR は SDK 側（干渉フラグを見られるのは SDK の中だけ）、
 # それ以外は受信後の _is_valid() で効く。除外された点はどちらも同じ扱いで、
 # そのビンが NaN にクリアされる（SDK が落とした点は距離 0 で返るため）。
+#
+# AMBIENT / SPECULAR は SDK の既定がどちらも false（CYdLidar.h の
+# m_SunNoise / m_GlassNoise）。true にするのは「点を捨てる」方向なので、
+# 落氷を取りこぼしたくないここでは既定のまま両方 false にしてある。
+# 屋外・窓際で使って偽の点が増えるようなら true に倒す。
 FILTER_ZERO_DISTANCE = True        # 距離 0（無反射・SDK が落とした点）を除外
-FILTER_AMBIENT = True              # 外乱光（太陽光ノイズ）を SDK に除外させる
+FILTER_AMBIENT = False             # 外乱光（太陽光ノイズ）を SDK に除外させる
 FILTER_SPECULAR = False            # 鏡面反射（ガラスノイズ）を SDK に除外させる
 FILTER_BY_RANGE = True             # RANGE_MIN..RANGE_MAX の外を除外
 
@@ -186,6 +198,9 @@ class ScanBuffer:
 
     LiDAR 1 台につき 1 つ持つ。距離[mm]と Intensity[0-255] を同じインデックスの
     2 本の配列で持ち、無反射／ノイズ／未計測のビンは、どちらの配列も NaN。
+
+    あわせて、干渉フラグが 0x03（太陽光ノイズ）だった有効点の数も数える。
+    セクタのカウンタと違って全周が対象で、こちらはビンに関係なく点を数える。
     """
 
     def __init__(self, num_bins):
@@ -196,6 +211,11 @@ class ScanBuffer:
         # 直近 1 回転で有効だった点の数（ビンではなく点の数。同じビンに複数の点が
         # 入ることがあるので、画面上の点の数とは必ずしも一致しない）
         self._valid_count = 0
+        # 太陽光ノイズと判定された有効点。直近 1 回転ぶんと、起動／リセットからの累計。
+        # FILTER_AMBIENT が True だと SDK がこれらを距離 0 に落とすので _is_valid() で
+        # 全部弾かれ、常に 0 になる（＝この数字はフィルタを切ったときだけ意味を持つ）。
+        self._flagged_count = 0
+        self._flagged_total = 0
 
     def update(self, samples):
         """1 パケットぶんの samples でビンを更新する。
@@ -204,9 +224,11 @@ class ScanBuffer:
         そのビンを NaN でクリアする。こうすることで、ビームがその方向を
         通過したのに物体が無ければ、残っていた古い点が消える。
 
-        あわせて、この 1 回転で有効だった点の数を数えて持っておく（タイトル表示用）。
+        あわせて、この 1 回転で有効だった点の数と、そのうち太陽光ノイズと
+        判定されていた点の数を数えて持っておく（表示用）。
         """
         valid_count = 0
+        flagged_count = 0
 
         with self._lock:
             for p in samples:
@@ -216,16 +238,26 @@ class ScanBuffer:
                     self._distances[idx] = p["distance"]
                     self._intensities[idx] = p["intensity"]
                     valid_count += 1
+
+                    if p["flag"] == FLAG_SUN_NOISE:
+                        flagged_count += 1
                 else:
                     self._distances[idx] = np.nan
                     self._intensities[idx] = np.nan
 
             self._valid_count = valid_count
+            self._flagged_count = flagged_count
+            self._flagged_total += flagged_count
+
+    def reset_flagged(self):
+        """太陽光フラグの累計を 0 に戻す（1 回の計測の区切り）。"""
+        with self._lock:
+            self._flagged_total = 0
 
     def snapshot(self):
-        """(距離配列, 強度配列, 直近 1 回転の有効点数) を返す。
+        """(距離配列, 強度配列, 有効点数, フラグ点数, フラグ累計) を返す。
 
-        3 つは必ず同じ瞬間のものを一度のロックで取る（表示のズレを防ぐため）。
+        すべて必ず同じ瞬間のものを一度のロックで取る（表示のズレを防ぐため）。
         配列はコピーを返す。
         """
         with self._lock:
@@ -233,6 +265,8 @@ class ScanBuffer:
                 self._distances.copy(),
                 self._intensities.copy(),
                 self._valid_count,
+                self._flagged_count,
+                self._flagged_total,
             )
 
 
@@ -544,6 +578,7 @@ class LidarPanel:
         self._head_text = None
         self._value_text = None
         self._now_text = None
+        self._flag_text = None
 
     #--- センサー ---------------------------------------------------------
 
@@ -576,8 +611,13 @@ class LidarPanel:
     #--- カウンタ ---------------------------------------------------------
 
     def reset(self):
-        """カウンタを 0 に戻す（1 回の計測の区切り）。"""
+        """カウンタを 0 に戻す（1 回の計測の区切り）。
+
+        セクタのカウンタと、全周の太陽光フラグ累計の両方を戻す。片方だけ残ると
+        「どの区間の数字なのか」が分からなくなるため。
+        """
         self.counter.reset()
+        self.buffer.reset_flagged()
 
     def set_mode(self, mode):
         """数え方を切り替える（0 から数え直す）。"""
@@ -677,10 +717,13 @@ class LidarPanel:
 
         self._set_title(0)
         self._set_counts(self.counter.snapshot())
+        self._set_flagged(0, 0)
 
     def refresh(self):
         """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。"""
-        distances, intensities, detected = self.buffer.snapshot()
+        distances, intensities, detected, flagged, flagged_total = (
+            self.buffer.snapshot()
+        )
 
         self._scat.set_offsets(np.column_stack((self._theta, distances)))
         if COLOR_BY_INTENSITY:
@@ -690,6 +733,7 @@ class LidarPanel:
 
         self._set_title(detected)
         self._set_counts(self.counter.snapshot())
+        self._set_flagged(flagged, flagged_total)
 
         return self._scat
 
@@ -708,6 +752,7 @@ class LidarPanel:
         # 数字は桁が変わっても左端が動かないよう、等幅で右詰めにする
         self._value_text = block(COUNT_VALUE_FONTSIZE, family="monospace")
         self._now_text = block(COUNT_NOW_FONTSIZE, family="monospace")
+        self._flag_text = block(COUNT_FLAG_FONTSIZE, family="monospace")
 
     def place_count_text(self, fig):
         """左のカウンタ欄を、自分のプロットと同じ高さに置き直す。
@@ -724,6 +769,7 @@ class LidarPanel:
             (self._head_text, COUNT_HEAD_OFFSET_IN),
             (self._value_text, COUNT_VALUE_OFFSET_IN),
             (self._now_text, COUNT_NOW_OFFSET_IN),
+            (self._flag_text, COUNT_FLAG_OFFSET_IN),
         ):
             text.set_position((left, center_y + offset_in / height_in))
 
@@ -748,6 +794,20 @@ class LidarPanel:
             # （now > 0）を、その場で切り分けるために出している。
             marker = "   DETECTING" if present else ""
             self._now_text.set_text(f"now {last:3d}{marker}")
+
+    def _set_flagged(self, flagged, total):
+        """太陽光ノイズと判定された点の数を書き替える。毎フレーム呼ぶ。
+
+        上の hits/pts はセクタの数字だが、これは全周が対象。範囲が違うので
+        取り違えないよう、見出しに「all 360 deg」と書いてある。
+
+        FILTER_AMBIENT が True のときは SDK がこれらを距離 0 に落とすので、
+        必ず 0 のまま動かない（＝フィルタを切っているときだけ意味のある数字）。
+        """
+        self._flag_text.set_text(
+            f"flag 0x{FLAG_SUN_NOISE:02x} sun  (all 360 deg)\n"
+            f"{flagged:5d} /rev {total:8d} total"
+        )
 
     def _set_title(self, detected):
         """2 行のタイトルを書き替える（どの台か / 点の出方）。

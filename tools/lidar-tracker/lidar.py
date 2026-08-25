@@ -13,12 +13,19 @@
 呼び出し側の契約は移植前と揃えてある。read_scan() が返すのは 1 回転ぶんの
 サンプル辞書のリストで、キーは:
 
-    {"angle": 度[0,360), "distance": mm, "intensity": 0-255, "x": mm, "y": mm}
+    {"angle": 度[0,360), "distance": mm, "intensity": 0-255,
+     "flag": 0-3, "x": mm, "y": mm}
 
-移植前との差分は `flag`（干渉フラグ）が無いこと。SDK の LaserPoint は
-angle / range / intensity の 3 つしか持たない。代わりに同じ判定を SDK 内部で
-やらせる（filter_sun_noise / filter_glass_noise）。除かれた点は距離 0 で返るので、
-呼び出し側の「距離 0 は無効」判定にそのまま乗る。
+干渉フラグ `flag` は本家 SDK の LaserPoint には無い（angle / range / intensity の
+3 つしか持たない）。本家は enableSunNoise / enableGlassNoise の判定に使ったあと
+捨ててしまい、呼び出し側からは「どの点が疑わしいと判定されたか」が分からない。
+patches/ydlidar-sdk-expose-flag.patch でその 2bit を LaserPoint.flag として
+残すようにしてあるので、ここではそれをそのまま samples に載せている。
+
+フィルタを有効にした場合、除かれた点は距離 0 で返るので、呼び出し側の
+「距離 0 は無効」判定にそのまま乗る（＝flag を見なくても落とせる）。逆に
+フィルタを切ると、疑わしいと判定された点も距離つきで届くので、flag を見れば
+「フィルタを切ったことで増えた点」だけを数えられる。
 
 SDK のパラメータは公式サンプル python/examples/tminiplus_test.py に準拠。
 """
@@ -41,6 +48,12 @@ SAMPLE_RATE_K = 4
 # 干渉フラグ（3＝太陽光 / 2＝ガラス反射）。SDK はこの 8bit 指定のときだけ
 # そのフラグを読むので、enableSunNoise / enableGlassNoise とセットで効く。
 INTENSITY_BIT = 8
+
+# 干渉フラグ（LaserPoint.flag）の値。距離値の下位 2bit で、SDK が
+# enableSunNoise / enableGlassNoise の判定に使っているもの。
+# INTENSITY_BIT = 8 のときだけ入る（他の値にすると常に 0 になる）。
+FLAG_SUN_NOISE = 0x03      # 外乱光（太陽光）ノイズと判定された点
+FLAG_GLASS_NOISE = 0x02    # 鏡面反射（ガラス）ノイズと判定された点
 
 # デバイスとしての測距範囲[m]。データシートの実力値は 0.02〜12 m。
 # ここを外れた点は SDK が距離 0 にする。用途ごとの「関心範囲」の絞り込みは
@@ -160,6 +173,7 @@ class TMiniPlus:
                 "angle": math.degrees(point.angle) % 360.0,
                 "distance": distance,
                 "intensity": point.intensity,
+                "flag": point.flag,
                 "x": distance * math.cos(point.angle),
                 "y": distance * math.sin(point.angle),
             })
