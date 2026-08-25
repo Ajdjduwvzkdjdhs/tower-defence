@@ -8,8 +8,9 @@ uv 環境として自閉させたもの（現状は**可視化のみ**）。
 センサーとの通信は**公式 SDK（[YDLidar-SDK](https://github.com/YDLIDAR/YDLidar-SDK)）**が担う。
 
 かき氷機の氷入力を「手の画像検知（`tools/position-tracker`）」から
-「氷が落ちる様子の LiDAR 検知」へ置き換えるための土台。谷チャンネル判定と
-`seq,channel` の書き出しは**まだ入っていない**（position-tracker 側の契約を後で移植する）。
+「氷が落ちる様子の LiDAR 検知」へ置き換えるためのツール群。谷チャンネル判定と
+共有ファイルの書き出しは `valley_tracker.py` が担う（`scan_plot_realtime.py` は
+可視化のみで、範囲やノイズの下見に使う）。
 
 `Assets/` の外（`tools/`）に置き、uv 環境で隔離している（Unity のインポート対象外）。
 
@@ -17,6 +18,7 @@ uv 環境として自閉させたもの（現状は**可視化のみ**）。
 
 | ファイル | 役割 |
 |----------|------|
+| `valley_tracker.py` | **本番のエントリポイント**。落氷を 4 方向の谷へ写し、`seq,channel,shaving` を Unity へ書き出す（下記） |
 | `scan_plot_realtime.py` | エントリポイント。台数ぶんの読み取りスレッド + matplotlib の極座標アニメーション。`LidarPanel` が 1 台ぶん（センサー・点群バッファ・カウンタ・プロット）を持つ |
 | `lidar.py` | `TMiniPlus`：公式 SDK（`ydlidar` モジュール）の薄いラッパ |
 | `config.py` | `config.toml` から `(ports, baudrate)`・回転数・検出範囲を読む |
@@ -51,8 +53,13 @@ ls /dev/tty.usb* /dev/cu.usb*            # 例: /dev/tty.usbserial-0001
 ## 実行
 
 ```sh
-uv run python scan_plot_realtime.py      # ウィンドウを閉じるか Ctrl-C で安全停止（stop_scan → close）
+uv run python valley_tracker.py          # 本番。落氷を谷へ写して Unity へ渡す
+uv run python valley_tracker.py --headless   # 窓なし（本番で CPU を空けたいとき）
+
+uv run python scan_plot_realtime.py      # 可視化のみ。範囲・ノイズの下見用
 ```
+
+どちらもウィンドウを閉じるか Ctrl-C で安全停止する（stop_scan → close）。
 
 ウィンドウは `config.toml` の台数ぶんの段になる（1 台なら 1 段、2 台なら上下 2 段）。
 起動時に 1 台でも開けなければ、先に開いた台を閉じてから終了する。
@@ -353,3 +360,73 @@ SWIG は既定で GIL を保持したまま C++ を呼ぶ。`doProcessSimple()` 
 
 - 依存から `serial>=0.0.97` を削除。PyPI の `serial` は pyserial とは無関係の別パッケージ。
 - この用途で使わないスクリプト（`scan_all.py` などの旧版）は持ち込んでいない。
+
+
+## Unity への受け渡し（`valley_tracker.py`）
+
+落氷の検出を「どの谷か（`channel`）」と「削っているか（`shaving`）」に変換し、共有
+テキストファイルへ 1 行 `seq,channel,shaving`（例 `1837,2,1`）を書く。Unity 側は
+`VisionInputSource` がこのファイルをポーリングし、`InputMode.Vision` のとき
+`ActiveChannel` と `IsShaving` に使う（`seq,channel` の 2 列だけの旧 `position-tracker`
+契約も引き続き読める）。
+
+- 書き込みは `position.txt.tmp` に書き切って `os.replace()` で原子的 rename
+  （Unity が中途半端な行を読まない）。間隔は 50ms
+- 氷が無い間も `-1,0` を書き続けて `seq` を進める。Unity は `seq` の停止で
+  「Python 停止（ロスト）」を検知し、`channel` を -1・`shaving` を false に倒す
+- 出力先の解決順：環境変数 `KAKIGORI_POSITION_FILE` → `config.toml` の
+  `[output] position_file` → スクリプト相対 `out/position.txt`
+  （既定のままで Unity Editor から読める。`VisionConfig.asset` の `_relativePath` と対）
+
+### 谷の判定（`config.toml` の `[valleys]` / `[ice]`）
+
+LiDAR 2 台はどちらも**北の谷の正面**、ラックの上下段に置く。水平位置が同じなので各谷への
+方位角は 2 台で共通で、違うのは氷を捉える高さだけ。4 つの谷の配置の**外側**に立つため
+北の谷と南の谷はほぼ同じ方位角に重なり、角度だけでは切り分けられない。そのため谷は
+「角度 × 距離」の**極座標の矩形**で指定する。
+
+**LiDAR の正面は 225〜315 度**（中心 270 度＝極座標プロットの画面左）で、
+`scan_plot_realtime.py` の既定計測セクタと同じ範囲。4 つの谷はすべてこの 90 度の中に
+収める（範囲外を指定しても点が来ない）。仮値は正面を素直に 4 分割してある。
+
+```toml
+[valleys.north]     # north=0 / west=1 / south=2 / east=3（Unity の channel と対応）
+angle_start_deg = 250   # 正面の中心。south と同じ方位角で、距離だけが違う
+angle_end_deg = 290     # 0 度をまたぐ指定は start > end で書く
+dist_min_cm = 15
+dist_max_cm = 40
+```
+
+`west`（225-250）と `east`（290-315）の左右は LiDAR の向きで入れ替わるので、現物で
+確認して逆なら**この 2 つの角度を入れ替える**。Unity 側の `_visionFlipHorizontal` では
+直さないこと（補正が二重になって原因が読めなくなる）。
+
+氷かどうかは 2 つの傾向で判定する（どちらも `[ice]` のノブ）:
+
+- **氷は Intensity が低い / 障害物は高い** → `intensity_max`（既定 200）**未満**だけを氷の候補に
+- **氷は 1〜3 点でしか写らない / 障害物はまとまって写る** → 谷ごとの点数が
+  `max_points_per_valley`（既定 5）を超えたら、その谷は障害物とみなして照準にも削りにも
+  寄与させない
+
+複数の谷に残ったら**点数が最も少ない谷**を採る（少ない方が氷らしい）。同数なら直前の谷を
+維持する。静止背景の学習（`scan_plot_realtime.py` の background モード）は使わない。
+
+2 台の OR は**判定した後**に取る。回転の位相が同期していないので点は合算せず、台ごとに
+1 回転を独立に判定し切って、その結果のうち**最も新しい検出**を採る（合算すると同じ氷を
+2 台が拾っただけで `max_points_per_valley` に引っかかる）。
+
+### ホールド（検出の隙間を埋める）
+
+LiDAR は氷を毎回転は拾えない（実測で 0.75〜2 秒に 1 回）。生のまま流すと照準も削りも
+点滅するので、最後の検出から一定時間は保持する。保持時間は求める挙動が逆なので 2 本ある:
+
+- `channel_hold_sec`（既定 5.0、0 で無期限）— 長く取っても実害は小さい。谷が -1 に飛ぶなら伸ばす
+- `shaving_hold_sec`（既定 1.5）— **そのまま「削りを止めてから雪崩が止まるまでの遅延」**に
+  なる。短くすると氷が流れているのに雪崩が途切れる。当日の主要な調整ノブ
+
+### 画面の見方
+
+- 有効な点はすべて**灰色**、そのうち氷とみなした点だけ**赤**で重なる
+- 4 つの谷は**青**く塗られ、採用中の谷だけ濃くなる
+- 左の欄に台ごとの検出回数と**谷ごとの点数**（`max_points_per_valley` を決める根拠）
+- 下端に、いま Unity へ書いている `seq` / `channel` / `shaving` と出力先パス

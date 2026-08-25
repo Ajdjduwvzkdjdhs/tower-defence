@@ -5,8 +5,9 @@ namespace KakigoriTD.Input
     /// 谷選択（<see cref="ActiveChannel"/>）は <see cref="InputMode"/> で明示切替する（暗黙の優先順位合成は
     /// しない・docs/phase5.md §3-⑤）: <see cref="InputMode.Vision"/> なら位置検知、<see cref="InputMode.Keyboard"/>
     /// ならキーボード（未選択のみシリアルにフォールバック＝旧挙動）。
-    /// 決定（<see cref="ConfirmPressed"/>）と削り（<see cref="IsShaving"/>）は<b>モードに依らず</b>従来通り
-    /// 「キーボード OR シリアル」の論理和（位置検知は削り・決定を担当しない）。
+    /// 決定（<see cref="ConfirmPressed"/>）と削り（<see cref="IsShaving"/>）は<b>モードに依らず</b>論理和。
+    /// 決定は「キーボード OR シリアル」、削りは LiDAR の落氷検知を加えた
+    /// 「キーボード OR シリアル OR 位置検知」（位置検知は決定を担当しない）。
     ///
     /// これにより実機が無くてもキーボードで全操作でき、シリアル接続時はハンドル回転でも削れる。
     /// 純 C#（MonoBehaviour 非依存）で、各子の現在値を getter で都度読む（ADR-8 / EditMode 検証）。
@@ -47,8 +48,18 @@ namespace KakigoriTD.Input
             }
         }
 
-        /// <summary>削りは論理和（キーボード Space 長押し OR ハンドル回転）。</summary>
-        public bool IsShaving => (_keyboard?.IsShaving ?? false) || (_serial?.IsShaving ?? false);
+        /// <summary>
+        /// 削りは論理和（キーボード Space 長押し OR ハンドル回転 OR LiDAR の落氷検知）。
+        ///
+        /// 谷選択と違い <see cref="InputMode"/> で切り替えず、無条件に 3 つを OR する。既存の
+        /// 「削りはモードに依らず論理和」という規則をそのまま 1 項ぶん広げたもので、こうすると
+        /// LiDAR が不調でも Space と M5Stick で削れるフォールバックが残る。Python が動いていない
+        /// 開発時は vision がロスト＝false なので、Keyboard モードの挙動は従来どおり変わらない。
+        /// </summary>
+        public bool IsShaving =>
+            (_keyboard?.IsShaving ?? false)
+            || (_serial?.IsShaving ?? false)
+            || (_vision?.IsShaving ?? false);
 
         /// <summary>決定/再挑戦はエッジ。どちらかが押されたら true。</summary>
         public bool ConfirmPressed => (_keyboard?.ConfirmPressed ?? false) || (_serial?.ConfirmPressed ?? false);

@@ -6,7 +6,9 @@ namespace KakigoriTD.Tests.EditMode
     /// <summary>
     /// EditMode tests for <see cref="VisionInputProtocol"/> (Phase 5 / ADR-24).
     /// Covers: seq,channel parse, malformed-line rejection, seq-based lost watchdog (state Y) with
-    /// fail-safe -1, live(A) vs latched(B) handling of -1, Python-restart recovery, and the debounce insurance.
+    /// fail-safe -1, live(A) vs latched(B) handling of -1, Python-restart recovery, the debounce insurance,
+    /// and the LiDAR 3-column contract seq,channel,shaving (optional 3rd column, back-compat with 2-column
+    /// lines, strict validation, fail-safe shaving=false on lost).
     /// </summary>
     public class VisionInputProtocolTests
     {
@@ -166,6 +168,95 @@ namespace KakigoriTD.Tests.EditMode
             var p = Live(lost: 5f, debounce: 0f);
             p.Ingest("1,3"); p.Tick(0f);
             Assert.That(p.ActiveChannel, Is.EqualTo(3));
+        }
+
+        //--- LiDAR の 3 列契約 seq,channel,shaving -----------------------------
+
+        [Test]
+        public void Shaving_ThirdColumn_One_IsTrue()
+        {
+            var p = Live(lost: 5f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            Assert.That(p.ActiveChannel, Is.EqualTo(2));
+            Assert.That(p.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void Shaving_ThirdColumn_Zero_IsFalse()
+        {
+            var p = Live(lost: 5f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            p.Ingest("2,2,0"); p.Tick(0f);
+            Assert.That(p.ActiveChannel, Is.EqualTo(2));
+            Assert.That(p.IsShaving, Is.False); // 削り終了は次の行で即座に降りる
+        }
+
+        [Test]
+        public void Shaving_TwoColumnLine_StaysFalse()
+        {
+            // 旧 position-tracker の 2 列行。従来どおり channel は効き、削りは keyboard/serial 任せ
+            var p = Live(lost: 5f);
+            p.Ingest("1,3"); p.Tick(0f);
+            Assert.That(p.ActiveChannel, Is.EqualTo(3));
+            Assert.That(p.IsShaving, Is.False);
+        }
+
+        [Test]
+        public void Shaving_MalformedThirdColumn_RejectsWholeLine()
+        {
+            // 壊れた 3 列目を黙って false 扱いにすると原因に気づけないので、行ごと捨てる
+            var p = Live(lost: 5f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            p.Ingest("2,0,x"); p.Tick(0f);   // 数値でない
+            p.Ingest("3,0,7"); p.Tick(0f);   // 0/1 の範囲外
+            Assert.That(p.ActiveChannel, Is.EqualTo(2)); // 直前の値が据え置かれる
+            Assert.That(p.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void Shaving_SameSeq_IsIgnored()
+        {
+            // IO はポーリングなので同じ行を繰り返し Ingest しうる。seq 据置は据え置き
+            var p = Live(lost: 5f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            p.Ingest("1,2,0"); p.Tick(0f);   // seq 同一 → 反映しない
+            Assert.That(p.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void Shaving_FalseWhenLost()
+        {
+            // フェイルセーフ：Python 停止（seq 据置）で削りも降りる＝雪崩が流れ続けない
+            var p = Live(lost: 0.3f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            Assert.That(p.IsShaving, Is.True);
+
+            p.Tick(0.4f);                     // seq 不変のまま watchdog 超過
+            Assert.That(p.IsLost, Is.True);
+            Assert.That(p.IsShaving, Is.False);
+            Assert.That(p.ActiveChannel, Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void Shaving_RecoversAfterLost()
+        {
+            var p = Live(lost: 0.3f);
+            p.Ingest("1,2,1"); p.Tick(0.4f);
+            Assert.That(p.IsShaving, Is.False);
+
+            p.Ingest("2,2,1"); p.Tick(0f);    // seq 前進で復帰
+            Assert.That(p.IsLost, Is.False);
+            Assert.That(p.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void Shaving_IsIndependentOfDebounceAndLatch()
+        {
+            // 削りは Python 側でホールド済みなので、ラッチもデバウンスも通さない
+            var p = new VisionInputProtocol(5f, latch: true, debounceSeconds: 1f);
+            p.Ingest("1,2,1"); p.Tick(0f);
+            Assert.That(p.ActiveChannel, Is.EqualTo(-1)); // channel はデバウンス待ち
+            Assert.That(p.IsShaving, Is.True);            // 削りは即座に立つ
         }
     }
 }
