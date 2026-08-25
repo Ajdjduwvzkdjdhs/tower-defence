@@ -5,7 +5,8 @@ namespace KakigoriTD.Tests.EditMode
 {
     /// <summary>
     /// EditMode tests for <see cref="CompositeInputSource"/> (keyboard + serial merge, ADR-15).
-    /// Covers: channel/confirm come from keyboard, shave is the logical OR, and null serial is tolerated.
+    /// Covers: channel/confirm come from keyboard, shave is the logical OR (keyboard OR serial OR vision,
+    /// mode-independent), and null serial/vision are tolerated.
     /// </summary>
     public class CompositeInputSourceTests
     {
@@ -109,7 +110,7 @@ namespace KakigoriTD.Tests.EditMode
         {
             var kb = new StubInput();
             var serial = new StubInput();
-            var vision = new StubInput { ActiveChannel = 0 }; // 削りは担当しない
+            var vision = new StubInput { ActiveChannel = 0 }; // LiDAR は落氷を検知していない
             var c = new CompositeInputSource(kb, serial, vision, InputMode.Vision);
 
             Assert.That(c.IsShaving, Is.False);
@@ -126,6 +127,55 @@ namespace KakigoriTD.Tests.EditMode
             var c = new CompositeInputSource(kb, null, null, InputMode.Vision);
 
             Assert.That(c.ActiveChannel, Is.EqualTo(-1)); // 位置検知未接続なら谷なし
+        }
+
+        // ---- LiDAR の削り検知（valley_tracker.py の 3 列目）--------------------
+
+        [Test]
+        public void VisionMode_ShaveOrsVision()
+        {
+            var kb = new StubInput();
+            var serial = new StubInput();
+            var vision = new StubInput { ActiveChannel = 0 };
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Vision);
+
+            Assert.That(c.IsShaving, Is.False);
+            vision.IsShaving = true;               // LiDAR が落氷を検知
+            Assert.That(c.IsShaving, Is.True);     // M5Stick 無しでも削れる
+        }
+
+        [Test]
+        public void KeyboardMode_ShaveStillOrsVision()
+        {
+            // 削りはモード非依存の OR。Python が動いていなければ vision はロスト＝false なので、
+            // Keyboard モードの従来挙動は変わらない（この規則自体を固定しておく）
+            var kb = new StubInput();
+            var serial = new StubInput();
+            var vision = new StubInput { IsShaving = true };
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Keyboard);
+
+            Assert.That(c.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void VisionMode_NullVision_ShaveFallsBackToKeyboardAndSerial()
+        {
+            // LiDAR 不調でも Space / M5Stick で削れるフォールバックが残ること
+            var kb = new StubInput { IsShaving = true };
+            var c = new CompositeInputSource(kb, null, null, InputMode.Vision);
+
+            Assert.That(c.IsShaving, Is.True);
+        }
+
+        [Test]
+        public void VisionMode_VisionDoesNotDriveConfirm()
+        {
+            var kb = new StubInput();
+            var serial = new StubInput();
+            var vision = new StubInput { ConfirmPressed = true }; // 位置検知は決定を担当しない
+            var c = new CompositeInputSource(kb, serial, vision, InputMode.Vision);
+
+            Assert.That(c.ConfirmPressed, Is.False);
         }
     }
 }

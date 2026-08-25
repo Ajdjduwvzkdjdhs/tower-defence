@@ -1,3 +1,4 @@
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -17,6 +18,28 @@ DEFAULT_RANGE_MAX_CM = 80
 DEFAULT_SCAN_FREQUENCY_HZ = 10.0
 MIN_SCAN_FREQUENCY_HZ = 5.0
 MAX_SCAN_FREQUENCY_HZ = 12.0
+
+# 氷の判定パラメータの既定値（[ice] セクションごと省略可能）。
+#
+# 氷は Intensity が低く、1 回転あたり 1〜3 点程度でしか写らない。逆に障害物
+# （人・機体・造形物）は Intensity が高く、まとまった点で写る。この 2 つの傾向を
+# そのまま「上限 2 本」にしたのが intensity_max と max_points_per_valley。
+DEFAULT_INTENSITY_MAX = 200.0
+DEFAULT_MAX_POINTS_PER_VALLEY = 5
+
+# ホールド[秒]。LiDAR は氷を毎回転は拾えない（実測で 0.75〜2 秒に 1 回）ので、
+# 検出の隙間を埋めないと照準も削りも点滅する。channel は長く保持しても実害が
+# 小さいが、shaving の保持時間はそのまま「削りを止めてから雪崩が止まるまでの
+# 遅延」になるので、2 本に分けてある。
+DEFAULT_CHANNEL_HOLD_SEC = 5.0
+DEFAULT_SHAVING_HOLD_SEC = 1.5
+
+# 谷の名前と Unity の channel の対応。並び順がそのまま channel 0..3 になる
+# （Unity 側 IInputSource.ActiveChannel の 0:N / 1:W / 2:S / 3:E）。
+VALLEY_NAMES = ("north", "west", "south", "east")
+
+# 共有ファイルの既定の出力先（[output] も環境変数も無いとき）。
+DEFAULT_POSITION_FILE = _CONFIG_PATH.parent / "out" / "position.txt"
 
 
 def _load():
@@ -158,3 +181,167 @@ def load_detection_config():
         )
 
     return range_min, range_max
+
+
+def load_ice_config():
+    """config.toml から氷の判定パラメータを読み込み、dict で返す。
+
+    返す辞書のキーは以下（すべて省略可能で、欠けていれば既定値）:
+
+        intensity_max          氷とみなす Intensity の上限（これ**未満**だけを氷とする）
+        max_points_per_valley  1 台の 1 回転で 1 つの谷に許す点数の上限（超えたら障害物）
+        channel_hold_sec       最後の検出から、その谷を照準として保持し続ける秒数（0 で無期限）
+        shaving_hold_sec       最後の検出から、削り中とみなし続ける秒数
+
+    氷は Intensity が低く 1〜3 点程度でしか写らないのに対し、障害物（人・機体・造形物）は
+    Intensity が高くまとまった点で写る。この 2 つの傾向をそのまま 2 本のノブにしてある。
+    どちらも設置場所と当日の光環境で変わる現物合わせの値なので config.toml に置く。
+
+    ホールドを 2 本に分けているのは、求める挙動が逆だから。channel は長く保持しても
+    実害が小さい（削っていなければ雪崩は流れない）が、shaving の保持時間はそのまま
+    「削るのを止めてから雪崩が止まるまでの遅延」になる。
+    """
+    ice = _load().get("ice", {})
+
+    values = {}
+    for key, default, minimum in (
+        ("intensity_max", DEFAULT_INTENSITY_MAX, 0),
+        ("max_points_per_valley", DEFAULT_MAX_POINTS_PER_VALLEY, 1),
+        ("channel_hold_sec", DEFAULT_CHANNEL_HOLD_SEC, 0),
+        ("shaving_hold_sec", DEFAULT_SHAVING_HOLD_SEC, 0),
+    ):
+        value = ice.get(key, default)
+
+        # bool は int のサブクラスなので明示的に弾く
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            sys.exit(
+                f"config.toml の [ice] {key} は数値で指定してください"
+                f"（現在: {value!r}）。"
+            )
+        if value < minimum:
+            sys.exit(
+                f"config.toml の [ice] {key} は {minimum} 以上で指定してください"
+                f"（現在: {value}）。"
+            )
+
+        values[key] = value
+
+    values["max_points_per_valley"] = int(values["max_points_per_valley"])
+    values["intensity_max"] = float(values["intensity_max"])
+    values["channel_hold_sec"] = float(values["channel_hold_sec"])
+    values["shaving_hold_sec"] = float(values["shaving_hold_sec"])
+
+    return values
+
+
+def load_valleys_config():
+    """config.toml から 4 方向の谷の範囲を読み込み、チャンネル順のリストで返す。
+
+    返すのは要素 4 個のリストで、添字がそのまま Unity の channel（0:N 1:W 2:S 3:E）。
+    各要素は dict:
+
+        {"name": "north", "channel": 0,
+         "angle_start_deg": 350.0, "angle_end_deg": 10.0,
+         "dist_min_mm": 200.0, "dist_max_mm": 600.0}
+
+    LiDAR は 4 つの谷の配置の**外側**（北の谷の正面）に立つため、北の谷と南の谷は
+    ほぼ同じ方位角に重なる。角度だけでは切り分けられないので、角度と距離の
+    両方で「極座標の矩形」として指定する。
+
+    角度は 0 度をまたいでよい（angle_start_deg > angle_end_deg なら、そこで折り返す）。
+    距離は cm で書き、ここで mm に直して返す（点群の距離が mm のため）。
+
+    2 台の LiDAR は同じ水平位置（ラックの上下段）に置くので、各谷への方位角は
+    2 台で共通。よってこのテーブルは 1 個で、全台が同じものを使う。
+    """
+    valleys_cfg = _load().get("valleys")
+
+    if not isinstance(valleys_cfg, dict):
+        sys.exit(
+            "config.toml に [valleys] がありません。"
+            "config.example.toml を参考に 4 方向ぶん設定してください。"
+        )
+
+    valleys = []
+
+    for channel, name in enumerate(VALLEY_NAMES):
+        valley = valleys_cfg.get(name)
+
+        if not isinstance(valley, dict):
+            sys.exit(
+                f"config.toml に [valleys.{name}]（channel {channel}）が"
+                "ありません。4 方向すべてを設定してください。"
+            )
+
+        parsed = {"name": name, "channel": channel}
+
+        for key in ("angle_start_deg", "angle_end_deg", "dist_min_cm", "dist_max_cm"):
+            if key not in valley:
+                sys.exit(
+                    f"config.toml の [valleys.{name}] に {key} がありません。"
+                )
+
+            value = valley[key]
+
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                sys.exit(
+                    f"config.toml の [valleys.{name}] {key} は数値で"
+                    f"指定してください（現在: {value!r}）。"
+                )
+
+            parsed[key] = float(value)
+
+        # 角度は 0 度またぎを許すので大小関係は検査しない（0〜360 に正規化するだけ）。
+        # 距離は折り返しようがないので、逆転していれば設定ミスとして弾く。
+        parsed["angle_start_deg"] %= 360.0
+        parsed["angle_end_deg"] %= 360.0
+
+        if parsed["dist_min_cm"] < 0:
+            sys.exit(
+                f"config.toml の [valleys.{name}] dist_min_cm に負の値は"
+                f"指定できません（現在: {parsed['dist_min_cm']}）。"
+            )
+        if parsed["dist_min_cm"] >= parsed["dist_max_cm"]:
+            sys.exit(
+                f"config.toml の [valleys.{name}] は dist_min_cm < dist_max_cm で"
+                f"ある必要があります（現在: {parsed['dist_min_cm']}, "
+                f"{parsed['dist_max_cm']}）。"
+            )
+
+        parsed["dist_min_mm"] = parsed.pop("dist_min_cm") * 10.0
+        parsed["dist_max_mm"] = parsed.pop("dist_max_cm") * 10.0
+
+        valleys.append(parsed)
+
+    return valleys
+
+
+def load_output_config():
+    """共有ファイル（Unity が読む position.txt）の出力先を Path で返す。
+
+    解決順（Unity 側 VisionInputSource のパス解決と対になる）:
+      1. 環境変数 KAKIGORI_POSITION_FILE（通常未設定・手動運用の上書き保険）
+      2. config.toml の [output] position_file
+      3. スクリプト相対 out/position.txt（Editor 開発の既定・無設定で動く）
+
+    相対パスで書かれた場合は config.toml の場所を基準に解決する（実行ディレクトリに
+    依存させない）。
+    """
+    env = os.environ.get("KAKIGORI_POSITION_FILE")
+    if env:
+        return Path(env).expanduser()
+
+    value = _load().get("output", {}).get("position_file")
+
+    if value:
+        if not isinstance(value, str):
+            sys.exit(
+                "config.toml の [output] position_file は文字列で指定して"
+                f"ください（現在: {value!r}）。"
+            )
+
+        path = Path(value).expanduser()
+
+        return path if path.is_absolute() else (_CONFIG_PATH.parent / path)
+
+    return DEFAULT_POSITION_FILE

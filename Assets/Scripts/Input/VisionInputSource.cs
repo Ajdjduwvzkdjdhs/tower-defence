@@ -6,10 +6,11 @@ using KakigoriTD.Data;
 namespace KakigoriTD.Input
 {
     /// <summary>
-    /// 位置検知ファイル（Python が書く <c>seq,channel</c>）をポーリングして
-    /// <see cref="IInputSource.ActiveChannel"/> に変換する薄い MonoBehaviour アダプタ（ADR-6/8/24）。
-    /// 谷選択のみ担当し、削り・決定は担当しない（<see cref="IsShaving"/>=false / <see cref="ConfirmPressed"/>=false）。
-    /// <see cref="CompositeInputSource"/> 側で <see cref="InputMode"/> により合成される。
+    /// 位置検知ファイル（Python が書く <c>seq,channel</c> / LiDAR 版は <c>seq,channel,shaving</c>）を
+    /// ポーリングして <see cref="IInputSource.ActiveChannel"/>・<see cref="IsShaving"/> に変換する
+    /// 薄い MonoBehaviour アダプタ（ADR-6/8/24）。谷選択と削りを担当し、決定は担当しない
+    /// （<see cref="ConfirmPressed"/>=false）。<see cref="CompositeInputSource"/> 側で
+    /// 谷選択は <see cref="InputMode"/> による切替、削りはモード非依存の論理和として合成される。
     ///
     /// パースと watchdog・ライブ/ラッチ・デバウンスは純ロジック <see cref="VisionInputProtocol"/> に委譲し
     /// （<see cref="SerialInputSource"/>↔<see cref="SerialInputProtocol"/> と対称）、本クラスは IO（間隔ポーリングの
@@ -56,8 +57,13 @@ namespace KakigoriTD.Input
             return ch;
         }
 
-        /// <inheritdoc/>
-        public bool IsShaving => false;
+        /// <summary>
+        /// 削り中か。LiDAR 版（<c>tools/lidar-tracker/valley_tracker.py</c>）が 3 列目に書く
+        /// <c>shaving</c> をそのまま素通しする。取りこぼしを埋めるホールドは Python 側が
+        /// 当てた後なので、ここでは均さない。旧 2 列契約のファイル（position-tracker）では
+        /// 常に false になり、削りは keyboard / serial が担う従来どおりの構成で動く。
+        /// </summary>
+        public bool IsShaving => _protocol?.IsShaving ?? false;
 
         /// <inheritdoc/>
         public bool ConfirmPressed => false;

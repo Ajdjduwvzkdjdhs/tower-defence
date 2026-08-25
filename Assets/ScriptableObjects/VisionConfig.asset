@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 553b84ee80b494a02a39a8cefd203eb7, type: 3}
   m_Name: VisionConfig
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.VisionConfigSO
-  _relativePath: tools/position-tracker/out/position.txt
+  _relativePath: tools/lidar-tracker/out/position.txt
   _configFileName: config.json
   _persistentFileName: position.txt
   _pollIntervalSec: 0.05
