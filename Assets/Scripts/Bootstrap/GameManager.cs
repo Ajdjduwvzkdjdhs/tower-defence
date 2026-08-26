@@ -53,7 +53,8 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
         [SerializeField] private GameObject _enemyPrefab;
-
+        [Header("展示用設定")]
+        [SerializeField] private float _resultLimit = 3f;// WINしてからリザルト画面に移動する時間
         private Fort _fort;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
@@ -182,7 +183,21 @@ namespace KakigoriTD.Bootstrap
         {
             _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
-            if (isWin) _audio?.PlayClear(); else _audio?.PlayGameOver();
+            if (isWin){ 
+                _audio?.PlayClear();
+                // 3秒後にシーン遷移
+                StartCoroutine(ResultSceneTransition(_resultLimit));
+            }else {
+                _audio?.PlayGameOver();
+            };
+        }
+        // リザルトシーンに転送する用です。展示に向けて急遽作成。
+        private System.Collections.IEnumerator ResultSceneTransition(float delaySeconds)
+        {
+            yield return new WaitForSeconds(delaySeconds);
+    
+            // シーン遷移処理
+            UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
         }
 
         // ---- build helpers ---------------------------------------------------
