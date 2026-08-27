@@ -383,10 +383,41 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 7 — 展示ビルド化（3Dアセット・マルチシーン・LiDAR入力・開発連携）　【🟡 進行中／記録は git 履歴からの再構成】
+
+**ゴール**: 遊びの核（Phase 1〜6）が固まった状態から、展示に出せる本番ビルドへ仕上げる。3Dアート、演出、複数シーンのフロー、実機入力（LiDAR）の統合。
+
+> **この節は git 履歴（2026-08）からの再構成であり、Phase 1〜6 のような受け入れ基準・EditMode・検証記録は未整備。** 実作業は各ブランチ
+> （`4-敵味方キャラの3dモデル改善` / `5-演出敵撃破時のエフェクト効果音` / `6-タイトルシーン作成` / `7-リザルトシーン作成` /
+> `11-演出雪崩表現の改善` / `12-LiDARとUnityの連携` / `37-samplesceneに3dモデルを実装` / `scene_connect`）で行われ、
+> 受け入れ基準フローを経ずに `main` へマージされている。設計判断（ADR）は `docs/architecture.md` **ADR-28**（遡及・要レビュー）にまとめている。
+
+### やったこと（コミット単位の要約）
+
+| 領域 | 内容 |
+|------|------|
+| 3D 山アセット | 球体テスト用スポナー＋山オブジェクト → リアルな山メッシュへ差し替え（tomokican/徳久研 作）→ 虹色（サーモ風）アセットは削除。地形の基準を山メッシュにし、敵の停止位置を 8.0 に |
+| アクター 3D 化 | 敵兵（`TGS_兵士赤.fbx`）・味方（`TGS_Ally.prefab`）・市民の 3D モデルとアニメーション（`Main_TGS_兵士赤 アニメーション.prefab` 等）。旧・敵モデル生成コードは削除 |
+| 撃破演出 | 敵が横回転で吹き飛んで蒸発する演出、パーティクルの実装 → 改善 → prefab 化（`DissolveBurst` / `SnowPuff` / `Snowball` / `SphereSpawner`） |
+| サウンド | 撃破音を 3 クリップから順送り再生（`feat(audio): 撃破音を3種のクリップから順送りで鳴らす`） |
+| 雪崩シェーダー | カスタムシェーダー＋環境光の調整。「キラキラの雪崩シェーダー」と「シンプルな雪シェーダー」の 2 種を用意（`11-演出雪崩表現の改善`、`AvalancheVfx`） |
+| シーン構成 | `SampleScene` に敵・味方 prefab をアサイン → `TitleScene` / `ResultScene` を作成し prefab 化 → 各シーンを「プロジェクト全体として認識」＝ Build Settings に登録 → 各シーンに `Enter` キーによるシーン遷移を追加（`scene_connect`）。ゲーム本体は `TH.unity`（`Assets/Prefabs/TH_Stage.prefab` に `GameManager` 一式） |
+| LiDAR 入力 | `tools/lidar-tracker` を公式 YDLidar-SDK ベースへ載せ替え、リアルタイム可視化＋検出範囲フィルタ＋反射強度の色表示＋セクタ検出回数カウント＋干渉フラグ(0x03/太陽光ノイズ)集計＋複数台の縦並び表示。`valley_tracker.py` が落氷を 4 谷へ写して `seq,channel,shaving` を書き、Unity 側 `VisionInputSource` が読む（谷選択＋削り、ADR-24 のファイル契約に 3 列目を追加）。`tools/lidar-tracker2` / `2.1` は Hokuyo UBG-04LX-F01（別センサー）の C++ 検証 |
+| 開発連携 | `com.unity.pipeline`（`0.5.0-exp.1`）を導入し、`unity` CLI から起動中 Editor をヘッドレス駆動（recompile / run_tests / screenshot / シーン・GameObject 操作）。旧 Unity-MCP（`com.ivanmurzak.unity.mcp`）の残骸（OpenUPM scoped registry）は撤去。詳細は `CLAUDE.md`「Unity Editor 連携」 |
+
+### 未整備（Phase 7 を「完了」と呼ぶ前にやること）
+
+- [ ] 3Dモデル/シェーダー/演出まわりの設計判断を ADR に落とす（現状 ADR-28 に要約のみ）
+- [ ] マルチシーン構成（Title→TH→Result）の Play 通し検証と受け入れ基準の明文化
+- [ ] LiDAR 実機との end-to-end 検証（`seq,channel,shaving` → 谷選択＋削り → 雪崩 → 撃破）
+- [ ] `Assets/Scenes/SampleScene.unity`（旧セットアップ）の要否判断（現状 Build 対象外で残置）
+- [ ] EditMode 151 本が緑であることの CI/記録（現状ローカルの `unity command run_tests` で確認）
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
-- 味方/敵/変装の**形**のデザイン
-- 変装の tell（見た目差）の具体
+- 味方/敵/変装の**形**のデザイン → 3Dモデル化で概ね確定（Phase 7）。変装の tell（見た目差）の具体は未確定
 - バランス数値（`iceTotal`, `projectile.damage`, `fireInterval`, `spawnInterval` 等）のプレイテスト調整
 - 弾の見た目・着弾エフェクト
-- Unity バージョンの確定（CLAUDE.md の TODO）
+- ~~Unity バージョンの確定~~ → **6000.3.16f1 で確定**（`ProjectSettings/ProjectVersion.txt`）

@@ -27,6 +27,7 @@
 | 雪崩の視覚＋撃破起点 | 白い雪玉ストリーム（pooled）＋撃破の起点を雪崩フロントの到達位置（位置ベース・Core 不変）→ **ADR-27 で撃破駆動を実雪玉の到達へ移管** | ADR-25 |
 | サウンド | 表現層のみ移植＝薄い AudioService＋AudioConfigSO＋additive cosmetic イベント（Core 無改修・3系統 AudioSource・雪崩は IsAvalanching gate ループ） | ADR-26 |
 | 撃破の駆動 | 実際に流れている Snowball(VFX) が先頭行の敵の実位置に届いた瞬間にその谷の先頭行を1行撃破（1雪玉=1行）。別フロントの模擬を廃止＝見た目と同期・入力ちらつきに頑健。後続行の即死は谷ごとの撃破クールダウン（TryApplyAvalanche・既定0.2s）でレート制御 | ADR-27 |
+| 展示ビルド化 | 3Dアート（山メッシュ＋FBXアクター＋Animator）・演出・マルチシーン（Title→TH→Result）・LiDAR入力（`seq,channel,shaving` 3列）・`unity` CLI＋`com.unity.pipeline` 開発連携。**git履歴からの遡及要約・要レビュー** | ADR-28 |
 
 ---
 
@@ -344,3 +345,21 @@
 - **coupling の明記（ADR-25 からの反転）**: ADR-25 は「`AvalancheVfx`/`Snowball` は撃破に一切干渉しない純 cosmetic」としたが、本 ADR は **`Snowball` を撃破の駆動に昇格**させる（`Launch` に `frontRowDistance`/`onReachFrontRow` を追加。既定 null で従来の純 cosmetic も維持）。トレードオフ: 見た目と撃破の同期・パラメータ二重管理の解消・入力頑健性を得る代わりに、gameplay が VFX ストリームに依存する。撃破の粒度（先頭行 × `rowWidth` / 1 行 1 ヒット）・`ApplyAvalanche` の中身（`SnowPuff`・`OnEnemyKilled` 音・味方巻き込み `OnAllyCaught`）は不変。
 - **不変（覆さない）**: Core（`EnemyMatrix`/State/`Scoring`/各種 Clock の**ロジック**）・`ChannelController.ApplyAvalanche` の撃破解決と粒度・敵/弾/味方/変装の生成・`Projectile`・入力（`IInputSource`）・カメラ・座標系・EditMode テスト。物理不使用維持（`Snowball` は従来どおりコライダーなしのスクリプト滑走）。`AudioService` 連携（`OnEnemyKilled`＝行単位1回・`OnAvalancheChanged` gate）は `ApplyAvalanche`/`AvalancheController` を経由するため据え置きで機能。ADR-4（プール）・ADR-20・ADR-21・ADR-24 を踏襲。`AvalancheClock`（Core・EditMode 済）は本改訂で**未使用**になるが、Core ロジックとテストは残置（将来のペース制御拡張点／削除は別判断）。
 - **残タスク（MCP Play 検証）**: ①削り→雪玉が麓（先頭行）到達の瞬間に先頭行が消える（届く前に消えない・届いて消える）②**先頭行は即時・後続行は約 0.2s 間隔**で消える（クールダウンが効き、後ろの行まで一気に消えない）③位置検知ちらつき相当（谷を小刻みに切替）でも主谷へ発射済みの雪玉で撃破が成立④タップ（短い削り）でも発射された雪玉が届いて撃破＝連続長押し不要⑤氷枯渇で新規射出停止・在庫雪玉は完走⑥撃破音（Monster・行単位）/雪崩ループ音が従来どおり。`AvalancheController`/`AvalancheVfx`/`Snowball`/`ChannelController` の撃破まわりは薄いアダプタ／単純タイマー（ADR-11）のため EditMode テストは追加せず MCP Play で検証（ADR-11/25 と同方針）。
+
+## ADR-28: 展示ビルド化（3Dアート・マルチシーン・LiDAR入力・Pipeline 開発連携）— 記録（遡及・要レビュー）
+
+> **このエントリは 2026-08 に `main` へ直接マージされた作業を git 履歴から再構成した要約であり、正式な「決定／結果／不変」の精査は未了。** 詳細は各ブランチと `docs/phases.md` Phase 7 を参照。ADR-1〜27 のように「これに従えば配線が完了する」レベルの規範性はまだない。
+
+- **背景**: Phase 1〜6（ADR-1〜27）で遊びの核と表現層の骨格が固まった。展示に出すため、プリミティブのままだったアクター・山を 3D アセットへ、平面的な演出を本番演出へ、単一シーン運用を Title→ゲーム→Result のフローへ、開発時の検証を Editor 手動から自動連携へ、それぞれ引き上げる必要が生じた。
+
+- **変更点（領域別・git 履歴ベース）**:
+  - **3D アート**: 手続き生成の山 Quad／プリミティブのアクターを、造形済み山メッシュ（外部作。虹色サーモ風の中間アセットは廃棄）と FBX アクター（`TGS_兵士赤` 敵兵・`TGS_Ally` 味方・市民）＋ Animator へ置換。地形の高さ基準を山メッシュへ移し、敵停止位置を radial 8.0 に。旧・敵モデル生成コードは削除。
+  - **演出**: 撃破時に敵が横回転で吹き飛んで蒸発（`DissolveBurst`）、パーティクルを prefab 化（`SnowPuff`/`Snowball`/`SphereSpawner`）。撃破音は 3 クリップの順送り再生。
+  - **雪崩シェーダー**: カスタムシェーダー 2 種（「キラキラの雪崩」「シンプルな雪」）＋環境光調整（`AvalancheVfx` 経由で切替。ADR-25/27 の雪玉ストリーム駆動は不変）。
+  - **マルチシーン**: `TitleScene` / `ResultScene` を新規作成し prefab 化、Build Settings に `TitleScene → TH → ResultScene` を登録。各シーンに `Enter` キー遷移（`TitleScene.cs` / `ResultScene.cs` = `KakigoriTD.Scenes`、`GameManager` は勝敗確定後 `SceneManager.LoadScene("ResultScene")`）。ゲーム本体は `TH.unity`（`Assets/Prefabs/TH_Stage.prefab` に `GameManager` 一式）。`SampleScene` は旧セットアップとして Build 対象外で残置。
+  - **LiDAR 入力（ADR-24 の拡張）**: `tools/lidar-tracker` を公式 YDLidar-SDK ベースへ載せ替え、`valley_tracker.py` が落氷を 4 谷へ分類して **`seq,channel,shaving`（3 列）** を原子的に書く。ADR-24 の 2 列契約（`seq,channel`）に 3 列目 `shaving` を追加し、`VisionInputSource` が谷選択に加えて削りも供給できるようにした（旧 2 列ファイル＝position-tracker では常に false で後方互換）。`tools/lidar-tracker2` / `2.1` は Hokuyo UBG-04LX-F01 の別系統検証。
+  - **開発連携**: `com.unity.pipeline`（`0.5.0-exp.1`）を `manifest.json` に追加。`unity` CLI（`~/.unity/bin/unity`）で起動中 Editor をヘッドレス駆動（recompile / run_tests / screenshot / GameObject・シーン操作 / eval）。旧 Unity-MCP（`com.ivanmurzak.unity.mcp`、2026-07-30 に manifest から削除済み）の OpenUPM scoped registry 残骸を撤去。運用ルールは `CLAUDE.md`「Unity Editor 連携」節。`docs/mcp-guide.md` は旧 MCP 前提のまま（ツール名は読み替え）。
+
+- **不変（この作業で覆していないはず。要確認）**: Core（`EnemyMatrix`/State/`Scoring`/各種 Clock のロジック）・雪崩の撃破解決（ADR-27）・生成/プール（ADR-4）・入力抽象 `IInputSource`（ADR-6）・Singleton は `GameManager` のみ（ADR-5）・調整値は SO（ADR-1）・物理不使用。EditMode は現在 **151 本**（`unity command run_tests --mode editor` で緑を確認）。
+
+- **未了（このエントリを正式 ADR に昇格させる前に）**: ①3Dモデル/シェーダー/Animator 統合の設計判断を各領域の ADR に分割 ②マルチシーン通しの受け入れ基準と Play 検証記録 ③LiDAR 実機 end-to-end ④`SampleScene` の要否判断 ⑤各ブランチが Core/入力/Singleton 方針を破っていないかのレビュー。
