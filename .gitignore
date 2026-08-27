@@ -118,3 +118,6 @@ InitTestScene*.unity*
 
 # macOS
 .DS_Store
+
+# LiDAR env memo: keep the note, not the machine-specific config copy
+/tools/環境構築について/config.toml
