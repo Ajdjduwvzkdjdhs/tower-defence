@@ -40,6 +40,10 @@ namespace KakigoriTD.Gameplay
         private Action _onReachFrontRow;       // 到達時に 1 回だけ呼ぶ（= 1 雪玉 1 行）。
         private bool _reachedFront;            // 既に発火したか（多重撃破防止）。
 
+        // 一般化位置到達（phase-preview-feedback §3.4）: 谷を持たない LiDAR 経路用。毎フレーム自分の現在位置を渡し、
+        // 半径内の敵を 1 体撃破できたら true が返る。true で _reachedFront を立てて以後は純滑走（1 雪玉 1 撃）。
+        private Func<Vector3, bool> _tryKillNear;
+
         /// <summary>
         /// 山頂寄りの一点から谷の外向きへ射出する。完了時に onDone を呼ぶ（所有者がプール返却する）。
         /// </summary>
@@ -63,6 +67,33 @@ namespace KakigoriTD.Gameplay
             _onDone = onDone;
             _frontRowDistance = frontRowDistance;
             _onReachFrontRow = onReachFrontRow;
+            _tryKillNear = null;
+            _reachedFront = false;
+            _speed = _startSpeed;
+            _elapsed = 0f;
+            _spin = UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(180f, 540f);
+
+            Apply();
+        }
+
+        /// <summary>
+        /// 検知点から放射方向へ射出する一般化版（phase-preview-feedback §3.4）。谷を持たず、滑走中に
+        /// <paramref name="tryKillNear"/> が半径内の敵を 1 体撃破できたら以後は純滑走する（1 雪玉 1 撃）。
+        /// 拡散は <paramref name="dir"/>（方位角を回した放射方向）で表すため <paramref name="lateral"/> は 0 で呼ぶ。
+        /// </summary>
+        public void Launch(Vector3 dir, float startRadius, float lateral, float endRadius,
+            Func<float, float, float> heightAt, Action<Snowball> onDone, Func<Vector3, bool> tryKillNear)
+        {
+            _outwardDir = dir;
+            _perpDir = new Vector3(dir.z, 0f, -dir.x);
+            _radius = startRadius;
+            _lateral = lateral;
+            _endRadius = endRadius;
+            _heightAt = heightAt;
+            _onDone = onDone;
+            _frontRowDistance = null;
+            _onReachFrontRow = null;
+            _tryKillNear = tryKillNear;
             _reachedFront = false;
             _speed = _startSpeed;
             _elapsed = 0f;
@@ -87,6 +118,12 @@ namespace KakigoriTD.Gameplay
             {
                 _reachedFront = true;
                 _onReachFrontRow?.Invoke();
+            }
+
+            // 一般化位置到達（phase-preview-feedback §3.4・LiDAR 経路）: 半径内の敵を 1 体撃破できたら以後は純滑走。
+            if (!_reachedFront && _tryKillNear != null && _tryKillNear(transform.position))
+            {
+                _reachedFront = true;
             }
 
             if (_radius >= _endRadius || _elapsed >= _maxLifetime)

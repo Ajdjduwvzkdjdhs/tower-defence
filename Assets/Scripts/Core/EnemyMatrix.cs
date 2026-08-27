@@ -115,6 +115,29 @@ namespace KakigoriTD.Core
         }
 
         /// <summary>
+        /// item を 1 体だけ行から取り除く（雪玉が半径内の敵を 1 体撃破する用・phase-preview-feedback §3.4）。
+        /// 行が空になったらその行ごと除去し、後続行が 1 つ手前へ繰り上がる。隔離行フラグも解除する。
+        /// 見つからなければ false（マトリックスは不変）。
+        /// </summary>
+        public bool Remove(T item)
+        {
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                int idx = row.IndexOf(item);
+                if (idx < 0) continue;
+                row.RemoveAt(idx);
+                if (row.Count == 0)
+                {
+                    _rows.RemoveAt(i);
+                    _isolatedRows.Remove(row);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// 全行を消して全要素を返す（Wave 終了時の残敵消去用）。返却後はマトリックスが空。
         /// </summary>
         public IReadOnlyList<T> RemoveAll()

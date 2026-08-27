@@ -210,46 +210,91 @@ namespace KakigoriTD.Gameplay
             {
                 var e = killed[i];
                 if (e == null) continue;
-
-                // Kill / Release より前に位置を取得して雪しぶきを発生（ADR-20）
-                _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
-
-                // 同じく Release 前に見た目を複製し、身代わりを蒸発させる（純 cosmetic・ADR-27 不変）。
-                // 敵本体は従来どおり即座にプールへ返るため、撃破解決のタイミングは変わらない。
-                if (_burstPool != null)
-                {
-                    // 山へ進む向きの逆＝麓側へ押し出す。着地点は斜面に乗せる（ADR-21）。
-                    Vector3 landing = e.transform.position + _outwardDir * _knockbackDistance;
-                    if (_heightAt != null) landing.y = _heightAt(landing.x, landing.z);
-                    _burstPool.Get().Play(e.transform, landing, _burstPool.Release);
-                }
-
-                if (e is AllyNPC ally)
-                {
-                    // 自走退場ハンドラの二重発火を防ぐ
-                    ally.OnExpired -= OnAllyExpired;
-                    ally.Kill();
-                    _allyPool.Release(ally);
-                    OnAllyCaught?.Invoke();
-                }
-                else if (e is DisguisedEnemy disguised)
-                {
-                    // 変装敵は AllyNPC ではないので OnAllyCaught を発火しない（無ペナルティ）。
-                    disguised.Kill();
-                    _disguisedPool.Release(disguised);
-                    killedReal = true;
-                }
-                else
-                {
-                    e.Kill();
-                    _pool.Release(e);
-                    killedReal = true;
-                }
+                if (PerformKill(e) == KillKind.Ally) OnAllyCaught?.Invoke();
+                else killedReal = true;
             }
             RepositionAll();
             // 実敵/変装を撃破した行でのみ撃破音（Monster）を 1 回。味方のみの行は無音（ADR-26）。
             if (killedReal) OnEnemyKilled?.Invoke();
             return n;
+        }
+
+        private enum KillKind { Ally, Real }
+
+        /// <summary>
+        /// 敵 e の撃破演出（雪しぶき puff・身代わり蒸発 burst）＋ Kill ＋ 適切なプールへの返却を行う。
+        /// マトリックスからの除去（行 or 単体）と繰り上げ・イベント発火は呼び出し側の責務。ADR-20/27 不変。
+        /// </summary>
+        private KillKind PerformKill(Enemy e)
+        {
+            // Kill / Release より前に位置を取得して雪しぶきを発生（ADR-20）
+            _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
+
+            // 同じく Release 前に見た目を複製し、身代わりを蒸発させる（純 cosmetic）。
+            if (_burstPool != null)
+            {
+                Vector3 landing = e.transform.position + _outwardDir * _knockbackDistance;
+                if (_heightAt != null) landing.y = _heightAt(landing.x, landing.z);
+                _burstPool.Get().Play(e.transform, landing, _burstPool.Release);
+            }
+
+            if (e is AllyNPC ally)
+            {
+                ally.OnExpired -= OnAllyExpired; // 自走退場ハンドラの二重発火を防ぐ
+                ally.Kill();
+                _allyPool.Release(ally);
+                return KillKind.Ally;
+            }
+            if (e is DisguisedEnemy disguised)
+            {
+                disguised.Kill();
+                _disguisedPool.Release(disguised);
+                return KillKind.Real;
+            }
+            e.Kill();
+            _pool.Release(e);
+            return KillKind.Real;
+        }
+
+        /// <summary>
+        /// <paramref name="worldPos"/> の XZ から <paramref name="maxRadius"/> 内で生存している最も近い敵を返す
+        /// （撃破はしない）。無ければ null。雪玉の一般化位置到達（phase-preview-feedback §3.4）で
+        /// <see cref="EnemyRegistry"/> が 4 谷を横断して最近傍を選ぶために使う。
+        /// </summary>
+        public Enemy FindNearestLive(Vector3 worldPos, float maxRadius)
+        {
+            if (_matrix == null || _matrix.IsEmpty) return null;
+            float best = maxRadius * maxRadius;
+            Enemy hit = null;
+            for (int row = 0; row < _matrix.RowCount; row++)
+            {
+                var members = _matrix.RowAt(row);
+                for (int s = 0; s < members.Count; s++)
+                {
+                    var e = members[s];
+                    if (e == null || !e.IsAlive) continue;
+                    float dx = e.transform.position.x - worldPos.x;
+                    float dz = e.transform.position.z - worldPos.z;
+                    float sq = dx * dx + dz * dz; // XZ のみ
+                    if (sq <= best) { best = sq; hit = e; }
+                }
+            }
+            return hit;
+        }
+
+        /// <summary>
+        /// この谷の敵 <paramref name="e"/> を 1 体だけ撃破する（雪玉 1 個 = 1 体・phase-preview-feedback §3.4）。
+        /// 撃破演出 → マトリックスから単体除去 → 繰り上げ → 味方なら <see cref="OnAllyCaught"/>／
+        /// 実敵・変装なら <see cref="OnEnemyKilled"/> を発火。クールダウンは呼び出し側（グローバル）で管理する。
+        /// </summary>
+        public void KillOne(Enemy e)
+        {
+            if (e == null || _matrix == null) return;
+            var kind = PerformKill(e);
+            _matrix.Remove(e);
+            RepositionAll();
+            if (kind == KillKind.Ally) OnAllyCaught?.Invoke();
+            else OnEnemyKilled?.Invoke();
         }
 
         /// <summary>Wave 終了時などに残敵・残味方を全消去してプールへ返す。</summary>
