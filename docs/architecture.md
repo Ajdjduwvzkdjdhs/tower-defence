@@ -28,6 +28,7 @@
 | サウンド | 表現層のみ移植＝薄い AudioService＋AudioConfigSO＋additive cosmetic イベント（Core 無改修・3系統 AudioSource・雪崩は IsAvalanching gate ループ） | ADR-26 |
 | 撃破の駆動 | 実際に流れている Snowball(VFX) が先頭行の敵の実位置に届いた瞬間にその谷の先頭行を1行撃破（1雪玉=1行）。別フロントの模擬を廃止＝見た目と同期・入力ちらつきに頑健。後続行の即死は谷ごとの撃破クールダウン（TryApplyAvalanche・既定0.2s）でレート制御 | ADR-27 |
 | 展示ビルド化 | 3Dアート（山メッシュ＋FBXアクター＋Animator）・演出・マルチシーン（Title→TH→Result）・LiDAR入力（`seq,channel,shaving` 3列）・`unity` CLI＋`com.unity.pipeline` 開発連携。**git履歴からの遡及要約・要レビュー** | ADR-28 |
+| LiDAR 連続座標入力 | LiDAR は谷でなく氷の座標 `seq,x,y,shaving` を送る。検知点から放射状に雪玉ストリーム→一般化位置到達で1体撃破。d 連動で cooldown(0.6→0)/角度spread(25→3)。氷消費は無効。角度は設置時 config 固定・平行移動のみキー calib。**Unity 側実装済み／Python・実機は未着手（Proposed）** | ADR-29 |
 
 ---
 
@@ -363,3 +364,23 @@
 - **不変（この作業で覆していないはず。要確認）**: Core（`EnemyMatrix`/State/`Scoring`/各種 Clock のロジック）・雪崩の撃破解決（ADR-27）・生成/プール（ADR-4）・入力抽象 `IInputSource`（ADR-6）・Singleton は `GameManager` のみ（ADR-5）・調整値は SO（ADR-1）・物理不使用。EditMode は現在 **151 本**（`unity command run_tests --mode editor` で緑を確認）。
 
 - **未了（このエントリを正式 ADR に昇格させる前に）**: ①3Dモデル/シェーダー/Animator 統合の設計判断を各領域の ADR に分割 ②マルチシーン通しの受け入れ基準と Play 検証記録 ③LiDAR 実機 end-to-end ④`SampleScene` の要否判断 ⑤各ブランチが Core/入力/Singleton 方針を破っていないかのレビュー。
+
+## ADR-29: LiDAR 入力を連続座標に置換し、検知点から放射状に雪玉を放出する（谷選択を廃止・ADR-24/25/27 を LiDAR 経路で改訂）— Proposed（`preview-feedback`）
+
+- **背景**: ADR-24 は LiDAR/カメラの入力を「4 谷のどれか（`ActiveChannel`）＋削り」に落としてファイル経由で渡す設計だった。内覧会のフィードバックを受け、氷が落ちた**連続座標そのもの**を使い、その位置から雪玉を出す方式に変えたい（先生コメント「中心近くは雪崩の範囲が拡大するがダメージが低下する」等のギミック余地を作るため）。詳細と Q&A の確定事項は `docs/phase-preview-feedback.md`。
+
+- **決定**:
+  - **データ契約**: Python は氷の代表点（関心円内で中心最近傍の 1 点）の座標 `seq,x,y,shaving` を書く（mm・LiDAR 原点フレーム・`x = r·cosθ`, `y = −r·sinθ`）。検知なしは `seq,,,0`。旧 `seq,channel,shaving` は LiDAR 経路で廃止。関心円（中心オフセット・半径・許容）は Python 側 `tools/lidar-tracker/preview.toml`。
+  - **谷選択の廃止（LiDAR 経路）**: `ActiveChannel` を使わない。`ChannelController` の**敵スポーン（4 方向の行列）は不変**。撃破は谷を経由せず、`EnemyRegistry` が 4 谷を横断して「雪玉の現在位置から `killRadius` 内の最も近い生存敵を 1 体撃破」する（`EnemyMatrix<T>.Remove(item)` を新設）。**1 雪玉 = 1 撃**（`Snowball._reachedFront` 流用）。
+  - **放出**: `LidarAvalancheVfx` が検知点 P から**山中心を通る放射方向**へ雪玉ストリーム（`_spawnRate`/s）。拡散は横オフセットではなく**放射方向に対する角度ばらつき（±deg）**で表す。
+  - **d 連動ギミック**: `d`＝検知点の中心距離[mm]（0..`radiusMm` にクランプ）。撃破クールダウン `cooldown(d) = lerp(中心 0.6s, 外周 0.0s)`（グローバル単一ゲート・「今フレームの d」に依存する割り切りを承知で採用）、拡散 `spread(d) = lerp(中心 ±25°, 外周 ±3°)`。中心＝広く弱い / 外周＝狭く強い。両端は `LidarPreviewConfigSO`。
+  - **物理不使用を維持**: 撃破は `Snowball` の一般化位置到達（コライダーなし・スクリプト滑走）。ADR-11/21/25/27 の「物理を使わない」方針は踏襲。
+  - **氷消費は無効（無限）**: `LidarPreviewConfigSO._consumeIce = false` 既定。`IceStock`／`AvalancheController` の氷ドレインは保険として残置し、`true` のときだけゲートする分岐を持つ。「完全排除」指示で一括削除（手順は phase-preview-feedback §3.10）。
+  - **キャリブレーション**: 角度・回転・反転は設置時に `LidarPreviewConfigSO`（`_worldRotationDeg`/`_flipX`/`_flipY`）で一度確定して以後固定。プレイ中は `C` 長押し＋矢印キーで**山中心の平行移動オフセット（`field_offset`・10mm 刻み）**のみを nudge、離すと PlayerPrefs へ保存。
+  - **旧経路の残置**: `InputMode.Keyboard`（W/A/S/D 谷選択＋旧 `AvalancheVfx`）と `InputMode.Vision` は当面残す。`_inputMode` で排他。新モデルが現場で通ったら別コミットで削除。
+
+- **不変（覆さない）**: Core（`EnemyMatrix` の行ロジック本体・State・`Scoring`・`PenaltyTally`・各 Clock）、`ChannelController` の敵スポーン・隊列・繰り上げ、`Enemy`/`AllyNPC`/`DisguisedEnemy`、`Fort`、`WaveManager`、`Projectile`/`ProjectileFactory`、`AvalancheController`（旧経路用に据置）、Singleton は `GameManager` のみ（ADR-5）、調整値は SO（ADR-1）、物理不使用。味方巻き込みペナルティ（`OnAllyCaught`→`PenaltyTally`）と撃破音（`OnEnemyKilled`）は新経路の `KillOne` からも発火して従来の配線を流用。
+
+- **検証状況**: Unity 側は EditMode **187 本**（`LidarPositionProtocol` 13 / `LidarPointMapper` 9 / `EnemyMatrix.Remove` 4 / `EnemyRegistry` 5 / `LidarPreviewConfigSO` 5 ＋既存 151）＋ PlayMode 2 本（`LidarAvalancheVfx` の放出／撃破パス到達／`IsEmitting` の toggle）緑。`unity command` で確認。**Python 側（`valley_tracker.py` の連続座標化）と実機 end-to-end は未着手**（`preview.example.toml` のみ用意。関数単位パッチは phase-preview-feedback §2.3）。
+
+- **昇格条件（Proposed → Accepted）**: ①`valley_tracker.py` の改修と `preview.toml` の現物合わせ ②LiDAR 実機で「氷を落とす→その位置から雪玉→当たった敵が消える」「中心＝広く弱い / 外周＝狭く強い」を確認 ③マルチシーン通し（Title→TH→Result）で回帰なし ④旧経路の削除 or 正式残置の判断。

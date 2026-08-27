@@ -90,6 +90,28 @@ mode = "nearest_center"           # 現状これのみ（円中心に最も近�
   ステータス行は `seq / x / y / shaving` 表示に変更。台数ぶんの段組みは維持。
 - README・`環境構築について/LiDAR環境設定メモ.md` の該当箇所を更新（谷設定 → 円設定）。
 
+### 2.3 実装状況（2026-08-28 時点）
+
+- **Unity 側（§3・§5 の 3〜10）は実装・検証済み**（EditMode 187本＋PlayMode 2本 緑、`unity command` で確認）。
+  `_inputMode = SimPointer` にすればマウスで新経路をすぐ試せる（LiDAR 不要）。
+- **Python 側（この §2）は未着手**。`tools/lidar-tracker/preview.example.toml` のみ用意済み（`.gitignore` に `preview.toml` 追加）。
+  `valley_tracker.py` は 900行・スレッド＋matplotlib＋SDK 依存で、**実機なしでは検証できない**ため、
+  ハードウェアのある回で下記の関数単位パッチを当てる:
+
+| 対象 | 変更 |
+|---|---|
+| 設定読み込み（`config.py` / モジュール冒頭） | `preview.toml` を読む `load_preview_config()` を追加。`CIRCLE_CENTER_MM`（tuple）・`CIRCLE_RADIUS_MM`・`CIRCLE_TOLERANCE_MM`・`REPRESENTATIVE_MODE` を公開。`VALLEYS = load_valleys_config()` と `MAX_POINTS_PER_VALLEY` / `CHANNEL_HOLD_SEC` は撤去可（残しても未使用）。 |
+| `IceClassifier.classify(samples)` | 返り値を `(channel, counts, ice_points)` → `(point_or_None, ice_points)` に。中身: `_is_valid` かつ `intensity < INTENSITY_MAX` の各 `p` を `theta=_display_angle(p["angle"])`, `r=p["distance"]` で `x=r*cos(radians(theta))`, `y=-r*sin(radians(theta))` に変換。`hypot(x-cx, y-cy) <= CIRCLE_RADIUS_MM + CIRCLE_TOLERANCE_MM` の点だけ残し、その中心距離が最小の 1 点を返す（無ければ `None`）。`_pick` / `_last_channel` は削除。 |
+| `UnitState` | `self._channel` → `self._point`（`(x,y)` or `None`）。`publish(point, ice_points, all_points, valid_count)`。`detection()` は `(point, detected_at)`。`point is not None` のときだけ `_detected_at` を更新（ホールドの実体）。 |
+| `reader_loop` | `classifier.classify` の新シグネチャに合わせ、`point` を `state.publish` へ。ログは `ice -> (x, y)` 形式。 |
+| `PositionWriter` | `_channel_hold` / `_pick` 系を撤去。`resolve()`: 全台の `detection()` を突き合わせ、`age = now - detected_at`。`age <= SHAVING_HOLD_SEC` なら `shaving=True` かつ直近 `point` を継続。`point is None` かつ `age > SHAVING_HOLD_SEC` なら「検知なし」。`run()` の行組み立て: `x,y = point if (point and shaving系条件) else ("","")` → `f"{seq},{x},{y},{1 if shaving else 0}\n"`（原子的 rename・seq 単調増加は不変）。 |
+| `LidarUnit.build` / `refresh` / `run_plot.update` | 谷の扇形塗り（`_valley_fills` / `valley_spans`）を撤去し、関心円 2 本（`CIRCLE_RADIUS_MM` と `+TOLERANCE`）＋代表点マーカーを描く。極座標プロットのままなので、円は `theta=linspace(0,2π)` で半径一定の線として描ける（`x=r*cosθ,y=-r*sinθ` の中心オフセットは Cartesian になるので、`ax.plot` を Cartesian サブプロットに変えるか、中心が原点近似なら極座標のまま円で可）。ステータス行を `seq / x / y / shaving` に。 |
+| 2 台の扱い | 現行は台ごとに `classify` → `PositionWriter` が突き合わせ。連続座標では **全台の氷点を 1 リストに結合してから円フィルタ・代表点選択**する方が素直（メモ「2台は垂直に積む＝同一座標系・単純に足し合わせ」より）。`reader_loop` を台ごとに回すのは維持しつつ、`PositionWriter.resolve` で全 `UnitState` の「直近点」から中心最近傍を 1 つ選ぶ形でよい。 |
+
+> 変換の健全性チェック: 氷を山の物理中心へ落として `valley_tracker.py` のログ `(x, y)` が概ね `(0, +300)` 付近になること。
+> ずれるなら `ANGLE_OFFSET_DEG`（LiDAR の物理向き）か `center_offset_mm` を現物合わせ。左右が反転していたら Unity 側
+> `LidarPreviewConfigSO._flipX/_flipY`（設置時に一度確定）で直す。Python 側の符号はいじらない。
+
 ---
 
 ## 3. Unity 側
