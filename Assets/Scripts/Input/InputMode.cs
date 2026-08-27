@@ -8,10 +8,19 @@ namespace KakigoriTD.Input
     /// </summary>
     public enum InputMode
     {
-        /// <summary>開発・検証用。谷選択はキーボード（W/A/S/D）。</summary>
+        /// <summary>【旧経路】開発・検証用。谷選択はキーボード（W/A/S/D）＋ Space 削り＋旧 AvalancheVfx。</summary>
         Keyboard,
 
-        /// <summary>展示本番。谷選択は位置検知（かき氷機の位置）。</summary>
+        /// <summary>【旧経路】谷選択は position-tracker（camera）。seq,channel,shaving 契約。</summary>
         Vision,
+
+        /// <summary>
+        /// 【新経路・展示本番】LiDAR 位置検知（連続座標 seq,x,y,shaving）。谷選択なし。
+        /// 検知点から放射状に雪玉を放出し、一般化位置到達で撃破（phase-preview-feedback.md）。
+        /// </summary>
+        LidarPosition,
+
+        /// <summary>【新経路・開発用】マウス/矢印キーで検知点を疑似入力（LiDAR なしで新経路を検証）。</summary>
+        SimPointer,
     }
 }

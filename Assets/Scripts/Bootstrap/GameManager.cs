@@ -28,8 +28,11 @@ namespace KakigoriTD.Bootstrap
 
         [Header("位置検知（Vision。未割り当てならキーボードのみ。谷選択の源は _inputMode で切替）")]
         [SerializeField] private VisionConfigSO _visionConfig;
-        [Tooltip("谷選択の源。展示本番=Vision（かき氷機の位置）／開発=Keyboard。")]
+        [Tooltip("入力経路。Keyboard/Vision=旧（谷選択）。LidarPosition=新（連続座標・展示本番）／SimPointer=新（マウス疑似・開発）。")]
         [SerializeField] private InputMode _inputMode = InputMode.Keyboard;
+
+        [Header("LiDAR 位置入力（新経路。未割り当てなら既定値インスタンスで動作）")]
+        [SerializeField] private LidarPreviewConfigSO _lidarPreviewConfig;
         [Tooltip("カメラの左右反転（ミラー）。左右の谷が逆に出るときに ON。W↔E を入れ替える（再生中もライブ反映）。")]
         [SerializeField] private bool _visionFlipHorizontal;
         [Tooltip("カメラの上下反転（ミラー）。前後の谷が逆に出るときに ON。N↔S を入れ替える（再生中もライブ反映）。")]
@@ -63,6 +66,9 @@ namespace KakigoriTD.Bootstrap
         private IInputSource _input;
         private AvalancheController _avalanche;
         private AvalancheVfx _avalancheVfx;
+        private LidarPositionInputSource _lidarPosSource; // 新経路（LidarPosition モード）のロスト警告用に保持
+        private LidarAvalancheVfx _lidarVfx;
+        private EnemyRegistry _enemyRegistry;
         private WaveManager _waveManager;
         private UIManager _ui;
         private GameStateMachine _machine;
@@ -117,6 +123,10 @@ namespace KakigoriTD.Bootstrap
 
             BuildAimIndicator();
 
+            // 新経路（LiDAR 連続座標／マウス疑似）。旧 AvalancheVfx は _inputMode がこれらのとき
+            // _avalanche.IsAvalanching が false 固定で idle のまま（射出しない）。
+            BuildLidarPathIfEnabled();
+
             _machine = new GameStateMachine();
             _machine.Change(new TitleState(_machine, this));
         }
@@ -133,6 +143,14 @@ namespace KakigoriTD.Bootstrap
         // 正常な「谷なし(-1)」とは区別し、ロスト時のみ表示する（docs/phase5.md §3-⑥）。
         private void UpdateTrackerWarning()
         {
+            // 新経路（LiDAR 連続座標）: seq 停滞のロストを警告。
+            if (_inputMode == InputMode.LidarPosition)
+            {
+                bool lidarWarn = _lidarPosSource != null && _lidarPosSource.IsLost;
+                _ui.SetTrackerWarning(lidarWarn ? "LiDAR 未接続（valley_tracker.py を確認）" : "");
+                return;
+            }
+
             // Inspector の左右／上下反転トグルを再生中もライブ反映（キャリブレーション用）。
             if (_visionSource != null)
             {
@@ -231,6 +249,40 @@ namespace KakigoriTD.Bootstrap
             }
 
             return new CompositeInputSource(keyboard, serial, vision, _inputMode);
+        }
+
+        // 新経路（phase-preview-feedback.md）。LiDAR の連続座標 or マウス疑似から、検知点 P を中心に
+        // 放射状の雪玉ストリームを放出し、一般化位置到達で撃破する。旧 4 谷経路とは _inputMode で排他。
+        private void BuildLidarPathIfEnabled()
+        {
+            if (_inputMode != InputMode.LidarPosition && _inputMode != InputMode.SimPointer) return;
+
+            var cfg = _lidarPreviewConfig != null
+                ? _lidarPreviewConfig
+                : ScriptableObject.CreateInstance<LidarPreviewConfigSO>();
+
+            _enemyRegistry = new EnemyRegistry(_channels);
+
+            IPositionInputSource posInput;
+            if (_inputMode == InputMode.LidarPosition)
+            {
+                _lidarPosSource = NewChild("LidarPositionInput").AddComponent<LidarPositionInputSource>();
+                _lidarPosSource.Configure(cfg, HeightAt);
+                var calib = NewChild("LidarCalibration").AddComponent<LidarCalibration>();
+                calib.Configure(_lidarPosSource, cfg, Camera.main);
+                posInput = _lidarPosSource;
+            }
+            else
+            {
+                var sim = NewChild("SimPositionInput").AddComponent<SimPositionInputSource>();
+                sim.Configure(cfg, HeightAt, Camera.main);
+                posInput = sim;
+            }
+
+            _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
+            _lidarVfx.Configure(posInput, _enemyRegistry, HeightAt, CreateSnowball, cfg,
+                cfg.ConsumeIce ? _ice : null);
+            _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
