@@ -19,6 +19,10 @@ namespace KakigoriTD.Data
         [Header("ファイル読み・ロスト検知")]
         [SerializeField] private float _pollIntervalSec = 0.05f;
         [SerializeField] private float _lostTimeoutSec = 0.3f;
+        [Tooltip("Editor：プロジェクトルート相対の共有ファイル。Python preview.toml の position_file と対。")]
+        [SerializeField] private string _positionFileRelative = "tools/lidar-tracker/out/position.txt";
+        [Tooltip("ビルド：persistentDataPath 下のファイル名。")]
+        [SerializeField] private string _positionFilePersistent = "position.txt";
 
         [Header("座標写像（mm → ゲームワールド XZ）")]
         [Tooltip("mm → ゲーム単位。円の縁がゲーム r=10（雪崩終端）想定の暫定値 10/300。現場調整。")]
@@ -62,6 +66,8 @@ namespace KakigoriTD.Data
 
         public float PollIntervalSec => _pollIntervalSec;
         public float LostTimeoutSec => _lostTimeoutSec;
+        public string PositionFileRelative => _positionFileRelative;
+        public string PositionFilePersistent => _positionFilePersistent;
         public float ScaleUnitsPerMm => _scaleUnitsPerMm;
         public float WorldRotationDeg => _worldRotationDeg;
         public bool FlipX => _flipX;
