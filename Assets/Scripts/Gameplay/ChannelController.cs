@@ -16,7 +16,7 @@ namespace KakigoriTD.Gameplay
     /// Phase2: 味方NPC 専用プール + 専用行（AddRow）対応。雪崩が味方行に達すると
     /// <see cref="OnAllyCaught"/> を発火し、自走退場は無ペナルティで行除去（ADR-16）。
     /// </summary>
-    public class ChannelController : MonoBehaviour
+    public class ChannelController : MonoBehaviour, IEnemyChannel
     {
         [Header("配置（砦中心からの外向き）")]
         // Phase4.5: 隊列を山の麓（斜面基部）に静止させる。先頭行(index0)=山頂寄り(up-slope)、後続は麓の平地側。
