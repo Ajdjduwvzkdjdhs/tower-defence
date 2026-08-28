@@ -7,7 +7,7 @@ namespace KakigoriTD.Gameplay
     /// 青い tint（味方と同色）で擬態するが、tell マーカー（小さな暗色キューブ）を持ち注意すれば見分けられる。
     /// 発射は基底 <see cref="Enemy.Update"/> のまま（factory≠null なので撃つ）。
     /// 自走退場しない（AllyNPC と異なり lifetime カウントを持たない）。
-    /// 雪崩で撃破されても <see cref="ChannelController.OnAllyCaught"/> は発火しない（無ペナルティ）。
+    /// 雪崩で撃破されても <c>EnemyField.OnAllyCaught</c> は発火しない（無ペナルティ）。
     /// </summary>
     public class DisguisedEnemy : Enemy
     {

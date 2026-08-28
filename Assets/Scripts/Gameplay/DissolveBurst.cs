@@ -10,7 +10,7 @@ namespace KakigoriTD.Gameplay
     /// プール返却コールバックを呼ぶ。<see cref="KakigoriTD.Factory.ObjectPool{T}"/> で使い回し、
     /// ホットパスで Instantiate しない（ADR-4）。
     ///
-    /// 敵本体には触れない。<see cref="ChannelController.ApplyAvalanche"/> は従来どおり
+    /// 敵本体には触れない。<c>EnemyField.KillOne</c> は従来どおり
     /// Kill→Release を即座に行い、本エフェクトは複製した見た目だけを溶かす。
     /// 撃破解決ロジックには一切関与しない純 cosmetic（ADR-27）。
     ///

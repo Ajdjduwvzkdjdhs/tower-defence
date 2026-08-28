@@ -10,7 +10,7 @@ namespace KakigoriTD.Gameplay
     /// <summary>
     /// LiDAR 位置入力（連続座標）版の雪崩。谷を持たず、検知点 P（<see cref="IPositionInputSource.WorldPoint"/>）
     /// から**山中心を通る放射方向へ**雪玉ストリームを放出し、雪玉が半径内の敵を 1 体撃破する
-    /// （phase-preview-feedback.md §3.4）。旧 <see cref="AvalancheVfx"/>（谷ストリーム＋ADR-27 先頭行到達）の
+    /// （phase-preview-feedback.md §3.4）。旧 AvalancheVfx（谷ストリーム＋ADR-27 先頭行到達）の
     /// 置き換え。物理不使用・雪玉はプール（ADR-4/21/25/27 の方針は踏襲）。
     ///
     /// d（＝検知点の中心距離[mm]）に連動して:
@@ -27,7 +27,7 @@ namespace KakigoriTD.Gameplay
         [SerializeField] private float _iceDrainPerSec = 1.0f;
 
         private IPositionInputSource _input;
-        private EnemyRegistry _registry;
+        private EnemyField _field;
         private Func<float, float, float> _heightAt;
         private ObjectPool<Snowball> _pool;
         private LidarPreviewConfigSO _config;
@@ -44,12 +44,12 @@ namespace KakigoriTD.Gameplay
         /// <summary>このフレームに放出しているか（デバッグ表示用）。</summary>
         public bool IsEmitting => _wasEmitting;
 
-        public void Configure(IPositionInputSource input, EnemyRegistry registry,
+        public void Configure(IPositionInputSource input, EnemyField field,
             Func<float, float, float> heightAt, Func<Snowball> createSnowball,
             LidarPreviewConfigSO config, IceStock ice = null)
         {
             _input = input;
-            _registry = registry;
+            _field = field;
             _heightAt = heightAt;
             _config = config;
             _ice = ice;
@@ -62,7 +62,7 @@ namespace KakigoriTD.Gameplay
         {
             bool emitting = false;
 
-            if (_input != null && _registry != null && _config != null && _pool != null
+            if (_input != null && _field != null && _config != null && _pool != null
                 && _input.HasPoint && _input.IsShaving && !_input.IsLost)
             {
                 bool iceOk = !_config.ConsumeIce || _ice == null
@@ -109,7 +109,7 @@ namespace KakigoriTD.Gameplay
         private bool TryKill(Vector3 worldPos)
         {
             float d = (_input != null && _input.HasPoint) ? _input.DistanceMm : _lastDMm;
-            return _registry.TryKillNearest(worldPos, _config.KillRadiusUnits, _config.CooldownSecFor(d), Time.time);
+            return _field.TryKillNearest(worldPos, _config.KillRadiusUnits, _config.CooldownSecFor(d), Time.time);
         }
     }
 }
