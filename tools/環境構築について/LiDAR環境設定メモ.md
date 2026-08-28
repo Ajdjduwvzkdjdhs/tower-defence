@@ -4,6 +4,13 @@ LiDARを動作させるプログラムは `tools/lidar-tracker/valley_tracker.py
 
 また、`valley_tracker.py` の動作には `tools/lidar-tracker` に適切な設定値が書かれた `config.toml` を配置する必要があります。添付した `config.toml` を使用してください。設定値の詳細は添付した `config.toml` のコメントを見てください。氷検知の精度をよくするために設定値を環境に合わせて変更する必要があります。特に重要なのが `range_max_cm` や `intensity_max` です。
 
+> **2026-08 更新（`preview-feedback` / ADR-29）**: `valley_tracker.py` は谷 channel ではなく
+> **氷の連続座標** `seq,x,y,shaving` を送るようになった。関心円（山の中心オフセット・半径・許容）は
+> 新ファイル `tools/lidar-tracker/preview.toml`（`cp preview.example.toml preview.toml`）で設定する。
+> `config.toml` の `[valleys.*]` は未使用。現物合わせは「氷を山の中心へ落として `[LiDARn] ice -> (x, y)` が
+> だいたい `(0, +300)` になること」を目安に `intensity_max` と `preview.toml` を詰める。詳細は
+> `docs/phase-preview-feedback.md`。
+
 ---
 
 ## valley_tracker.pyを動かすための環境構築 (tools/lidar-tracker/README.mdより抜粋)

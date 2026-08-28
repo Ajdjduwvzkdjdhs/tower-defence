@@ -1,13 +1,18 @@
-"""LiDAR の落氷検知 → 谷チャンネル + 削り状態（Kakigori TD / lidar-tracker）。
+"""LiDAR の落氷検知 → 氷の連続座標 + 削り状態（Kakigori TD / lidar-tracker）。
 
-`scan_plot_realtime.py`（可視化のみ）を土台に、検出した点を「どの谷に氷が落ちたか」へ
-写して Unity へ渡す。Unity 側は共有テキストファイルを読むだけで、点群も座標も持たない
-（分類の責務は Python 側・`docs/phase5.md` §3-① の踏襲）。
+`scan_plot_realtime.py`（可視化のみ）を土台に、検出した氷の**代表点の座標**を Unity へ渡す。
+谷（channel）の分類はしない（phase-preview-feedback.md / ADR-29）。Unity 側はその座標を
+山上のワールド位置へ写し、そこから雪玉を放出する。
 
-出力は 1 行 `seq,channel,shaving`（例 `1837,2,1`）。`position-tracker` の 2 列契約
-`seq,channel` に 3 列目を足したもので、temp へ書き切って `os.replace()` の原子的 rename
-（partial read を排除）・`seq` 単調増加は そのまま。Unity は `seq` の停止で「ロスト」を
-検知し、`channel` も `shaving` も安全側（-1 / false）へ倒す。
+出力は 1 行 `seq,x,y,shaving`（例 `1837,12.5,-284.0,1`）。座標は LiDAR 原点フレーム[mm]:
+    x = r * cos(theta) ,  y = -r * sin(theta)     （theta = 表示角[deg]、r = distance[mm]）
+これで theta=0° -> +X、theta=270° -> +Y。物理配置では山の中心は LiDAR の 270° 方向へ
+約 300mm なので、中心に落ちた氷はおよそ (x, y) = (0, +300) になる。
+
+代表点は preview.toml の関心円（中心オフセット・半径・はみ出し許容）の中で、円中心に最も
+近い 1 点。検知なしは `seq,,,0`（x,y 空欄）。temp へ書き切って `os.replace()` の原子的
+rename（partial read を排除）・`seq` 単調増加はそのまま。Unity は `seq` の停止で「ロスト」を
+検知し、検知点なし・削りなし（安全側）へ倒す。
 
 構成（台数 + 1 スレッド、+ 可視化なら メインスレッド）:
   - 読み取りスレッド : 台ごとに 1 本。read_scan() で 1 回転ぶんを読み、その回転を
@@ -59,6 +64,7 @@
 """
 
 import argparse
+import math
 import os
 import sys
 import threading
@@ -67,13 +73,12 @@ import time
 import numpy as np
 
 from config import (
-    VALLEY_NAMES,
     load_detection_config,
     load_ice_config,
     load_output_config,
+    load_preview_config,
     load_scan_config,
     load_serial_config,
-    load_valleys_config,
 )
 from lidar import TMiniPlus, max_points_per_rev
 
@@ -90,13 +95,18 @@ RANGE_MIN_CM, RANGE_MAX_CM = load_detection_config()
 RANGE_MIN_MM = RANGE_MIN_CM * 10
 RANGE_MAX_MM = RANGE_MAX_CM * 10
 
-# 谷のテーブル（添字＝Unity の channel）と氷の判定パラメータ。
-VALLEYS = load_valleys_config()
+# 氷の判定パラメータ。連続座標モードでは谷テーブル・max_points_per_valley・channel_hold_sec は
+# 使わない（preview.toml の関心円が担う）。intensity_max と shaving_hold_sec だけ流用する。
 ICE = load_ice_config()
 INTENSITY_MAX = ICE["intensity_max"]
-MAX_POINTS_PER_VALLEY = ICE["max_points_per_valley"]
-CHANNEL_HOLD_SEC = ICE["channel_hold_sec"]
 SHAVING_HOLD_SEC = ICE["shaving_hold_sec"]
+
+# 関心円（連続座標モード。preview.toml）。x = r*cos(theta), y = -r*sin(theta) の mm フレーム。
+_PREVIEW = load_preview_config()
+CIRCLE_CENTER_MM = _PREVIEW["center_offset_mm"]          # (cx, cy)
+CIRCLE_RADIUS_MM = _PREVIEW["radius_mm"]
+CIRCLE_TOLERANCE_MM = _PREVIEW["tolerance_mm"]
+CIRCLE_FILTER_MM = CIRCLE_RADIUS_MM + CIRCLE_TOLERANCE_MM  # フィルタはこの半径で通す（はみ出し許容込み）
 
 # Unity が読む共有ファイル。
 POSITION_FILE = load_output_config()
@@ -136,13 +146,10 @@ STATUS_LEFT_IN = 0.3
 STATUS_BOTTOM_IN = 0.45
 
 #--- 点の描き方 ----------------------------------------------------------
-# 谷の合わせ込みでは「氷でない点がどこにいるか」も見たいので、有効な点はすべて
-# 灰色で描き、そのうち氷とみなした点だけを赤で重ねる。採用中の谷は塗りを濃くする。
+# 合わせ込みでは「氷でない点がどこにいるか」も見たいので、有効な点はすべて灰色で描き、
+# そのうち関心円内の氷を赤、採用中の代表点を緑の輪で重ねる。
 ALL_POINT_COLOR = "0.75"
 ICE_POINT_COLOR = "tab:red"
-VALLEY_FILL_COLOR = "tab:blue"
-VALLEY_FILL_ALPHA = 0.07
-VALLEY_ACTIVE_FILL_ALPHA = 0.25
 
 #--- フィルタの ON/OFF（現物合わせで切り替える）-------------------------
 # scan_plot_realtime.py と同じ意味。AMBIENT / SPECULAR は SDK 側で効く。
@@ -156,7 +163,7 @@ FILTER_BY_RANGE = True             # RANGE_MIN..RANGE_MAX の外を除外
 def _is_valid(p):
     """フィルタ設定に照らして、その点を「有効な物体点」とみなすか。
 
-    ここでは氷かどうかまでは見ない（Intensity・谷・点数の判定は IceClassifier）。
+    ここでは氷かどうかまでは見ない（Intensity・関心円の判定は IcePointExtractor）。
     scan_plot_realtime.py の同名関数と同じ判定にしてあるので、あちらで合わせ込んだ
     `[detection]` の値がそのままこちらでも同じ意味を持つ。
     """
@@ -175,109 +182,58 @@ def _display_angle(angle_deg):
     return (angle_deg + ANGLE_OFFSET_DEG) % 360.0
 
 
-def valley_spans(valley):
-    """1 つの谷の角度範囲を [(開始角, 終了角), ...] で返す（表示角[度]）。
-
-    0 度をまたぐ指定は 2 つに割れる。描画にも判定にも同じ定義を使う。
-    """
-    start = valley["angle_start_deg"]
-    end = valley["angle_end_deg"]
-
-    if start <= end:
-        return [(start, end)]
-
-    return [(start, 360.0), (0.0, end)]
+def _to_xy_mm(display_deg, distance_mm):
+    """表示角[deg]・距離[mm] → LiDAR 原点フレームの (x, y)[mm]。
+    x = r*cos(theta), y = -r*sin(theta)（theta=0°→+X, theta=270°→+Y）。"""
+    rad = math.radians(display_deg)
+    return distance_mm * math.cos(rad), -distance_mm * math.sin(rad)
 
 
-def _in_valley(valley, display_deg, distance_mm):
-    """その点が谷の極座標矩形（角度 × 距離）に入るか。"""
-    if not (valley["dist_min_mm"] <= distance_mm <= valley["dist_max_mm"]):
-        return False
-
-    return any(lo <= display_deg <= hi for lo, hi in valley_spans(valley))
+def _xy_to_polar_deg_mm(x, y):
+    """(x, y)[mm] → (表示角[deg], 半径[mm])。_to_xy_mm の逆（プロット用）。"""
+    return math.degrees(math.atan2(-y, x)) % 360.0, math.hypot(x, y)
 
 
-class IceClassifier:
-    """1 回転ぶんの samples を「どの谷に氷が落ちたか」へ写す純ロジック。
+class IcePointExtractor:
+    """1 回転ぶんの samples から「関心円内の氷の代表点」を取り出す純ロジック。
 
-    LiDAR 1 台につき 1 つ持つ。台ごとに独立して判定し切るので、2 台の位相が
-    ずれていても影響し合わない（OR は判定の後で PositionWriter が取る）。
+    LiDAR 1 台につき 1 つ。台ごとに独立して判定し切る（2 台の突き合わせは PositionWriter）。
 
-    判定の順序は、氷らしさの手掛かりが強い順:
+      1. intensity < INTENSITY_MAX の有効点だけを氷の候補にする（氷は反射が弱い）。
+      2. 各点を (x, y)[mm] へ変換し、関心円の中心から filter_radius_mm 以内の点だけ残す。
+      3. 残った点のうち中心に最も近い 1 点を代表点として返す（無ければ None）。
 
-      1. Intensity が `intensity_max` 未満の有効点だけを氷の候補にする
-         （氷は反射が弱く、障害物は強い）
-      2. 谷ごとに候補点を数え、`max_points_per_valley` を超えた谷は障害物が写って
-         いるとみなして候補から落とす（氷は 1〜3 点、障害物はまとまって写る）
-      3. 残った谷のうち**点数が最も少ない**谷を採る。同数なら直前に採った谷を維持
-         （境界での往復を抑える）
-
-    2 の「超えたら丸ごと落とす」が肝で、これが無いと障害物が 1 つの谷にだけ写って
-    いるとき競合相手がいないまま採用され、削っていないのに雪崩が流れ続ける。
-
-    状態は直前に採ったチャンネル 1 つだけ（同数時の維持に使う）。読み取りスレッド
-    からのみ触るのでロックは持たない。
+    谷（channel）・max_points_per_valley の概念は無い。障害物対策は intensity と円の狭さで担う。
+    状態は持たない（読み取りスレッドからのみ呼ばれる）。
     """
 
-    def __init__(self, valleys, intensity_max, max_points_per_valley):
-        self._valleys = valleys
+    def __init__(self, intensity_max, circle_center_mm, filter_radius_mm):
         self._intensity_max = intensity_max
-        self._max_points = max_points_per_valley
-        self._last_channel = -1
+        self._cx, self._cy = circle_center_mm
+        self._filter_r2 = filter_radius_mm * filter_radius_mm
 
-    def classify(self, samples):
-        """1 回転ぶんを判定し、(channel, 谷ごとの点数, 氷とみなした点) を返す。
-
-        channel は -1（氷なし）か 0..3。点数と点は可視化とログのために返す。
-        点は (表示角[度], 距離[mm]) のリスト。
-        """
-        ice_points = []
-        counts = [0] * len(self._valleys)
-
+    def extract(self, samples):
+        """(代表点 (x,y) or None, 円内の氷点 [(display_deg, distance_mm), ...]) を返す。"""
+        best = None
+        best_d2 = None
+        in_circle = []
         for p in samples:
             if not _is_valid(p):
                 continue
-            # 氷は反射が弱い。強い点は障害物なので、谷を見るまでもなく落とす
             if p["intensity"] >= self._intensity_max:
                 continue
-
             display_deg = _display_angle(p["angle"])
             distance = p["distance"]
-            in_any = False
-
-            for valley in self._valleys:
-                if _in_valley(valley, display_deg, distance):
-                    counts[valley["channel"]] += 1
-                    in_any = True
-
-            # どの谷にも入らない氷は無視する（shaving は谷の範囲内の検出からのみ立つ）。
-            # 描画には残したいので、谷に入った点だけを ice_points に積む
-            if in_any:
-                ice_points.append((display_deg, distance))
-
-        channel = self._pick(counts)
-        self._last_channel = channel
-
-        return channel, counts, ice_points
-
-    def _pick(self, counts):
-        """谷ごとの点数から、採用するチャンネルを 1 つ選ぶ（-1 = 氷なし）。"""
-        candidates = [
-            ch for ch, n in enumerate(counts) if 0 < n <= self._max_points
-        ]
-
-        if not candidates:
-            return -1
-
-        fewest = min(counts[ch] for ch in candidates)
-        tied = [ch for ch in candidates if counts[ch] == fewest]
-
-        # 同数なら直前の谷を維持。含まれないときは添字の小さい方で決め打つ
-        # （どちらを採っても根拠が無いので、フレーム間で揺れない規則にする）
-        if self._last_channel in tied:
-            return self._last_channel
-
-        return tied[0]
+            x, y = _to_xy_mm(display_deg, distance)
+            dx, dy = x - self._cx, y - self._cy
+            d2 = dx * dx + dy * dy
+            if d2 > self._filter_r2:
+                continue
+            in_circle.append((display_deg, distance))
+            if best_d2 is None or d2 < best_d2:
+                best_d2 = d2
+                best = (x, y)
+        return best, in_circle
 
 
 class UnitState:
@@ -292,59 +248,49 @@ class UnitState:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._channel = -1
+        self._point = None           # 直近の代表点 (x, y)[mm] or None
         self._detected_at = None     # None = 起動してから一度も検出していない
         self._hit_count = 0          # 起動からの検出回数（ログ・表示用）
         self._all_points = np.zeros((0, 2))
         self._ice_points = np.zeros((0, 2))
-        self._counts = [0] * len(VALLEY_NAMES)
         self._valid_count = 0
 
-    def publish(self, channel, counts, ice_points, all_points, valid_count):
-        """1 回転ぶんの判定結果を載せる。氷ありのときだけ検出時刻を更新する。
-
-        氷なし（channel = -1）で時刻を触らないのが、ホールドの実体。取りこぼしの
-        隙間は「直近の検出からの経過時間」で埋まる。
-        """
+    def publish(self, point, ice_points, all_points, valid_count):
+        """1 回転ぶんの結果を載せる。代表点があるときだけ検出時刻を更新する（ホールドの実体）。"""
         with self._lock:
-            self._counts = counts
             self._ice_points = np.asarray(ice_points, dtype=float).reshape(-1, 2)
             self._all_points = all_points
             self._valid_count = valid_count
 
-            if channel >= 0:
-                self._channel = channel
+            if point is not None:
+                self._point = point
                 self._detected_at = time.monotonic()
                 self._hit_count += 1
 
     def detection(self):
-        """(谷, 検出時刻) を返す。一度も検出していなければ None。"""
+        """(代表点 (x,y), 検出時刻) を返す。一度も検出していなければ None。"""
         with self._lock:
             if self._detected_at is None:
                 return None
 
-            return self._channel, self._detected_at
+            return self._point, self._detected_at
 
     def snapshot(self):
-        """描画用に (全点, 氷点, 谷ごとの点数, 直近1回転の有効点数, 検出回数) を返す。
-
-        表示がズレないよう、すべて一度のロックで取る。
-        """
+        """描画用に (全点, 氷点, 直近1回転の有効点数, 検出回数) を返す（一度のロックで取る）。"""
         with self._lock:
             return (
                 self._all_points,
                 self._ice_points,
-                list(self._counts),
                 self._valid_count,
                 self._hit_count,
             )
 
 
-def reader_loop(name, lidar, classifier, state, stop_event):
+def reader_loop(name, lidar, extractor, state, stop_event):
     """読み取りスレッド本体。停止フラグが立つまで 1 回転ぶんずつ読み続ける。
 
     LiDAR 1 台につき 1 本走る。エラーはその台のループを抜けるだけで、もう片方の台と
-    ライタは動き続ける（2 台の OR なので、片方が落ちても検出は続く）。
+    ライタは動き続ける（片方が落ちても検出は続く）。
     """
     while not stop_event.is_set():
         try:
@@ -355,11 +301,10 @@ def reader_loop(name, lidar, classifier, state, stop_event):
             break
 
         # 空 = SDK が 1 回転ぶんを揃えられなかった（タイムアウト・再接続中）。
-        # 次の回転で戻ってくるので、状態はそのままにして読み続ける。
         if not samples:
             continue
 
-        channel, counts, ice_points = classifier.classify(samples)
+        point, ice_points = extractor.extract(samples)
 
         # 描画用の全点（有効なものすべて）。判定には使わないので同じループで作る
         valid = [
@@ -369,45 +314,35 @@ def reader_loop(name, lidar, classifier, state, stop_event):
         ]
         all_points = np.asarray(valid, dtype=float).reshape(-1, 2)
 
-        state.publish(channel, counts, ice_points, all_points, len(valid))
+        state.publish(point, ice_points, all_points, len(valid))
 
-        if channel >= 0:
-            print(
-                f"[{name}] ice -> {VALLEY_NAMES[channel]}(ch {channel})"
-                f"  {counts[channel]} pts"
-            )
+        if point is not None:
+            print(f"[{name}] ice -> ({point[0]:7.1f}, {point[1]:7.1f}) mm")
 
 
 class PositionWriter:
-    """全台の検出を突き合わせ、共有ファイルへ `seq,channel,shaving` を書き続ける。
+    """全台の検出を突き合わせ、共有ファイルへ `seq,x,y,shaving` を書き続ける。
 
-    2 台の OR はここで取る。台ごとに判定は完結しているので、ここがするのは
-    「最も新しい検出はどれか」を選ぶことと、ホールドを当てることだけ。
+    2 台の突き合わせはここで取る（最も新しい代表点を採る）。当てるのは shaving ホールドだけ:
+    最後の検出から shaving_hold_sec 以内なら shaving=1 かつ直近の代表点を継続、それを過ぎたら
+    「検知なし」＝ x,y 空欄（`seq,,,0`）。
 
-    ホールドを 2 本に分けているのは、求める挙動が逆だから:
-      - channel : 長く保持しても実害が小さい（削っていなければ雪崩は流れない）。
-                  0 を指定すると無期限（次の検出まで保持し続ける）
-      - shaving : 保持時間がそのまま「削りを止めてから雪崩が止まるまでの遅延」に
-                  なるので短く取る。ただし取りこぼし間隔より短いと雪崩が途切れる
-
-    書き込みは temp へ書き切って os.replace() の原子的 rename。Unity 側が読んだ行は
-    常に完全（partial read が起きない）。氷が無い間も -1 を書き続けて seq を進めるので、
-    Unity は「正常な氷なし」と「Python 停止（seq 据置＝ロスト）」を区別できる。
+    書き込みは temp へ書き切って os.replace() の原子的 rename（partial read なし）。氷が無い間も
+    seq を進めるので、Unity は「正常な検知なし」と「Python 停止（seq 据置＝ロスト）」を区別できる。
     """
 
-    def __init__(self, path, states, channel_hold_sec, shaving_hold_sec, interval_sec):
+    def __init__(self, path, states, shaving_hold_sec, interval_sec):
         self._path = path
         self._tmp_path = path.with_name(path.name + ".tmp")
         self._states = states
-        self._channel_hold = channel_hold_sec
         self._shaving_hold = shaving_hold_sec
         self._interval = interval_sec
         self._seq = 0
         self._lock = threading.Lock()
-        self._last_line = (-1, False)   # (channel, shaving)。描画のステータス表示用
+        self._last_line = (None, False)   # (point, shaving)。描画のステータス表示用
 
     def resolve(self):
-        """(channel, shaving) をいま時点で決める。ライタと描画の両方から呼ぶ。"""
+        """(代表点 (x,y) or None, shaving) をいま時点で決める。"""
         latest = None
 
         for state in self._states:
@@ -418,19 +353,17 @@ class PositionWriter:
                 latest = detection
 
         if latest is None:
-            return -1, False
+            return None, False
 
-        channel, detected_at = latest
+        point, detected_at = latest
         age = time.monotonic() - detected_at
-
-        # channel_hold_sec = 0 は無期限保持（次の検出まで谷を手放さない）
-        held = channel if (self._channel_hold <= 0 or age <= self._channel_hold) else -1
         shaving = age <= self._shaving_hold
 
-        return held, shaving
+        # shaving ホールド中は直近の代表点を継続。過ぎたら検知なし。
+        return (point if shaving else None), shaving
 
     def status(self):
-        """直近に書いた (channel, shaving, seq) を返す（描画のステータス表示用）。"""
+        """直近に書いた (point, shaving, seq) を返す（描画のステータス表示用）。"""
         with self._lock:
             return self._last_line[0], self._last_line[1], self._seq
 
@@ -439,14 +372,17 @@ class PositionWriter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
         while not stop_event.is_set():
-            channel, shaving = self.resolve()
+            point, shaving = self.resolve()
 
             with self._lock:
                 self._seq += 1
-                self._last_line = (channel, shaving)
+                self._last_line = (point, shaving)
                 seq = self._seq
 
-            line = f"{seq},{channel},{1 if shaving else 0}\n"
+            if point is None:
+                line = f"{seq},,,{1 if shaving else 0}\n"
+            else:
+                line = f"{seq},{point[0]:.1f},{point[1]:.1f},{1 if shaving else 0}\n"
 
             try:
                 # temp へ書き切って fsync してから rename。rename は同一ディレクトリ内
@@ -473,7 +409,7 @@ class LidarUnit:
         self.name = name
         self.port = port
         self.state = UnitState()
-        self._classifier = IceClassifier(VALLEYS, INTENSITY_MAX, MAX_POINTS_PER_VALLEY)
+        self._extractor = IcePointExtractor(INTENSITY_MAX, CIRCLE_CENTER_MM, CIRCLE_FILTER_MM)
 
         # コンストラクタは SDK に設定を積むだけで、まだ接続しない（接続は start()）
         self._lidar = TMiniPlus(
@@ -488,7 +424,7 @@ class LidarUnit:
         self._ax = None
         self._all_scat = None
         self._ice_scat = None
-        self._valley_fills = []
+        self._rep_scat = None
         self._head_text = None
         self._value_text = None
         self._now_text = None
@@ -501,7 +437,7 @@ class LidarUnit:
 
         self._thread = threading.Thread(
             target=reader_loop,
-            args=(self.name, self._lidar, self._classifier, self.state, stop_event),
+            args=(self.name, self._lidar, self._extractor, self.state, stop_event),
             daemon=True,
         )
         self._thread.start()
@@ -530,82 +466,61 @@ class LidarUnit:
         ax.set_theta_direction(-1)         # 時計回り
         ax.set_rlabel_position(135)
 
-        # 谷の範囲（角度 × 距離）を塗る。採用中の谷だけ濃くするので、台ごとに
-        # アーティストを持って毎フレーム alpha を差し替える
-        for valley in VALLEYS:
-            fills = []
-            for lo, hi in valley_spans(valley):
-                span_theta = np.radians(np.linspace(lo, hi, 61))
-                fills.append(ax.fill_between(
-                    span_theta,
-                    valley["dist_min_mm"],
-                    valley["dist_max_mm"],
-                    color=VALLEY_FILL_COLOR,
-                    alpha=VALLEY_FILL_ALPHA,
-                ))
+        # 関心円（radius）とフィルタ円（radius + tolerance）。xy 平面で円を作って polar へ写す。
+        t = np.linspace(0.0, 2.0 * np.pi, 181)
+        for r_mm, kw in (
+            (CIRCLE_RADIUS_MM, dict(color="tab:blue", linewidth=1.4, alpha=0.85)),
+            (CIRCLE_FILTER_MM, dict(color="tab:blue", linewidth=0.9, alpha=0.35, linestyle="--")),
+        ):
+            xs = CIRCLE_CENTER_MM[0] + r_mm * np.cos(t)
+            ys = CIRCLE_CENTER_MM[1] + r_mm * np.sin(t)
+            deg = np.degrees(np.arctan2(-ys, xs)) % 360.0
+            ax.plot(np.radians(deg), np.hypot(xs, ys), **kw)
 
-            # どの谷か読めるよう、範囲の中央にラベルを置く
-            mid = np.radians(_span_middle(valley))
-            ax.text(
-                mid,
-                (valley["dist_min_mm"] + valley["dist_max_mm"]) / 2,
-                f"{valley['name']}\n{valley['channel']}",
-                ha="center",
-                va="center",
-                fontsize=8,
-                color="tab:blue",
-            )
-            self._valley_fills.append(fills)
+        # 山の中心（＝関心円の中心）マーカー
+        cc_deg, cc_r = _xy_to_polar_deg_mm(*CIRCLE_CENTER_MM)
+        ax.plot([np.radians(cc_deg)], [cc_r], marker="+", color="tab:blue",
+                markersize=13, markeredgewidth=1.6, linestyle="none")
 
-        # 有効な点はすべて灰色、そのうち氷とみなした点を赤で重ねる。
-        # 合わせ込みでは「氷でない点がどこにいるか」も見たいので両方描く
+        # 有効な点はすべて灰色、円内の氷を赤、採用中の代表点を緑の輪で重ねる
         self._all_scat = ax.scatter([], [], s=6, c=ALL_POINT_COLOR, zorder=2)
         self._ice_scat = ax.scatter([], [], s=36, c=ICE_POINT_COLOR, zorder=3)
+        self._rep_scat = ax.scatter([], [], s=100, facecolors="none",
+                                    edgecolors="tab:green", linewidths=1.8, zorder=4)
 
-        # 検出範囲の境界線。外側＝赤、内側＝橙（RANGE_MIN=0 のときは描かない）
+        # 検出範囲の外周（赤）／内周（橙・RANGE_MIN=0 のときは描かない）
         circle_theta = np.linspace(0, 2 * np.pi, 361)
-        ax.plot(
-            circle_theta,
-            np.full_like(circle_theta, RANGE_MAX_MM),
-            color="tab:red",
-            linewidth=1.0,
-            alpha=0.7,
-        )
+        ax.plot(circle_theta, np.full_like(circle_theta, RANGE_MAX_MM),
+                color="tab:red", linewidth=1.0, alpha=0.5)
         if RANGE_MIN_MM > 0:
-            ax.plot(
-                circle_theta,
-                np.full_like(circle_theta, RANGE_MIN_MM),
-                color="tab:orange",
-                linewidth=1.0,
-                alpha=0.7,
-            )
+            ax.plot(circle_theta, np.full_like(circle_theta, RANGE_MIN_MM),
+                    color="tab:orange", linewidth=1.0, alpha=0.5)
 
-        # 全アーティストを追加した後に表示範囲を固定する（先に固定すると、後から
-        # plot したデータに合わせてオートスケールが rmax を上書きしてしまう）
+        # 全アーティストを追加した後に表示範囲を固定する
         ax.set_rlim(0, DISPLAY_MAX_MM)
         ax.autoscale(False)
 
         self._build_count_text(fig)
         self._set_title(0)
 
-    def refresh(self, active_channel):
-        """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。"""
-        all_points, ice_points, counts, valid_count, hit_count = self.state.snapshot()
+    def refresh(self, rep_point):
+        """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。
+
+        rep_point は writer が選んだ代表点 (x,y)[mm] or None（全パネル共通で表示する）。
+        """
+        all_points, ice_points, valid_count, hit_count = self.state.snapshot()
 
         self._all_scat.set_offsets(_to_offsets(all_points))
         self._ice_scat.set_offsets(_to_offsets(ice_points))
 
-        # 採用中の谷だけ濃く塗る（どこを見て決めたかが一目で分かるように）
-        for channel, fills in enumerate(self._valley_fills):
-            alpha = (
-                VALLEY_ACTIVE_FILL_ALPHA if channel == active_channel
-                else VALLEY_FILL_ALPHA
-            )
-            for fill in fills:
-                fill.set_alpha(alpha)
+        if rep_point is None:
+            self._rep_scat.set_offsets(np.zeros((0, 2)))
+        else:
+            deg, rr = _xy_to_polar_deg_mm(*rep_point)
+            self._rep_scat.set_offsets([[np.radians(deg), rr]])
 
         self._set_title(valid_count)
-        self._set_counts(counts, hit_count)
+        self._set_counts(hit_count)
 
         return self._all_scat
 
@@ -641,22 +556,14 @@ class LidarUnit:
         ):
             text.set_position((left, center_y + offset_in / height_in))
 
-    def _set_counts(self, counts, hit_count):
-        """左の数値欄を書き替える。毎フレーム呼ぶ。
-
-        谷ごとの点数を出すのは、`max_points_per_valley` を回すときの根拠にするため
-        （「何点で写っているか」が見えないと、上限をどこに置けばよいか決められない）。
-        """
+    def _set_counts(self, hit_count):
+        """左の数値欄を書き替える。毎フレーム呼ぶ。"""
         self._head_text.set_text(f"{self.name}\n{hit_count} hits")
         self._value_text.set_text(
-            "\n".join(
-                f"{name:>5s} {counts[ch]:3d} pts"
-                for ch, name in enumerate(VALLEY_NAMES)
-            )
+            f"circle center\n({CIRCLE_CENTER_MM[0]:.0f}, {CIRCLE_CENTER_MM[1]:.0f}) mm\n"
+            f"r {CIRCLE_RADIUS_MM:.0f}  +tol {CIRCLE_TOLERANCE_MM:.0f}"
         )
-        self._now_text.set_text(
-            f"intensity < {INTENSITY_MAX:g}\nmax {MAX_POINTS_PER_VALLEY} pts/valley"
-        )
+        self._now_text.set_text(f"intensity < {INTENSITY_MAX:g}")
 
     def _set_title(self, valid_count):
         """2 行のタイトルを書き替える（どの台か / 点の出方）。"""
@@ -667,17 +574,6 @@ class LidarUnit:
             f"   detected {valid_count:4d} pts",
             fontsize=10,
         )
-
-
-def _span_middle(valley):
-    """谷の角度範囲の中央[度]。0 度またぎでも中央に来るようにする。"""
-    start = valley["angle_start_deg"]
-    end = valley["angle_end_deg"]
-
-    if start > end:
-        end += 360.0
-
-    return ((start + end) / 2.0) % 360.0
 
 
 def _to_offsets(points):
@@ -781,16 +677,16 @@ def run_plot(units, writer, stop_event, shutdown):
     fig.canvas.mpl_connect("resize_event", apply_layout)
 
     def update(_frame):
-        channel, shaving, seq = writer.status()
-        name = VALLEY_NAMES[channel] if channel >= 0 else "none"
+        point, shaving, seq = writer.status()
+        loc = "  none        " if point is None else f"({point[0]:7.1f}, {point[1]:7.1f})"
 
         status_text.set_text(
-            f"seq {seq:>7d}   channel {channel:>2d} ({name})"
+            f"seq {seq:>7d}   xy {loc} mm"
             f"   shaving {'ON ' if shaving else 'off'}\n"
             f"{POSITION_FILE}"
         )
 
-        return [unit.refresh(channel) for unit in units]
+        return [unit.refresh(point) for unit in units]
 
     # 参照を捨てると GC でアニメーションが止まるので、ローカルに持っておく
     ani = animation.FuncAnimation(
@@ -814,7 +710,7 @@ def run_plot(units, writer, stop_event, shutdown):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LiDAR の落氷検知を谷チャンネル + 削り状態にして Unity へ渡す"
+        description="LiDAR の落氷検知を氷の連続座標 (x,y)[mm] + 削り状態にして Unity へ渡す"
     )
     parser.add_argument(
         "--headless",
@@ -831,7 +727,6 @@ def main():
     writer = PositionWriter(
         POSITION_FILE,
         [unit.state for unit in units],
-        CHANNEL_HOLD_SEC,
         SHAVING_HOLD_SEC,
         WRITE_INTERVAL_SEC,
     )
@@ -842,9 +737,9 @@ def main():
 
     print(f"position file = {POSITION_FILE}")
     print(
-        f"ice: intensity < {INTENSITY_MAX:g}, "
-        f"max {MAX_POINTS_PER_VALLEY} pts/valley, "
-        f"hold: channel {CHANNEL_HOLD_SEC:g}s / shaving {SHAVING_HOLD_SEC:g}s"
+        f"circle: center ({CIRCLE_CENTER_MM[0]:.0f}, {CIRCLE_CENTER_MM[1]:.0f}) mm, "
+        f"r {CIRCLE_RADIUS_MM:.0f} (+tol {CIRCLE_TOLERANCE_MM:.0f}); "
+        f"intensity < {INTENSITY_MAX:g}, shaving hold {SHAVING_HOLD_SEC:g}s"
     )
 
     def shutdown():

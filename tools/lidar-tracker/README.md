@@ -1,5 +1,11 @@
 # lidar-tracker（落氷の LiDAR 検知 / position-tracker の後継）
 
+> **2026-08 更新（`preview-feedback` / ADR-29）**: `valley_tracker.py` は「谷 channel」ではなく
+> **氷の連続座標** `seq,x,y,shaving`（mm・LiDAR 原点フレーム、`x=r·cosθ, y=−r·sinθ`）を Unity へ渡す。
+> 関心円の設定は専用ファイル `preview.toml`（テンプレ `preview.example.toml`・`.gitignore` 済み）。
+> `config.toml` の `[valleys.*]` は連続座標モードでは未使用（`[serial]`/`[scan]`/`[detection]`/`[ice] intensity_max`/`shaving_hold_sec` は流用）。
+> 設計と現物合わせ手順は `docs/phase-preview-feedback.md`。以下の本文は谷モデル時代の記述が残っているので読み替えること。
+
 YDLIDAR T-mini Plus の測距値を読み、リアルタイムに極座標散布図へ描画する。
 `config.toml` に並べたぶんだけ**複数台を同時に**読み、1 つのウィンドウへ上から順
 （LiDAR1, LiDAR2 …）に縦に並べて描く。

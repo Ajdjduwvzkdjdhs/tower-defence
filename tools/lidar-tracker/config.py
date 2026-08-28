@@ -5,6 +5,7 @@ from pathlib import Path
 
 # config.py 自身の場所を基準にするため、実行ディレクトリに依存しない
 _CONFIG_PATH = Path(__file__).parent / "config.toml"
+_PREVIEW_PATH = Path(__file__).parent / "preview.toml"
 
 # 検出範囲の既定値[cm]。config.toml に [detection] が無いときに使う。
 # セクションごと省略できるので、既存の config.toml をそのまま使い続けられる。
@@ -314,6 +315,55 @@ def load_valleys_config():
         valleys.append(parsed)
 
     return valleys
+
+
+# 内覧会（連続座標）モードの関心円の既定値[mm]（preview.toml が無い / キー欠けのとき）。
+# 変換フレーム: x = r*cos(theta), y = -r*sin(theta) → theta=270° 方向が +Y。
+DEFAULT_CIRCLE_CENTER_MM = (0.0, 300.0)
+DEFAULT_CIRCLE_RADIUS_MM = 300.0
+DEFAULT_CIRCLE_TOLERANCE_MM = 100.0
+DEFAULT_REPRESENTATIVE_MODE = "nearest_center"
+
+
+def load_preview_config():
+    """preview.toml から連続座標モードの関心円設定を読み、dict で返す。
+
+    キー: center_offset_mm (2 要素の数値リスト), radius_mm, tolerance_mm, representative_mode。
+    ファイルが無い / セクションやキーが欠けている場合は既定値で埋める（現物合わせ前でも動く）。
+    """
+    data = {}
+    if _PREVIEW_PATH.exists():
+        with open(_PREVIEW_PATH, "rb") as f:
+            data = tomllib.load(f)
+
+    circle = data.get("circle", {})
+    rep = data.get("representative", {})
+
+    center = circle.get("center_offset_mm", DEFAULT_CIRCLE_CENTER_MM)
+    try:
+        cx, cy = (float(center[0]), float(center[1]))
+    except (TypeError, ValueError, IndexError):
+        sys.exit(
+            "preview.toml の [circle] center_offset_mm は数値 2 要素のリストで"
+            f"指定してください（現在: {center!r}）。"
+        )
+
+    def _num(section, key, default, minimum=0.0):
+        v = section.get(key, default)
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            sys.exit(f"preview.toml の [circle] {key} は数値で指定してください（現在: {v!r}）。")
+        if v < minimum:
+            sys.exit(f"preview.toml の [circle] {key} は {minimum} 以上で指定してください。")
+        return v
+
+    return {
+        "center_offset_mm": (cx, cy),
+        "radius_mm": _num(circle, "radius_mm", DEFAULT_CIRCLE_RADIUS_MM, minimum=1.0),
+        "tolerance_mm": _num(circle, "tolerance_mm", DEFAULT_CIRCLE_TOLERANCE_MM),
+        "representative_mode": rep.get("mode", DEFAULT_REPRESENTATIVE_MODE),
+    }
 
 
 def load_output_config():
