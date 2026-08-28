@@ -19,13 +19,18 @@ MonoBehaviour:
   _scaleUnitsPerMm: 0.03333
   _worldRotationDeg: 0
   _flipX: 0
-  _flipY: 0
+  _flipY: 1
   _centerOffsetMm: {x: 0, y: 300}
   _radiusMm: 300
   _spawnRate: 24
   _endRadius: 10
   _consumeIce: 0
-  _killRadiusUnits: 0.6
+  _entranceRadius: 11
+  _restRadius: 8
+  _entranceSpeed: 6
+  _maxEnemies: 48
+  _killRadiusUnits: 1.5
+  _overlapRadiusUnits: 0.7
   _cooldownCenterSec: 0.6
   _cooldownEdgeSec: 0
   _spreadCenterDeg: 25

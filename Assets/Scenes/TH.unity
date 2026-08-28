@@ -354,7 +354,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
       propertyPath: _inputMode
-      value: 1
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
       propertyPath: _enemyPrefab
