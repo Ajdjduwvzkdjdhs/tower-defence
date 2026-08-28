@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a98263625ce19466bbd572097daa404b, type: 3}
+  m_Name: LidarPreviewConfig
+  m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.LidarPreviewConfigSO
+  _pollIntervalSec: 0.05
+  _lostTimeoutSec: 0.3
+  _positionFileRelative: tools/lidar-tracker/out/position.txt
+  _positionFilePersistent: position.txt
+  _scaleUnitsPerMm: 0.03333
+  _worldRotationDeg: 0
+  _flipX: 0
+  _flipY: 0
+  _centerOffsetMm: {x: 0, y: 300}
+  _radiusMm: 300
+  _spawnRate: 24
+  _endRadius: 10
+  _consumeIce: 0
+  _killRadiusUnits: 0.6
+  _cooldownCenterSec: 0.6
+  _cooldownEdgeSec: 0
+  _spreadCenterDeg: 25
+  _spreadEdgeDeg: 3
+  _fieldOffsetKey: 17
+  _fieldOffsetStepMm: 10

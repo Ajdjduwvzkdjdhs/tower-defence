@@ -44,9 +44,21 @@ namespace KakigoriTD.Data
         [Tooltip("氷消費の有効/無効。既定 false＝氷は無限（システム側リソース管理を使わない方針）。")]
         [SerializeField] private bool _consumeIce = false;
 
+        [Header("敵スポーン（360度）")]
+        [Tooltip("入場開始の絶対半径（山中心から）。外周のこの位置に湧いて内側へ歩く。")]
+        [SerializeField] private float _entranceRadius = 11f;
+        [Tooltip("静止半径。ここに到達して静止し、発射を始める。同じ半径なので密集すると自然に重なる。")]
+        [SerializeField] private float _restRadius = 8f;
+        [Tooltip("入場の歩行速度。")]
+        [SerializeField] private float _entranceSpeed = 6f;
+        [Tooltip("同時存在の上限。")]
+        [SerializeField] private int _maxEnemies = 48;
+
         [Header("撃破（一般化した位置到達）")]
         [Tooltip("雪玉→敵 撃破半径（XZ・ゲーム単位）。")]
         [SerializeField] private float _killRadiusUnits = 0.6f;
+        [Tooltip("前列判定の重なり半径。この距離内により古い生存敵がいる敵は「まだ前列でない」として撃破対象から外す。")]
+        [SerializeField] private float _overlapRadiusUnits = 0.7f;
         [Tooltip("d=0（中心）での撃破クールダウン秒。中心＝広く弱い。")]
         [SerializeField] private float _cooldownCenterSec = 0.6f;
         [Tooltip("d=radiusMm（外周）での撃破クールダウン秒。外周＝狭く強い。")]
@@ -77,7 +89,12 @@ namespace KakigoriTD.Data
         public float SpawnRate => _spawnRate;
         public float EndRadius => _endRadius;
         public bool ConsumeIce => _consumeIce;
+        public float EntranceRadius => _entranceRadius;
+        public float RestRadius => _restRadius;
+        public float EntranceSpeed => _entranceSpeed;
+        public int MaxEnemies => _maxEnemies;
         public float KillRadiusUnits => _killRadiusUnits;
+        public float OverlapRadiusUnits => _overlapRadiusUnits;
         public float CooldownCenterSec => _cooldownCenterSec;
         public float CooldownEdgeSec => _cooldownEdgeSec;
         public float SpreadCenterDeg => _spreadCenterDeg;
