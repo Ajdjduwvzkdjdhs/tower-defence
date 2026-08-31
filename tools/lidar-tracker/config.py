@@ -42,6 +42,17 @@ VALLEY_NAMES = ("north", "west", "south", "east")
 # 共有ファイルの既定の出力先（[output] も環境変数も無いとき）。
 DEFAULT_POSITION_FILE = _CONFIG_PATH.parent / "out" / "position.txt"
 
+# カメラ併用（[camera] セクションごと省略可能＝カメラを使わない）の既定値。
+#
+# LiDAR は氷を毎回転は拾えないので、従来は shaving_hold_sec（既定 1.5 秒）の
+# 「盲目のホールド」で隙間を埋めていた。この値はそのまま「削るのを止めてから
+# 雪崩が止まるまでの遅延」になる。カメラ（tools/position-tracker2）が
+# 「ハンドルが回っているか」を見ていれば、盲目のホールドを短くしたうえで、
+# **回している間だけ**削りを延長できる（手を止めた瞬間に切れる）。
+DEFAULT_CAMERA_ICE_HOLD_SEC = 0.4       # LiDAR 検出から無条件で削りを維持する秒数
+DEFAULT_CAMERA_EXTEND_MAX_SEC = 5.0     # カメラでの延長の上限（0 で無制限）
+DEFAULT_CAMERA_LOST_TIMEOUT_SEC = 0.5   # カメラの seq がこの秒数停滞したらロスト
+
 
 def _load():
     """config.toml を読んで dict を返す。無ければ分かりやすく終了する。"""
@@ -232,6 +243,65 @@ def load_ice_config():
     values["channel_hold_sec"] = float(values["channel_hold_sec"])
     values["shaving_hold_sec"] = float(values["shaving_hold_sec"])
 
+    return values
+
+
+def load_camera_config():
+    """config.toml の [camera] を読み、カメラ併用の設定を dict で返す。
+
+    返す辞書のキー:
+
+        file             カメラ（rotate_pairangle.py 等）の出力ファイル Path。
+                         **None ならカメラ併用しない**（従来どおり shaving_hold_sec だけで動く）
+        ice_hold_sec     LiDAR の検出から無条件で削りを維持する秒数
+        extend_max_sec   カメラでの延長の上限[秒]（0 で無制限）
+        lost_timeout_sec カメラの seq がこの秒数停滞したらロストとみなす
+
+    ファイルの解決順（position-tracker2 側の解決順と対になる）:
+      1. 環境変数 KAKIGORI_ROTATION_FILE
+      2. config.toml の [camera] rotation_file
+      3. 未設定 → None（カメラ併用しない）
+
+    相対パスは config.toml の場所を基準に解決する（実行ディレクトリに依存させない）。
+    """
+    camera = _load().get("camera", {})
+
+    values = {}
+    for key, default, minimum in (
+        ("ice_hold_sec", DEFAULT_CAMERA_ICE_HOLD_SEC, 0),
+        ("extend_max_sec", DEFAULT_CAMERA_EXTEND_MAX_SEC, 0),
+        ("lost_timeout_sec", DEFAULT_CAMERA_LOST_TIMEOUT_SEC, 0),
+    ):
+        value = camera.get(key, default)
+        # bool は int のサブクラスなので明示的に弾く
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            sys.exit(
+                f"config.toml の [camera] {key} は数値で指定してください"
+                f"（現在: {value!r}）。"
+            )
+        if value < minimum:
+            sys.exit(
+                f"config.toml の [camera] {key} は {minimum} 以上で指定してください"
+                f"（現在: {value}）。"
+            )
+        values[key] = float(value)
+
+    env = os.environ.get("KAKIGORI_ROTATION_FILE")
+    if env:
+        values["file"] = Path(env).expanduser()
+        return values
+
+    value = camera.get("rotation_file")
+    if not value:
+        values["file"] = None
+        return values
+    if not isinstance(value, str):
+        sys.exit(
+            "config.toml の [camera] rotation_file は文字列で指定して"
+            f"ください（現在: {value!r}）。"
+        )
+    path = Path(value).expanduser()
+    values["file"] = path if path.is_absolute() else (_CONFIG_PATH.parent / path)
     return values
 
 

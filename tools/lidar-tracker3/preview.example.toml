@@ -1,0 +1,32 @@
+# preview.example.toml — 連続座標モードの専用設定。
+# これをコピーして preview.toml を作成し、現物に合わせて書き換える。
+#   cp preview.example.toml preview.toml
+# preview.toml は Git 管理対象外（.gitignore 済み）。config.toml（シリアル/スキャン/検出）と併用する。
+#
+# 背景: valley_tracker.py は氷が落ちた「代表点」の座標を Unity へ送る（seq,x,y,shaving）。
+# 谷（channel）の分類はしない。座標系は次の変換で得る（単位 mm）:
+#     x = sx * r * sin(theta)     （theta = 表示角[deg]、r = distance[mm]）
+#     y = sy * r * cos(theta)
+# sx / sy は valley_tracker.py の FLIP_HORIZONTAL / FLIP_VERTICAL で決まる ±1。
+# 既定は両方 True なので theta=0° -> -Y、theta=90° -> -X。
+# 生角のどこを表示角 0 度にするかは valley_tracker.py の ANGLE_OFFSET_DEG で合わせる。
+
+[circle]
+# 関心円（この円の中で検出された代表点だけを Unity へ送る）。単位 mm・上記変換フレーム。
+#
+# 中心は +Y 方向へ radius_mm ぶん。こうすると**円の下端がちょうど原点で横軸に接する**ので、
+# 円は丸ごと LiDAR の前方に乗る。LiDAR を落氷域の縁に据え、正面に広がる円だけを見る前提。
+# 円の大きさを変えたら中心もそれに合わせること（接するのは center_y == radius_mm のとき）。
+center_offset_mm = [0.0, 300.0]   # 下端が原点で接する（= radius_mm と同じ値）
+radius_mm        = 300.0          # 直径 60cm
+tolerance_mm     = 100.0          # はみ出し許容。フィルタは「中心距離 <= radius_mm + tolerance_mm」で通す
+
+# はみ出し許容ぶん（tolerance_mm）は接線より下にもはみ出す（上図の破線）。
+# 原点は中心から 300mm で、フィルタ半径 400mm の内側 —— つまりセンサー筐体・治具など
+# 至近の反射は円の中に入る。それらは config.toml の [detection] range_min_cm で切ること。
+
+[representative]
+# 円内に氷点が複数あるときの代表点の選び方。現状 "nearest_center" のみ（円中心に最も近い点）。
+mode = "nearest_center"
+
+# 削り(shaving)ホールドは config.toml の [ice] shaving_hold_sec を流用する（このファイルには置かない）。

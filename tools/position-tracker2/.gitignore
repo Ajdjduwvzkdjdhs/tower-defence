@@ -1,0 +1,15 @@
+# uv virtual env（Assets/ 外なので Unity は無視。環境はこのフォルダに自閉）
+.venv/
+__pycache__/
+
+# 実行時に生成される共有ファイル（Unity が読む出力）。コミットしない。
+out/
+
+# 環境ごとに書き換える実パス・調整値。テンプレは config.example.json をコミット。
+config.json
+
+# マウスで合わせた ROI（回転中心と半径）。設置ごとに違うのでコミットしない。
+roi.json
+
+# ultralytics が初回実行時にダウンロードする重み。
+*.pt
