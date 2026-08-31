@@ -370,11 +370,15 @@ SWIG は既定で GIL を保持したまま C++ を呼ぶ。`doProcessSimple()` 
 
 ## Unity への受け渡し（`valley_tracker.py`）
 
-落氷の検出を「どの谷か（`channel`）」と「削っているか（`shaving`）」に変換し、共有
-テキストファイルへ 1 行 `seq,channel,shaving`（例 `1837,2,1`）を書く。Unity 側は
-`VisionInputSource` がこのファイルをポーリングし、`InputMode.Vision` のとき
-`ActiveChannel` と `IsShaving` に使う（`seq,channel` の 2 列だけの旧 `position-tracker`
-契約も引き続き読める）。
+落氷の検出を「氷が落ちた代表点の座標（`x,y`[mm]）」と「削っているか（`shaving`）」に
+変換し、共有テキストファイルへ 1 行 `seq,x,y,shaving`（例 `1837,12.5,-284.0,1`）を書く。
+Unity 側は `LidarPositionInputSource` がこのファイルをポーリングし、
+`LidarPositionProtocol` が座標と削りに直す（ADR-29 / `docs/phase-preview-feedback.md`）。
+谷（channel）の分類はしない。検知なしは `seq,,,0`（x,y 空欄）。
+
+> 以下の「谷の判定」節は **4 谷モード時代の記述**で、連続座標モードの現行実装とは
+> 一致しない（谷テーブル・`max_points_per_valley`・`channel_hold_sec` は使っていない）。
+> 現行は `preview.toml` の関心円で代表点を選ぶ。
 
 - 書き込みは `position.txt.tmp` に書き切って `os.replace()` で原子的 rename
   （Unity が中途半端な行を読まない）。間隔は 50ms
@@ -383,6 +387,46 @@ SWIG は既定で GIL を保持したまま C++ を呼ぶ。`doProcessSimple()` 
 - 出力先の解決順：環境変数 `KAKIGORI_POSITION_FILE` → `config.toml` の
   `[output] position_file` → スクリプト相対 `out/position.txt`
   （既定のままで Unity Editor から読める。`VisionConfig.asset` の `_relativePath` と対）
+
+### カメラ併用で削りの遅延を縮める（`config.toml` の `[camera]`）
+
+LiDAR は氷を毎回転は拾えない（実測 0.75〜2 秒に 1 回）ため、従来は
+`[ice] shaving_hold_sec = 1.5` の**盲目のホールド**で隙間を埋めていた。この 1.5 秒は
+そのまま「削るのを止めてから雪崩が止まるまでの遅延」になる。
+
+`tools/position-tracker2`（カメラでハンドルの回転を検知する）を併走させると、
+盲目のホールドを短くしたうえで**回している間だけ**削りを延長できる。
+
+```
+LiDAR が氷を初検知するまで          -> 削りなし（開始は従来どおり LiDAR 起点）
+LiDAR 検出から ice_hold_sec 以内     -> 削りあり
+それを過ぎたら
+  ├ カメラが回転を見ている          -> 削りを延長（extend_max_sec が上限）
+  └ カメラが止まった / ロスト       -> 即 削りなし
+```
+
+| | 従来（LiDAR 単独） | カメラ併用 |
+|---|---|---|
+| 削り開始 | LiDAR 初検知（0.75〜2 秒） | 同じ（変わらない） |
+| 検出の隙間 | 1.5 秒の盲目ホールド | 回転を見ている間だけ延長 |
+| 削り終了 | 最後の氷から 1.5 秒後 | 手を止めてから `ice_hold_sec`（既定 0.4 秒） |
+
+- **座標は常に LiDAR のもの**。カメラは座標を送らない（Unity 側の契約は不変・改修不要）
+- **`[camera]` を書かなければ従来動作**。カメラを起動していない・落ちた場合も
+  `lost_timeout_sec` で検知して `shaving_hold_sec` の従来動作へフォールバックする
+- 氷を入れ忘れて空回ししているときのために `extend_max_sec`（既定 5 秒）で延長を打ち切る
+- 起動:
+
+```sh
+# 別ターミナルでカメラ側（映像全体が検出範囲・ROI 調整なし）
+cd ../position-tracker2 && uv run python rotate_pairangle.py
+
+# LiDAR 側（config.toml の [camera] rotation_file が上の出力を指していること）
+uv run python valley_tracker.py
+```
+
+  ウィンドウ下部のステータスに `shaving ON [camera] cam TURN 62.3rpm` のように
+  **削りの由来**（`ice` / `camera` / `lidar-only` / `off`）とカメラの状態が出る。
 
 ### 谷の判定（`config.toml` の `[valleys]` / `[ice]`）
 

@@ -50,10 +50,26 @@ rename（partial read を排除）・`seq` 単調増加はそのまま。Unity �
 
 ホールド（検出の隙間を埋める）:
   検出はスパースなので、生のまま流すと照準も削りも点滅する。最後の検出から一定時間は
-  保持し続けるが、保持時間は 2 本に分けてある。`channel_hold_sec` は長く取っても実害が
-  小さい（削っていなければ雪崩は流れない）のに対し、`shaving_hold_sec` はそのまま
-  「削るのを止めてから雪崩が止まるまでの遅延」になるため。当日はこの 2 本が主要な
-  調整ノブになる。
+  保持し続けるが、`shaving_hold_sec` はそのまま「削るのを止めてから雪崩が止まるまでの
+  遅延」になる（既定 1.5 秒）。
+
+カメラ併用（config.toml の [camera] rotation_file を設定したときだけ有効）:
+  上の「盲目のホールド」は、削るのを止めても 1.5 秒は雪崩が流れ続けることを意味する。
+  カメラ（tools/position-tracker2）が「かき氷機のハンドルが回っているか」を見ていれば、
+  盲目のホールドを短くしたうえで**回している間だけ**削りを延長できる。
+
+      LiDAR が氷を初検知するまで            -> 削りなし（従来どおり。開始は LiDAR 起点）
+      LiDAR 検出から ice_hold_sec 以内       -> 削りあり
+      それを過ぎたら
+        ├ カメラが回転を見ている            -> 削りを延長（extend_max_sec が上限）
+        └ カメラが止まった / ロスト         -> 即 削りなし
+
+  こうすると「手を止めてから雪崩が止まるまで」が ice_hold_sec（既定 0.4 秒）に縮む。
+  氷を入れ忘れて空回ししている場合に延長が続かないよう、最後の氷検出からの経過が
+  extend_max_sec（既定 5 秒）を超えたら、回っていても削りを落とす。
+  **カメラの seq が停滞したら（プロセス停止・未起動）従来動作へフォールバック**するので、
+  カメラを起動しなければこれまでと完全に同じ挙動になる。座標は常に LiDAR のもので、
+  カメラは座標を一切送らない（Unity 側の契約 `seq,x,y,shaving` は不変）。
 
 接続情報・回転数・検出範囲・谷の範囲・氷の判定パラメータ・出力先は `config.toml` から
 読み込む。それ以外の描画パラメータは下の「設定」定数で調整する。
@@ -73,6 +89,7 @@ import time
 import numpy as np
 
 from config import (
+    load_camera_config,
     load_detection_config,
     load_ice_config,
     load_output_config,
@@ -107,6 +124,9 @@ CIRCLE_CENTER_MM = _PREVIEW["center_offset_mm"]          # (cx, cy)
 CIRCLE_RADIUS_MM = _PREVIEW["radius_mm"]
 CIRCLE_TOLERANCE_MM = _PREVIEW["tolerance_mm"]
 CIRCLE_FILTER_MM = CIRCLE_RADIUS_MM + CIRCLE_TOLERANCE_MM  # フィルタはこの半径で通す（はみ出し許容込み）
+
+# カメラ併用（[camera]）。rotation_file 未設定なら CAMERA["file"] は None＝従来動作。
+CAMERA = load_camera_config()
 
 # Unity が読む共有ファイル。
 POSITION_FILE = load_output_config()
@@ -320,6 +340,72 @@ def reader_loop(name, lidar, extractor, state, stop_event):
             print(f"[{name}] ice -> ({point[0]:7.1f}, {point[1]:7.1f}) mm")
 
 
+class CameraRotationSource:
+    """カメラ（tools/position-tracker2）の出力を読み、「ハンドルが回っているか」だけを返す。
+
+    契約は 1 行 `seq,shaving,rpm`（position-tracker2/common.py の RotationWriter が書く）。
+    使うのは `shaving` だけで、座標は受け取らない（位置は常に LiDAR のものを使う）。
+
+    `seq` は単調増加する。停滞＝カメラのプロセスが止まった・ハングした・そもそも
+    起動していない、とみなして**ロスト**にする。ロスト中はライタが LiDAR 単独の
+    従来動作（shaving_hold_sec の盲目ホールド）へフォールバックするので、カメラを
+    落としても遊べる状態が保たれる。
+
+    ファイル読みはライタスレッドから 50ms ごとに呼ばれる（専用スレッドは持たない）。
+    """
+
+    def __init__(self, path, lost_timeout_sec):
+        self._path = path
+        self._lost_timeout = lost_timeout_sec
+        self._last_seq = None
+        self._last_change = 0.0    # monotonic。seq が変わった時刻
+        self._rotating = False
+        self._rpm = 0.0
+        self._ever = False
+
+    def poll(self, now):
+        """ファイルの最終行を読み、seq が変わっていれば状態を更新する。"""
+        try:
+            text = self._path.read_text(encoding="utf-8")
+        except OSError:
+            return    # 未起動・読めない → seq が進まないのでロストへ倒れる
+
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            return
+        parts = lines[-1].split(",")
+        if len(parts) < 2:
+            return
+        try:
+            seq = int(parts[0])
+            shaving = parts[1].strip() == "1"
+            rpm = float(parts[2]) if len(parts) > 2 and parts[2].strip() else 0.0
+        except ValueError:
+            return    # 壊れた行は捨てる（次の書き込みで直る）
+
+        self._ever = True
+        if seq != self._last_seq:
+            # seq 変化＝新しい書き込み（カメラ側が再起動して戻っても「変化」＝新鮮）
+            self._last_seq = seq
+            self._last_change = now
+            self._rotating = shaving
+            self._rpm = rpm
+
+    def is_lost(self, now):
+        if not self._ever:
+            return True
+        return (now - self._last_change) > self._lost_timeout
+
+    def is_rotating(self, now):
+        return self._rotating and not self.is_lost(now)
+
+    def status(self, now):
+        """表示用の短い文字列。"""
+        if self.is_lost(now):
+            return "cam LOST"
+        return f"cam {'TURN' if self._rotating else 'idle'} {self._rpm:5.1f}rpm"
+
+
 class PositionWriter:
     """全台の検出を突き合わせ、共有ファイルへ `seq,x,y,shaving` を書き続ける。
 
@@ -331,18 +417,26 @@ class PositionWriter:
     seq を進めるので、Unity は「正常な検知なし」と「Python 停止（seq 据置＝ロスト）」を区別できる。
     """
 
-    def __init__(self, path, states, shaving_hold_sec, interval_sec):
+    def __init__(self, path, states, shaving_hold_sec, interval_sec,
+                 camera=None, ice_hold_sec=0.4, extend_max_sec=5.0):
         self._path = path
         self._tmp_path = path.with_name(path.name + ".tmp")
         self._states = states
         self._shaving_hold = shaving_hold_sec
         self._interval = interval_sec
+        self._camera = camera              # None ならカメラ併用しない（従来動作）
+        self._ice_hold = ice_hold_sec
+        self._extend_max = extend_max_sec
         self._seq = 0
         self._lock = threading.Lock()
-        self._last_line = (None, False)   # (point, shaving)。描画のステータス表示用
+        self._last_line = (None, False, "")   # (point, shaving, 判定の由来)。描画用
 
     def resolve(self):
-        """(代表点 (x,y) or None, shaving) をいま時点で決める。"""
+        """(代表点 (x,y) or None, shaving, 由来) をいま時点で決める。
+
+        由来は表示用の短い文字列（"ice" / "camera" / "lidar-only" / "off" / "no-ice"）。
+        位置は常に LiDAR の最新の代表点で、カメラは削りの延長にしか関与しない。
+        """
         latest = None
 
         for state in self._states:
@@ -353,30 +447,51 @@ class PositionWriter:
                 latest = detection
 
         if latest is None:
-            return None, False
+            return None, False, "no-ice"   # 起動から一度も氷を見ていない
 
         point, detected_at = latest
-        age = time.monotonic() - detected_at
-        shaving = age <= self._shaving_hold
+        now = time.monotonic()
+        age = now - detected_at
 
-        # shaving ホールド中は直近の代表点を継続。過ぎたら検知なし。
-        return (point if shaving else None), shaving
+        if self._camera is not None:
+            self._camera.poll(now)
+
+        if self._camera is None or self._camera.is_lost(now):
+            # カメラ未使用・未起動・停止 → 従来どおり盲目のホールドだけで判定する。
+            shaving = age <= self._shaving_hold
+            source = "lidar-only" if shaving else "off"
+        elif age <= self._ice_hold:
+            shaving, source = True, "ice"          # 直近に氷を見た（無条件）
+        elif self._camera.is_rotating(now) and (self._extend_max <= 0
+                                                or age <= self._extend_max):
+            shaving, source = True, "camera"       # 氷は途切れているが回している
+        else:
+            shaving, source = False, "off"         # 手を止めた or 延長の上限
+
+        # 削っている間は直近の代表点を継続。止まったら検知なし（Unity は点と削りの AND）。
+        return (point if shaving else None), shaving, source
 
     def status(self):
-        """直近に書いた (point, shaving, seq) を返す（描画のステータス表示用）。"""
+        """直近に書いた (point, shaving, 由来, seq) を返す（描画のステータス表示用）。"""
         with self._lock:
-            return self._last_line[0], self._last_line[1], self._seq
+            return self._last_line[0], self._last_line[1], self._last_line[2], self._seq
+
+    def camera_status(self):
+        """カメラの状態を表す短い文字列（未使用なら空）。"""
+        if self._camera is None:
+            return ""
+        return self._camera.status(time.monotonic())
 
     def run(self, stop_event):
         """ライタスレッド本体。停止フラグが立つまで一定間隔で書き続ける。"""
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
         while not stop_event.is_set():
-            point, shaving = self.resolve()
+            point, shaving, source = self.resolve()
 
             with self._lock:
                 self._seq += 1
-                self._last_line = (point, shaving)
+                self._last_line = (point, shaving, source)
                 seq = self._seq
 
             if point is None:
@@ -677,12 +792,14 @@ def run_plot(units, writer, stop_event, shutdown):
     fig.canvas.mpl_connect("resize_event", apply_layout)
 
     def update(_frame):
-        point, shaving, seq = writer.status()
+        point, shaving, source, seq = writer.status()
         loc = "  none        " if point is None else f"({point[0]:7.1f}, {point[1]:7.1f})"
+        cam = writer.camera_status()
 
         status_text.set_text(
             f"seq {seq:>7d}   xy {loc} mm"
-            f"   shaving {'ON ' if shaving else 'off'}\n"
+            f"   shaving {'ON ' if shaving else 'off'} [{source}]"
+            f"{'   ' + cam if cam else ''}\n"
             f"{POSITION_FILE}"
         )
 
@@ -724,11 +841,17 @@ def main():
 
     start_units(units, stop_event)
 
+    camera = (CameraRotationSource(CAMERA["file"], CAMERA["lost_timeout_sec"])
+              if CAMERA["file"] is not None else None)
+
     writer = PositionWriter(
         POSITION_FILE,
         [unit.state for unit in units],
         SHAVING_HOLD_SEC,
         WRITE_INTERVAL_SEC,
+        camera=camera,
+        ice_hold_sec=CAMERA["ice_hold_sec"],
+        extend_max_sec=CAMERA["extend_max_sec"],
     )
     writer_thread = threading.Thread(
         target=writer.run, args=(stop_event,), daemon=True
@@ -741,6 +864,16 @@ def main():
         f"r {CIRCLE_RADIUS_MM:.0f} (+tol {CIRCLE_TOLERANCE_MM:.0f}); "
         f"intensity < {INTENSITY_MAX:g}, shaving hold {SHAVING_HOLD_SEC:g}s"
     )
+    if camera is None:
+        print("camera: 未使用（config.toml の [camera] rotation_file 未設定）"
+              f" — 削りは shaving_hold {SHAVING_HOLD_SEC:g}s の盲目ホールドのみ")
+    else:
+        print(f"camera file = {CAMERA['file']}")
+        print(f"camera: ice hold {CAMERA['ice_hold_sec']:g}s / "
+              f"extend max {CAMERA['extend_max_sec']:g}s"
+              f"{'（無制限）' if CAMERA['extend_max_sec'] <= 0 else ''} / "
+              f"lost {CAMERA['lost_timeout_sec']:g}s — "
+              "カメラがロストしたら従来動作へフォールバック")
 
     def shutdown():
         # 二重呼び出しに備えてフラグで一度きりに
