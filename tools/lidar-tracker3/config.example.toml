@@ -1,0 +1,100 @@
+# このファイルをコピーして config.toml を作成し、ご自身の環境に合わせて書き換えてください。
+#   cp config.example.toml config.toml
+# config.toml は Git 管理対象外（.gitignore 済み）なので、各自のマシンごとに設定できます。
+#
+# 兄弟ツール tools/lidar-tracker（YDLIDAR T-mini Plus）の config.toml とは互換性が
+# ありません。ボーレート・回転数の範囲・quality のレンジがどれも違うので、
+# 値を写すのではなく、このテンプレから作り直してください。
+
+[serial]
+# 接続するシリアルポート。並び順がそのまま LiDAR1, LiDAR2 …（＝画面の上から下）になる。
+#   Windows      : "COM5" など
+#   Mac / Linux  : "/dev/ttyUSB0" や "/dev/tty.usbserial-0001" など
+# 接続中のポートは `ls /dev/tty.usb*`（macOS）で確認できる。
+# 1 台だけなら port = "/dev/tty.usbserial-0001" と 1 行で書いてもよい。
+port = "/dev/tty.usbserial-0001"
+
+# ボーレート。全台共通。
+# **S1 は 256000**。A シリーズの 115200 でも T-mini Plus の 230400 でもない。
+# ここが違うと応答ヘッダが不正になり、起動時にその旨のエラーで止まる。
+baudrate = 256000
+
+
+[scan]
+# LiDAR の回転数[Hz]。省略すると 10.0。S1 のデータシート範囲は 8〜15。
+#
+# 回転が速いほど同じ場所を捉え直す間隔が短くなる（落下する氷を追いやすい）が、
+# サンプリングレートは一定なので、1 回転あたりの点数は反比例して減る。
+# 実際の点数はウィンドウのタイトルに出るので、見ながら合わせる。
+frequency_hz = 10.0
+
+# スキャンモード。"standard"（既定）か "express"。
+#
+#   standard : 1 点 5 バイト。**quality（反射強度）が付く**ので [ice] intensity_max が
+#              効く。実機の申告は 244us/sample で、10Hz なら約 410 点/回転。
+#   express  : dense capsule。84 バイトに 40 点を詰めるので全レートが流せ、
+#              10Hz で約 920 点/回転。代わりに **quality を持たない**ので
+#              [ice] intensity_max が無効になり、障害物対策は関心円だけになる。
+#
+# **実機（firmware 1.28）では express は使えない。** この個体の DenseBoost が返すのは
+# ultra capsule（0x85）で、このドライバが読める dense capsule（0x86）ではないため、
+# 起動時にその旨のエラーで止まる。standard の約 410 点/回転は T-mini Plus（400 点）と
+# 同等でしかも quality が付くので、この用途では不足しない。
+# 手持ちの機体がどちらかは probe.py のモード一覧（ans=0x86 かどうか）で分かる。
+mode = "standard"
+
+# express のスキャンモード id。省略すると機体に推奨値（typical）を訊く。
+# 通常は省略でよい。probe.py が出すモード一覧の中から、応答種別が
+# 0x86（dense capsule）のものを選んで指定する。standard モードでは使わない。
+# mode_id = 0
+
+
+[detection]
+# LiDAR の検出範囲[cm]。この外の点は破棄する。
+# セクションごと省略可能で、その場合は range_min_cm = 0, range_max_cm = 80 が使われる。
+
+# 内側の境界。センサー筐体・治具・支柱など、常に至近距離で返る反射を切る。
+# 0 なら内側は切らない。0 以外にすると橙色の円で描画される。
+# S1 の最短測距は 10cm なので、それ未満を指定しても意味はない。
+#
+# **関心円が検出円と同心（既定）なので、ここが至近の反射を切る唯一のノブになる。**
+# LiDAR の足元・治具が氷として拾われるようなら、まずこの値を上げること。
+range_min_cm = 0
+
+# 外側の境界。赤い円で描画される。
+# 壁や周囲の人を落として、かき氷機まわりの落氷だけを見るための主要なノブ。
+# S1 の実力値は 0.1〜40 m なので、4000 より大きくしても意味はない。
+range_max_cm = 80
+
+
+[ice]
+# 落氷とみなす条件。設置場所と当日の光環境で変わる現物合わせの値。
+
+# 氷とみなす quality の上限。この値**未満**の点だけを氷の候補にする。
+# 氷は反射が弱く quality が低い / 障害物（人・機体・造形物）は高い、という傾向に乗る。
+#
+# **S1 standard モードの quality は 6bit（0〜63）**。T-mini Plus は 8bit（0〜255）なので、
+# lidar-tracker の 200 をそのまま写すと全点が素通りする。
+#
+# 実機の室内実測（氷なし・2026-08-31）は 5〜58 で、86% が 24〜39 に集まっていた。
+# つまり既定の 50 では周囲の物体もほぼ素通りする。**氷を実際に落としながら
+# probe.py の分布を見て取り直すこと**（氷の点がどこに出るかを見て、その上に閾値を置く）。
+# 64 以上にすると事実上フィルタ無効。express モードでは quality が来ないので効かない。
+intensity_max = 50
+
+# 最後に氷を検出してから、削り中とみなし続ける秒数。この値がそのまま
+# 「削るのを止めてから雪崩が止まるまでの遅延」になる。省略すると 1.5。
+#
+# LiDAR は氷を毎回転は拾えない（T-mini Plus の実測で 0.75〜2 秒に 1 回）ので、
+# 取りこぼし間隔より短くすると氷が流れているのに雪崩が途切れる。当日の主要な調整ノブ。
+shaving_hold_sec = 1.5
+
+
+[output]
+# Unity が読む共有ファイルの出力先（valley_tracker.py が使う）。
+# 解決順は 環境変数 KAKIGORI_POSITION_FILE → ここ → スクリプト相対 out/position.txt。
+# 相対パスは config.toml の場所が基準。
+#
+# **注意**: Unity 側 VisionConfig.asset の _relativePath は tools/position-tracker/out/
+# を指している。lidar-tracker3 から渡すなら、どちらかを合わせること。
+position_file = "out/position.txt"
