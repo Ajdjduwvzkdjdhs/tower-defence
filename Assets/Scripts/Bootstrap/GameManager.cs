@@ -124,6 +124,14 @@ namespace KakigoriTD.Bootstrap
         private void Update()
         {
             _machine.Tick(Time.deltaTime);
+            //デバッグ用
+            //Enterキーが押された際にいかなる場合にも強制的にシーンジャンプ
+            bool IsClearKey = UnityEngine.InputSystem.Keyboard.current.leftShiftKey.wasPressedThisFrame;
+            bool IsGameOverKey = UnityEngine.InputSystem.Keyboard.current.rightShiftKey.wasPressedThisFrame;
+
+            if(IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+            else if(IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
+
             UpdateStatusUI();
             UpdateAimIndicator();
             UpdateTrackerWarning();
@@ -185,7 +193,7 @@ namespace KakigoriTD.Bootstrap
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
             if (isWin){ 
                 _audio?.PlayClear();
-                // 3秒後にシーン遷移
+                // WINの際には3秒後にシーン遷移
                 StartCoroutine(ResultSceneTransition(_resultLimit));
             }else {
                 _audio?.PlayGameOver();
