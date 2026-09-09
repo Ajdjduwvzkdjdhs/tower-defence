@@ -233,5 +233,51 @@ namespace KakigoriTD.Tests.EditMode
             Assert.That(m.RowCount, Is.EqualTo(1));
             Assert.That(m.FrontRow, Is.EqualTo(new[] { 4 }), "奥の敵が先頭へ繰り上がる");
         }
+
+        //--- Remove(item): 雪玉が半径内の敵を 1 体だけ撃破する（phase-preview-feedback §3.4）---------
+
+        [Test]
+        public void Remove_MiddleOfRow_LeavesPartialRow_CountDrops()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1); m.AddToBack(2); m.AddToBack(3); // 行0 = [1,2,3]
+            Assert.That(m.Remove(2), Is.True);
+            Assert.That(m.RowCount, Is.EqualTo(1));
+            Assert.That(m.Count, Is.EqualTo(2));
+            Assert.That(m.RowAt(0), Is.EqualTo(new[] { 1, 3 }));
+        }
+
+        [Test]
+        public void Remove_LastOfRow_DropsRow_SubsequentShiftUp()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(1);                    // 行0 = [1]（隔離行にして 1 体だけの行を作る）
+            m.AddToBack(2); m.AddToBack(3); m.AddToBack(4); // 行1 = [2,3,4]
+            Assert.That(m.Remove(1), Is.True);
+            Assert.That(m.RowCount, Is.EqualTo(1));
+            Assert.That(m.FrontRow, Is.EqualTo(new[] { 2, 3, 4 }), "行が消えて後続が繰り上がる");
+        }
+
+        [Test]
+        public void Remove_NotPresent_ReturnsFalse_NoChange()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddToBack(1); m.AddToBack(2);
+            Assert.That(m.Remove(9), Is.False);
+            Assert.That(m.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Remove_IsolatedRowMember_DropsRow_AndClearsIsolationFlag()
+        {
+            var m = new EnemyMatrix<int>(3);
+            m.AddRow(99);        // 行0 = 隔離行（味方）
+            m.AddToBack(1);      // 行1
+            Assert.That(m.Remove(99), Is.True);
+            Assert.That(m.RowCount, Is.EqualTo(1));
+            // 隔離フラグが解除されているので、AddToBack が先頭行を埋められる
+            m.AddToBack(2); m.AddToBack(3);
+            Assert.That(m.FrontRow, Is.EqualTo(new[] { 1, 2, 3 }));
+        }
     }
 }

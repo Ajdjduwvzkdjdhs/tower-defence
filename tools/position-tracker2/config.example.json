@@ -1,0 +1,24 @@
+{
+  "_comment": "config.json は実行環境ごとの調整値。配布時にこのファイルを config.json にコピーして書き換える。無ければ全てスクリプト内の既定値で動く（Editor 開発はコピー不要）。",
+  "rotationFile": "/absolute/path/to/kakigori_demo/tools/position-tracker2/out/rotation.txt",
+
+  "_gate_comment": "回転[RPM] -> 削り中フラグ の判定。onRpm で立ち上がり、offRpm を割ってから holdSec 経過で落ちる。holdSec が『手が一瞬フレーム外に出る』問題の直接の対策。",
+  "onRpm": 12.0,
+  "offRpm": 6.0,
+  "minOnSec": 0.12,
+  "holdSec": 0.45,
+
+  "_camera_comment": "カメラ番号と取り込み解像度。flip は左右反転（既定 false）。",
+  "cameraIndex": 0,
+  "width": 640,
+  "height": 480,
+  "flip": false,
+
+  "_mediapipe_comment": "パターンA（rotate_landmark.py）の検出/追跡しきい値。",
+  "minDetectionConfidence": 0.5,
+  "minTrackingConfidence": 0.5,
+
+  "_yolo_comment": "パターンC（rotate_periodicity.py）の姿勢推定モデルと手首キーポイントの信頼度。",
+  "yoloModel": "yolo11n-pose.pt",
+  "yoloConfidence": 0.25
+}

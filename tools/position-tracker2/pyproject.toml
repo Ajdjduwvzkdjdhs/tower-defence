@@ -1,0 +1,21 @@
+[project]
+name = "position-tracker2"
+version = "0.1.0"
+description = "Kakigori TD: overhead-camera crank-rotation detection (3 implementations) -> shared text file"
+readme = "README.md"
+# MediaPipe / ultralytics ともに 3.12 で検証。position-tracker と同じ Python に揃える。
+requires-python = ">=3.12,<3.13"
+# position-tracker（実機で検証済み）と同じピン。mediapipe 1.x は legacy の
+# mp.solutions（rotate_landmark.py が使う Hands）を削除したので 0.10 系に留める。
+dependencies = [
+    "mediapipe==0.10.14",
+    "opencv-python==4.13.0.92",
+    "numpy==2.5.0",
+]
+
+# ultralytics は torch を引き込む（GB 級）。パターンC を使うときだけ入れる:
+#   uv sync --extra yolo
+[project.optional-dependencies]
+yolo = [
+    "ultralytics>=8.3",
+]

@@ -1,0 +1,18 @@
+[project]
+name = "lidar-tracker3"
+version = "0.1.0"
+description = "Kakigori TD: LiDAR (Slamtec RPLIDAR S1) で落氷を検知し氷の連続座標へ（lidar-tracker の S1 版）"
+readme = "README.md"
+# 兄弟ツール（lidar-tracker）と揃える。config.py が tomllib を使うため 3.11+ が必須。
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
+    "pyserial>=3.5",
+]
+
+# lidar-tracker（YDLIDAR T-mini Plus）にあった vendor/ の SDK ビルド一式
+# （setup-sdk.sh / patches / [tool.uv.sources] / cmake<4 / -D_DARWIN）は無い。
+# RPLIDAR の公式 SDK は C++ のみで Python バインディングを持たないため、
+# S1 のシリアルプロトコルを lidar.py に自前実装した（README「なぜ公式 SDK を
+# 使わないか」を参照）。依存は pyserial だけで、ネイティブビルドは発生しない。

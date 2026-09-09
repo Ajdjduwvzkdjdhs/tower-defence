@@ -5,6 +5,7 @@ from pathlib import Path
 
 # config.py 自身の場所を基準にするため、実行ディレクトリに依存しない
 _CONFIG_PATH = Path(__file__).parent / "config.toml"
+_PREVIEW_PATH = Path(__file__).parent / "preview.toml"
 
 # 検出範囲の既定値[cm]。config.toml に [detection] が無いときに使う。
 # セクションごと省略できるので、既存の config.toml をそのまま使い続けられる。
@@ -40,6 +41,17 @@ VALLEY_NAMES = ("north", "west", "south", "east")
 
 # 共有ファイルの既定の出力先（[output] も環境変数も無いとき）。
 DEFAULT_POSITION_FILE = _CONFIG_PATH.parent / "out" / "position.txt"
+
+# カメラ併用（[camera] セクションごと省略可能＝カメラを使わない）の既定値。
+#
+# LiDAR は氷を毎回転は拾えないので、従来は shaving_hold_sec（既定 1.5 秒）の
+# 「盲目のホールド」で隙間を埋めていた。この値はそのまま「削るのを止めてから
+# 雪崩が止まるまでの遅延」になる。カメラ（tools/position-tracker2）が
+# 「ハンドルが回っているか」を見ていれば、盲目のホールドを短くしたうえで、
+# **回している間だけ**削りを延長できる（手を止めた瞬間に切れる）。
+DEFAULT_CAMERA_ICE_HOLD_SEC = 0.4       # LiDAR 検出から無条件で削りを維持する秒数
+DEFAULT_CAMERA_EXTEND_MAX_SEC = 5.0     # カメラでの延長の上限（0 で無制限）
+DEFAULT_CAMERA_LOST_TIMEOUT_SEC = 0.5   # カメラの seq がこの秒数停滞したらロスト
 
 
 def _load():
@@ -234,6 +246,65 @@ def load_ice_config():
     return values
 
 
+def load_camera_config():
+    """config.toml の [camera] を読み、カメラ併用の設定を dict で返す。
+
+    返す辞書のキー:
+
+        file             カメラ（rotate_pairangle.py 等）の出力ファイル Path。
+                         **None ならカメラ併用しない**（従来どおり shaving_hold_sec だけで動く）
+        ice_hold_sec     LiDAR の検出から無条件で削りを維持する秒数
+        extend_max_sec   カメラでの延長の上限[秒]（0 で無制限）
+        lost_timeout_sec カメラの seq がこの秒数停滞したらロストとみなす
+
+    ファイルの解決順（position-tracker2 側の解決順と対になる）:
+      1. 環境変数 KAKIGORI_ROTATION_FILE
+      2. config.toml の [camera] rotation_file
+      3. 未設定 → None（カメラ併用しない）
+
+    相対パスは config.toml の場所を基準に解決する（実行ディレクトリに依存させない）。
+    """
+    camera = _load().get("camera", {})
+
+    values = {}
+    for key, default, minimum in (
+        ("ice_hold_sec", DEFAULT_CAMERA_ICE_HOLD_SEC, 0),
+        ("extend_max_sec", DEFAULT_CAMERA_EXTEND_MAX_SEC, 0),
+        ("lost_timeout_sec", DEFAULT_CAMERA_LOST_TIMEOUT_SEC, 0),
+    ):
+        value = camera.get(key, default)
+        # bool は int のサブクラスなので明示的に弾く
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            sys.exit(
+                f"config.toml の [camera] {key} は数値で指定してください"
+                f"（現在: {value!r}）。"
+            )
+        if value < minimum:
+            sys.exit(
+                f"config.toml の [camera] {key} は {minimum} 以上で指定してください"
+                f"（現在: {value}）。"
+            )
+        values[key] = float(value)
+
+    env = os.environ.get("KAKIGORI_ROTATION_FILE")
+    if env:
+        values["file"] = Path(env).expanduser()
+        return values
+
+    value = camera.get("rotation_file")
+    if not value:
+        values["file"] = None
+        return values
+    if not isinstance(value, str):
+        sys.exit(
+            "config.toml の [camera] rotation_file は文字列で指定して"
+            f"ください（現在: {value!r}）。"
+        )
+    path = Path(value).expanduser()
+    values["file"] = path if path.is_absolute() else (_CONFIG_PATH.parent / path)
+    return values
+
+
 def load_valleys_config():
     """config.toml から 4 方向の谷の範囲を読み込み、チャンネル順のリストで返す。
 
@@ -314,6 +385,55 @@ def load_valleys_config():
         valleys.append(parsed)
 
     return valleys
+
+
+# 内覧会（連続座標）モードの関心円の既定値[mm]（preview.toml が無い / キー欠けのとき）。
+# 変換フレーム: x = r*cos(theta), y = -r*sin(theta) → theta=270° 方向が +Y。
+DEFAULT_CIRCLE_CENTER_MM = (0.0, 300.0)
+DEFAULT_CIRCLE_RADIUS_MM = 300.0
+DEFAULT_CIRCLE_TOLERANCE_MM = 100.0
+DEFAULT_REPRESENTATIVE_MODE = "nearest_center"
+
+
+def load_preview_config():
+    """preview.toml から連続座標モードの関心円設定を読み、dict で返す。
+
+    キー: center_offset_mm (2 要素の数値リスト), radius_mm, tolerance_mm, representative_mode。
+    ファイルが無い / セクションやキーが欠けている場合は既定値で埋める（現物合わせ前でも動く）。
+    """
+    data = {}
+    if _PREVIEW_PATH.exists():
+        with open(_PREVIEW_PATH, "rb") as f:
+            data = tomllib.load(f)
+
+    circle = data.get("circle", {})
+    rep = data.get("representative", {})
+
+    center = circle.get("center_offset_mm", DEFAULT_CIRCLE_CENTER_MM)
+    try:
+        cx, cy = (float(center[0]), float(center[1]))
+    except (TypeError, ValueError, IndexError):
+        sys.exit(
+            "preview.toml の [circle] center_offset_mm は数値 2 要素のリストで"
+            f"指定してください（現在: {center!r}）。"
+        )
+
+    def _num(section, key, default, minimum=0.0):
+        v = section.get(key, default)
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            sys.exit(f"preview.toml の [circle] {key} は数値で指定してください（現在: {v!r}）。")
+        if v < minimum:
+            sys.exit(f"preview.toml の [circle] {key} は {minimum} 以上で指定してください。")
+        return v
+
+    return {
+        "center_offset_mm": (cx, cy),
+        "radius_mm": _num(circle, "radius_mm", DEFAULT_CIRCLE_RADIUS_MM, minimum=1.0),
+        "tolerance_mm": _num(circle, "tolerance_mm", DEFAULT_CIRCLE_TOLERANCE_MM),
+        "representative_mode": rep.get("mode", DEFAULT_REPRESENTATIVE_MODE),
+    }
 
 
 def load_output_config():

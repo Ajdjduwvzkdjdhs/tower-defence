@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 4458533273204606613}
   - component: {fileID: 331428665106823950}
-  - component: {fileID: 3327304788746446637}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -49,34 +48,19 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 506be38a9f90e4df1b165fad46787bdb, type: 2}
   - {fileID: 11400000, guid: 378cd1aa64eab4e3a858717372c841b5, type: 2}
   - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
-  _serialConfig: {fileID: 0}
-  _visionConfig: {fileID: 0}
-  _inputMode: 0
-  _visionFlipHorizontal: 0
-  _visionFlipVertical: 0
+  _inputMode: 2
+  _lidarPreviewConfig: {fileID: 11400000, guid: 38f103d2b7e054c77ad9fc19367b4967, type: 2}
   _terrain: {fileID: 4358695569998069333}
   _groundSurface: {fileID: 3739809722233026105}
   _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
-  _enemyModel: {fileID: 919132149155446097, guid: f029bb714eb16432591ebb5915397b22, type: 3}
-  _enemyModelHeight: 3.2
   _fortHpMax: 1000
   _iceTotal: 50
   _waveLull: 5
   _waveIntroDuration: 1.2
   _allyHitPenalty: 50
---- !u!114 &3327304788746446637
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 29437767786192992}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 05a3cd0009bca4cec90ce375a276107b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Gameplay.AvalancheController
-  _iceDrainPerSec: 1
+  _tgsAllyPrefab: {fileID: 0}
+  _enemyPrefab: {fileID: 0}
+  _resultLimit: 3
 --- !u!1 &184031253997498005
 GameObject:
   m_ObjectHideFlags: 0

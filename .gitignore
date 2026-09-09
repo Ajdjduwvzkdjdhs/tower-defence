@@ -106,13 +106,18 @@ InitTestScene*.unity*
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 
-# --- Project choice: Unity-MCP dev tooling is per-developer, not committed ---
-# MCP plugin NuGet/runtime DLLs (~17MB, reinstalled with the MCP package)
+# --- Project choice: AI-agent dev tooling & personal config are per-developer, not committed ---
+# Unity-MCP plugin NuGet/runtime DLLs (~17MB, reinstalled with the MCP package) — legacy
 /[Aa]ssets/Plugins/
 /[Aa]ssets/Plugins.meta
-# Claude Code / Unity-MCP local config & generated skill docs
+# Claude Code local config, per-project skills (unity-cli), generated docs
 /.claude/
 /.mcp.json
+# Personal per-developer working policy (auto-loaded by Claude Code; keep private)
+/CLAUDE.local.md
 
 # macOS
 .DS_Store
+
+# LiDAR env memo: keep the note, not the machine-specific config copy
+/tools/環境構築について/config.toml

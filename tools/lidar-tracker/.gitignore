@@ -8,5 +8,8 @@ out/
 # 実機ごとのシリアルポート設定。テンプレは config.example.toml をコミット。
 config.toml
 
+# 内覧会（連続座標）モードの現物設定。テンプレは preview.example.toml をコミット。
+preview.toml
+
 # 公式 SDK の clone（setup-sdk.sh が作る）。パッチだけコミットする
 vendor/

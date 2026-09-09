@@ -23,17 +23,12 @@ namespace KakigoriTD.Bootstrap
         [Header("ウェーブ（順に Wave1/2/3 の WaveConfigSO を割り当て）")]
         [SerializeField] private WaveConfigSO[] _waveConfigs;
 
-        [Header("シリアル（実機ハンドル接続。未割り当てならキーボードのみで動作）")]
-        [SerializeField] private SerialConfigSO _serialConfig;
+        [Header("入力経路")]
+        [Tooltip("LidarPosition=実 LiDAR（連続座標・展示本番）／SimPointer=マウス疑似（開発）。Keyboard/Vision は旧値（廃止・未使用）。")]
+        [SerializeField] private InputMode _inputMode = InputMode.LidarPosition;
 
-        [Header("位置検知（Vision。未割り当てならキーボードのみ。谷選択の源は _inputMode で切替）")]
-        [SerializeField] private VisionConfigSO _visionConfig;
-        [Tooltip("谷選択の源。展示本番=Vision（かき氷機の位置）／開発=Keyboard。")]
-        [SerializeField] private InputMode _inputMode = InputMode.Keyboard;
-        [Tooltip("カメラの左右反転（ミラー）。左右の谷が逆に出るときに ON。W↔E を入れ替える（再生中もライブ反映）。")]
-        [SerializeField] private bool _visionFlipHorizontal;
-        [Tooltip("カメラの上下反転（ミラー）。前後の谷が逆に出るときに ON。N↔S を入れ替える（再生中もライブ反映）。")]
-        [SerializeField] private bool _visionFlipVertical;
+        [Header("LiDAR 位置入力・雪玉放出・敵スポーンの調整値（未割り当てなら既定値インスタンス）")]
+        [SerializeField] private LidarPreviewConfigSO _lidarPreviewConfig;
 
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのフォールバック
@@ -58,24 +53,22 @@ namespace KakigoriTD.Bootstrap
         private Fort _fort;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
-        private ChannelController[] _channels;
+        private EnemyField _field;
         private IceStock _ice;
-        private IInputSource _input;
-        private AvalancheController _avalanche;
-        private AvalancheVfx _avalancheVfx;
+        private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
+        private LidarPositionInputSource _lidarPosSource; // LidarPosition モードのロスト警告用に保持
+        private LidarAvalancheVfx _lidarVfx;
         private WaveManager _waveManager;
         private UIManager _ui;
         private GameStateMachine _machine;
-        private VisionInputSource _visionSource; // ロスト（Python 停止）を UI 警告に反映するため保持
         private AudioService _audio;             // BGM/SE アダプタ（Phase 6 / ADR-26）
         private int _prevFortHp;                 // Hit 音の判定用（減少 かつ >0 のときだけ鳴らす）
 
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _aimMat, _snowPuffMat, _snowballMat;
+        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat, _snowballMat;
         private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
-        private GameObject _aimIndicator; // 照準中の谷を示すレーン（半透明）
 
         private void Awake()
         {
@@ -94,28 +87,25 @@ namespace KakigoriTD.Bootstrap
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
             _penalty = new PenaltyTally();
-            BuildChannels();
 
             _ice = new IceStock(_iceTotal);
-            _input = BuildInput();
 
-            _avalanche = NewChild("AvalancheController").AddComponent<AvalancheController>();
-            _avalanche.Configure(_input, _ice, _channels);
+            // 決定キー（Title/Result の Enter）専用。谷選択・削りは位置入力＋LidarAvalancheVfx が担う。
+            _input = NewChild("InputSource").AddComponent<KeyboardInputSource>();
 
-            // 雪崩の見た目（斜面を流れる雪玉ストリーム）。削り状態を読むだけの純 cosmetic（ADR-21）。
-            _avalancheVfx = NewChild("AvalancheVfx").AddComponent<AvalancheVfx>();
-            _avalancheVfx.Configure(_avalanche, _channels, HeightAt, CreateSnowball);
+            BuildField();
 
             _waveManager = NewChild("WaveManager").AddComponent<WaveManager>();
-            _waveManager.Configure(_channels);
+            _waveManager.Configure(_field);
 
             _ui = NewChild("UIManager").AddComponent<UIManager>();
-            _ui.Configure(_fort, _ice, _avalanche);
+            _ui.Configure(_fort, _ice);
 
-            // オーディオは購読対象（Fort/Factory/Channels/Avalanche）が揃った後に配線（ADR-26）。
+            // オーディオは購読対象（Fort/Factory/EnemyField）が揃った後に配線（ADR-26）。
             BuildAudio();
 
-            BuildAimIndicator();
+            // LiDAR 連続座標（LidarPosition）／マウス疑似（SimPointer）の位置入力＋雪玉放出。
+            BuildLidarPath();
 
             _machine = new GameStateMachine();
             _machine.Change(new TitleState(_machine, this));
@@ -133,23 +123,15 @@ namespace KakigoriTD.Bootstrap
             else if(IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
 
             UpdateStatusUI();
-            UpdateAimIndicator();
             UpdateTrackerWarning();
         }
 
-        // Vision モードで位置検知がロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
-        // 正常な「谷なし(-1)」とは区別し、ロスト時のみ表示する（docs/phase5.md §3-⑥）。
+        // LiDAR（LidarPosition モード）で seq が停滞＝ロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
         private void UpdateTrackerWarning()
         {
-            // Inspector の左右／上下反転トグルを再生中もライブ反映（キャリブレーション用）。
-            if (_visionSource != null)
-            {
-                _visionSource.FlipHorizontal = _visionFlipHorizontal;
-                _visionSource.FlipVertical = _visionFlipVertical;
-            }
-
-            bool warn = _inputMode == InputMode.Vision && _visionSource != null && _visionSource.IsLost;
-            _ui.SetTrackerWarning(warn ? "位置トラッキング未接続（Python を確認）" : "");
+            bool lidarWarn = _inputMode == InputMode.LidarPosition
+                             && _lidarPosSource != null && _lidarPosSource.IsLost;
+            _ui.SetTrackerWarning(lidarWarn ? "LiDAR 未接続（valley_tracker.py を確認）" : "");
         }
 
         // ---- IGameContext ----------------------------------------------------
@@ -173,7 +155,7 @@ namespace KakigoriTD.Bootstrap
                 _fort.Initialize(_fortHpMax);
                 _ice.Refill();
                 _penalty.Reset();
-                foreach (var ch in _channels) ch.ClearAll();
+                _field.ClearAll();
                 _ui.ClearResult();
             }
             _currentWaveIndex = waveIndex;
@@ -184,7 +166,7 @@ namespace KakigoriTD.Bootstrap
         public void ClearRemainingEnemies()
         {
             _waveManager.StopWave();
-            foreach (var ch in _channels) ch.ClearAll();
+            _field.ClearAll();
         }
 
         public void ShowResult(bool isWin, int score)
@@ -210,35 +192,46 @@ namespace KakigoriTD.Bootstrap
 
         // ---- build helpers ---------------------------------------------------
 
-        // 入力は Composite（キーボード＋シリアル＋位置検知、ADR-15/24）。谷選択＝_inputMode で
-        // Keyboard/Vision を明示切替、決定＝キーボード、削り＝キーボード Space OR ハンドル回転。
-        // 各 Config 未割り当てなら該当ソースは生成しない（実機なしでもキーボードで全操作可能）。
-        private IInputSource BuildInput()
+        // 360度化した単一の敵マネージャ（phase-preview-feedback.md / ADR-29 の 360度拡張）。
+        private void BuildField()
         {
-            var keyboard = NewChild("InputSource").AddComponent<KeyboardInputSource>();
+            // 調整値 SO 未割り当てなら既定値の一時インスタンスで動かす（EnemyField と LidarPath で共有）。
+            if (_lidarPreviewConfig == null)
+                _lidarPreviewConfig = ScriptableObject.CreateInstance<LidarPreviewConfigSO>();
 
-            IInputSource serial = null;
-            if (_serialConfig != null)
+            _field = NewChild("EnemyField").AddComponent<EnemyField>();
+            _field.Configure(_projectileFactory, _fort,
+                CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, CreateDissolveBurst,
+                HeightAt, _lidarPreviewConfig);
+            _field.OnAllyCaught += OnAllyCaughtHandler;
+        }
+
+        // LiDAR の連続座標 or マウス疑似から、検知点 P を中心に放射状の雪玉ストリームを放出し、
+        // 一般化位置到達で撃破する（phase-preview-feedback.md）。_inputMode は入力ソースだけを選ぶ。
+        private void BuildLidarPath()
+        {
+            var cfg = _lidarPreviewConfig; // BuildField で解決済み
+
+            IPositionInputSource posInput;
+            if (_inputMode == InputMode.LidarPosition)
             {
-                var go = NewChild("SerialInput");
-                var handler = go.AddComponent<SerialHandler>();
-                var serialSource = go.AddComponent<SerialInputSource>();
-                handler.Begin(_serialConfig);
-                serialSource.Configure(handler);
-                serial = serialSource;
+                _lidarPosSource = NewChild("LidarPositionInput").AddComponent<LidarPositionInputSource>();
+                _lidarPosSource.Configure(cfg, HeightAt);
+                var calib = NewChild("LidarCalibration").AddComponent<LidarCalibration>();
+                calib.Configure(_lidarPosSource, cfg, Camera.main);
+                posInput = _lidarPosSource;
+            }
+            else
+            {
+                var sim = NewChild("SimPositionInput").AddComponent<SimPositionInputSource>();
+                sim.Configure(cfg, HeightAt, Camera.main);
+                posInput = sim;
             }
 
-            IInputSource vision = null;
-            if (_visionConfig != null)
-            {
-                _visionSource = NewChild("VisionInput").AddComponent<VisionInputSource>();
-                _visionSource.Configure(_visionConfig);
-                _visionSource.FlipHorizontal = _visionFlipHorizontal;
-                _visionSource.FlipVertical = _visionFlipVertical;
-                vision = _visionSource;
-            }
-
-            return new CompositeInputSource(keyboard, serial, vision, _inputMode);
+            _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
+            _lidarVfx.Configure(posInput, _field, HeightAt, CreateSnowball, cfg,
+                cfg.ConsumeIce ? _ice : null);
+            _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
@@ -275,20 +268,6 @@ namespace KakigoriTD.Bootstrap
             _fort.Initialize(_fortHpMax);
         }
 
-        private void BuildChannels()
-        {
-            string[] names = { "N", "W", "S", "E" };
-            _channels = new ChannelController[4];
-            for (int id = 0; id < 4; id++)
-            {
-                var cgo = NewChild("Channel_" + names[id]);
-                var ch = cgo.AddComponent<ChannelController>();
-                ch.Configure(id, Vector3.zero, _projectileFactory, _fort, CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, CreateDissolveBurst, HeightAt);
-                ch.OnAllyCaught += OnAllyCaughtHandler;
-                _channels[id] = ch;
-            }
-        }
-
         private void OnAllyCaughtHandler()
         {
             _penalty.Add(_allyHitPenalty);
@@ -306,9 +285,9 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = _fort.CurrentHp;
 
             _projectileFactory.OnCreated += OnProjectileCreatedForAudio;     // EnemyAttack（毎発）
-            foreach (var ch in _channels) ch.OnEnemyKilled += OnEnemyKilledForAudio; // Monster（行単位）
-            _avalanche.OnAvalancheChanged += OnAvalancheChangedForAudio;     // Avalanche loop on/off
+            _field.OnEnemyKilled += OnEnemyKilledForAudio;                   // Monster（撃破1体ごと）
             _fort.OnHpChanged += OnFortHpChangedForAudio;                    // Hit（減少 かつ >0）
+            // 雪崩ループ音（OnAvalancheChanged）は BuildLidarPath で _lidarVfx に配線する。
         }
 
         private void OnProjectileCreatedForAudio() => _audio.PlayEnemyAttack();
@@ -535,76 +514,18 @@ namespace KakigoriTD.Bootstrap
             return _dotTex;
         }
 
-        // 照準レーンの along 範囲（砦寄り→麓）と幅。斜面上に寝かせて描く（ADR-21・U6）。
-        private const float AimNearAlong = 6.5f; // 砦寄り端（先頭行 8.0 の手前）
-        private const float AimFarAlong = 10.0f; // 麓側端（最奥行 9.65 の少し外）
-        private const float AimWidth = 2.0f;     // レーン幅（スロット横幅 ~2.1 を覆う）
-
-        // 照準中の谷を示す半透明レーン。斜面(XZ＋高さ)に沿って寝かせ、麓へ伸びる帯（ADR-21）。
-        private void BuildAimIndicator()
-        {
-            _aimMat = MakeUnlitAdditive(new Color(0.30f, 0.26f, 0.05f, 1f));
-            // 斜面に寝かせると向きにより表裏が変わるため両面表示（カリング無効）。
-            _aimMat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
-            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = "AimIndicator";
-            go.transform.SetParent(transform);
-            DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _aimMat;
-            _aimIndicator = go;
-            _aimIndicator.SetActive(false);
-        }
-
-        private void UpdateAimIndicator()
-        {
-            int ch = _avalanche != null ? _avalanche.ActiveChannel : -1;
-            if (ch < 0 || ch > 3)
-            {
-                if (_aimIndicator.activeSelf) _aimIndicator.SetActive(false);
-                return;
-            }
-
-            // 外向き(XZ)に沿って砦寄り端→麓側端の 2 点を斜面高さでサンプルし、その傾きに沿って寝かせる。
-            Vector3 dir = ChannelController.DirectionFor(ch); // XZ, y=0
-            Vector3 nearP = dir * AimNearAlong; nearP.y = HeightAt(nearP.x, nearP.z);
-            Vector3 farP = dir * AimFarAlong; farP.y = HeightAt(farP.x, farP.z);
-
-            Vector3 laneDir = farP - nearP;
-            float length = laneDir.magnitude;
-            if (length < 1e-4f) { laneDir = dir; length = AimFarAlong - AimNearAlong; }
-            else laneDir /= length;
-
-            // 斜面法線（レーン方向に直交し上向き）: 帯を斜面に沿って寝かせつつ面をカメラ側へ向ける。
-            Vector3 side = Vector3.Cross(Vector3.up, laneDir).normalized;
-            Vector3 normal = Vector3.Cross(laneDir, side).normalized;
-            // 単一の平面帯なので凸な斜面のバンプに食い込む。法線方向に少し浮かせて食い込みを抑える。
-            Vector3 mid = (nearP + farP) * 0.5f + normal * 0.35f;
-
-            // ローカル +Z=法線（面をカメラへ）、+Y=レーン方向（長さ）、+X=幅。
-            _aimIndicator.transform.SetPositionAndRotation(mid, Quaternion.LookRotation(normal, laneDir));
-            _aimIndicator.transform.localScale = new Vector3(AimWidth, length, 1f);
-            if (!_aimIndicator.activeSelf) _aimIndicator.SetActive(true);
-
-            // 削り中はより明るく（加算量UP）。RGB がそのまま加算される。
-            bool shaving = _avalanche.IsAvalanching;
-            _aimMat.SetColor("_BaseColor", shaving ? new Color(0.70f, 0.52f, 0.08f, 1f)
-                                                   : new Color(0.30f, 0.26f, 0.05f, 1f));
-        }
-
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
-            // OnAllyCaught 購読解除（ADR-3）
-            if (_channels != null)
-                foreach (var ch in _channels)
-                    if (ch != null) ch.OnAllyCaught -= OnAllyCaughtHandler;
 
-            // サウンド購読解除（Phase 6 / ADR-26）。全新規購読を確実に外す。
+            // 購読解除（ADR-3）。EnemyField / Factory / Fort / LidarVfx。
+            if (_field != null)
+            {
+                _field.OnAllyCaught -= OnAllyCaughtHandler;
+                _field.OnEnemyKilled -= OnEnemyKilledForAudio;
+            }
             if (_projectileFactory != null) _projectileFactory.OnCreated -= OnProjectileCreatedForAudio;
-            if (_channels != null)
-                foreach (var ch in _channels)
-                    if (ch != null) ch.OnEnemyKilled -= OnEnemyKilledForAudio;
-            if (_avalanche != null) _avalanche.OnAvalancheChanged -= OnAvalancheChangedForAudio;
+            if (_lidarVfx != null) _lidarVfx.OnAvalancheChanged -= OnAvalancheChangedForAudio;
             if (_fort != null) _fort.OnHpChanged -= OnFortHpChangedForAudio;
         }
     }

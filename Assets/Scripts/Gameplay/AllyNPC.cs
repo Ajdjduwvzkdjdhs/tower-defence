@@ -7,7 +7,7 @@ namespace KakigoriTD.Gameplay
     /// <summary>
     /// 味方NPC。<see cref="Enemy"/> を継承し同一 <c>EnemyMatrix&lt;Enemy&gt;</c> に多態で保持する（ADR-16）。
     /// 無発射（factory=null → <c>Fire</c> のガードで自動成立）、<see cref="EnemyTypeSO.AllyLifetime"/> 秒で
-    /// 自走退場し <see cref="OnExpired"/> を発火する。所有者（<see cref="ChannelController"/>）が
+    /// 自走退場し <see cref="OnExpired"/> を発火する。所有者（<c>EnemyField</c>）が
     /// プール返却・行除去を行う。
     /// </summary>
     public class AllyNPC : Enemy

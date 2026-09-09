@@ -14,11 +14,8 @@ namespace KakigoriTD.UI
     /// </summary>
     public class UIManager : MonoBehaviour
     {
-        private static readonly string[] ChannelNames = { "N", "W", "S", "E" };
-
         private Fort _fort;
         private IceStock _ice;
-        private AvalancheController _avalanche;
 
         private int _hp, _maxHp;
         private string _status = "";
@@ -29,12 +26,11 @@ namespace KakigoriTD.UI
         private int _resultScore;
         private int _resultPenalty;
 
-        /// <summary>砦・氷・雪崩制御を注入し、砦HP イベントを購読する。</summary>
-        public void Configure(Fort fort, IceStock ice, AvalancheController avalanche)
+        /// <summary>砦・氷を注入し、砦HP イベントを購読する。</summary>
+        public void Configure(Fort fort, IceStock ice)
         {
             _fort = fort;
             _ice = ice;
-            _avalanche = avalanche;
             _hp = fort.CurrentHp;
             _maxHp = fort.MaxHp;
             fort.OnHpChanged += OnHpChanged;
@@ -97,21 +93,6 @@ namespace KakigoriTD.UI
             float hp01 = _maxHp > 0 ? (float)_hp / _maxHp : 0f;
             Bar(new Rect(16, 68, 320, 22), hp01, new Color(0.4f, 0.95f, 0.5f));
             GUI.Label(new Rect(344, 68, 260, 22), $"砦HP {_hp}/{_maxHp}");
-
-            // アクティブ谷ハイライト（同時1本）
-            int active = _avalanche != null ? _avalanche.ActiveChannel : -1;
-            for (int i = 0; i < 4; i++)
-            {
-                var r = new Rect(16 + i * 52, 98, 46, 26);
-                GUI.color = (i == active) ? new Color(1f, 0.85f, 0.1f) : new Color(1f, 1f, 1f, 0.18f);
-                GUI.DrawTexture(r, Texture2D.whiteTexture);
-                GUI.color = Color.white;
-                GUI.contentColor = (i == active) ? Color.black : Color.white;
-                GUI.Label(new Rect(r.x + 16, r.y + 4, 24, 20), ChannelNames[i]);
-                GUI.contentColor = Color.white;
-            }
-            bool shaving = _avalanche != null && _avalanche.IsAvalanching;
-            if (shaving) GUI.Label(new Rect(232, 100, 200, 22), "▼ 削り中（雪崩）");
 
             // 中央バナー（WaveIntro / WaveLull。リザルト表示中は非表示）
             if (!string.IsNullOrEmpty(_banner) && !_resultShown)
