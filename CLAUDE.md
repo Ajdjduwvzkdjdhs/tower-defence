@@ -118,7 +118,14 @@
 
 - `tools/position-tracker/` — カメラ + 手位置検知（Python/uv）。`seq,channel` を書く（Phase 5 の初期実装）
 - `tools/lidar-tracker/` — YDLIDAR T-mini Plus で落氷を検知（Python/uv）。`seq,channel,shaving` を書く。position-tracker の後継
+- `tools/lidar-tracker3/` — Slamtec RPLIDAR S1 版の落氷検知（Python/uv）。判定・出力・スレッド構成は lidar-tracker と同じで、違うのはセンサーを開く層と機種差（quality 6bit・SDK ノイズ除去なし）だけ。連続座標モード（`seq,x,y,shaving`）
 - `tools/lidar-tracker2/`, `tools/lidar-tracker2.1/` — Hokuyo UBG-04LX-F01 の動作検証（C++）
+
+> **複数台 LiDAR は「冗長性の確保」専用**（lidar-tracker / lidar-tracker3）。全台は同じ落氷域を
+> 同一座標フレーム（同一原点・同一向き）で見て、取りこぼし低減のために OR を取る。
+> **別範囲を分担して検知エリアを広げる構成は取らない**（台ごとの外部標定・座標フュージョンは実装しない）。
+> ユーザーが「複数台使いたい」と言ったら、常に「冗長性を上げたい」の意味で解釈すること。
+> 貸与上限は 6 台。可視化は全台を束ねた単一の点群プロット（`valley_tracker.py` の `MergedView`）。
 
 ## リポジトリ構成
 

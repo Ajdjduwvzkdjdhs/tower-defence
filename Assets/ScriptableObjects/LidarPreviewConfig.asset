@@ -19,8 +19,8 @@ MonoBehaviour:
   _scaleUnitsPerMm: 0.03333
   _worldRotationDeg: 0
   _flipX: 0
-  _flipY: 1
-  _centerOffsetMm: {x: 0, y: 300}
+  _flipY: 0
+  _centerOffsetMm: {x: 0, y: 600}
   _radiusMm: 300
   _spawnRate: 24
   _endRadius: 10

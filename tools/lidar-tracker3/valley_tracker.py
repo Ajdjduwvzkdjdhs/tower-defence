@@ -26,8 +26,9 @@ theta=0°→-Y、theta=90°→-X（＝図では 0 度が画面の真下、90 度
 横軸に接する**位置にあり、円は丸ごと機体の片側に乗る。円の中心に落ちた氷はおよそ (0, +300)。
 その +Y が表示角のどちらを向くかは反転で決まる（既定＝両方反転では表示角 180 度の側）。
 
-代表点は preview.toml の関心円（中心オフセット・半径・はみ出し許容）の中で、円中心に最も
-近い 1 点。検知なしは `seq,,,0`（x,y 空欄）。temp へ書き切って `os.replace()` の原子的
+代表点は preview.toml の関心円（中心オフセット・半径・はみ出し許容）の中の 1 点。選び方は
+`[representative] mode`：既定 "nearest_lidar"（LiDAR に最も近い点。混合画素の尻尾対策）／
+"nearest_center"（円中心に最も近い点）。検知なしは `seq,,,0`（x,y 空欄）。temp へ書き切って `os.replace()` の原子的
 rename（partial read を排除）・`seq` 単調増加はそのまま。Unity は `seq` の停止で「ロスト」を
 検知し、検知点なし・削りなし（安全側）へ倒す。
 
@@ -35,7 +36,13 @@ rename（partial read を排除）・`seq` 単調増加はそのまま。Unity �
   - 読み取りスレッド : 台ごとに 1 本。read_scan() で 1 回転ぶんを読み、その回転を
                        そのまま判定して「代表点と時刻」を自分の共有状態に書く
   - ライタスレッド   : 50ms ごとに全台の共有状態を突き合わせ、共有ファイルへ 1 行書く
-  - メインスレッド   : 可視化ありなら FuncAnimation で散布図を再描画。--headless なら待つだけ
+  - メインスレッド   : 可視化ありなら FuncAnimation で再描画。--headless なら待つだけ
+
+可視化（`MergedView`）:
+  複数台は同じ落氷域を同一座標フレームで見る冗長構成なので、画面も **全台を束ねた
+  単一の点群プロット**にする（台ごとにパネルを割らない）。全台の有効点を重ねて灰色、
+  関心円内の氷を赤、ライタが選んだ代表点を緑の輪で出す。左の欄に台ごとの生存確認
+  （直近の有効点数・累計ヒット数）を出すので、どの台が効いていないかはそこで分かる。
 
 設置の前提:
   LiDAR は**落氷域の縁**に、正面を落氷域へ向けて据える。関心円は
@@ -57,7 +64,10 @@ rename（partial read を排除）・`seq` 単調増加はそのまま。Unity �
     - 関心円（`preview.toml` の中心・半径・はみ出し許容）の外は捨てる
       → 壁・周囲の人・かき氷機の筐体をここで落とす。express モードではこれが唯一の
         障害物対策になるので、円は必要最小限に絞ること
-  残った点のうち、円の中心に最も近い 1 点を代表点にする。
+  残った点から代表点を 1 点選ぶ（`[representative] mode`）。既定 "nearest_lidar" は
+  LiDAR に最も近い点＝距離 r が最小の点。小さな物体を測ると照射軸に沿って裏側へ点が
+  尾を引く（混合画素 / mixed pixel）が、その尾は必ず本体より奥なので、手前端が本体に
+  最も近い。"nearest_center" は円中心に最も近い点（旧既定）。
 
   静止背景の学習は使わない。quality と円の狭さで足りる見込みで、学習の待ち時間も
   リセット操作も要らない。
@@ -128,6 +138,10 @@ CIRCLE_RADIUS_MM = _PREVIEW["radius_mm"]
 CIRCLE_TOLERANCE_MM = _PREVIEW["tolerance_mm"]
 CIRCLE_FILTER_MM = CIRCLE_RADIUS_MM + CIRCLE_TOLERANCE_MM  # フィルタはこの半径で通す（はみ出し許容込み）
 
+# 円内に氷点が複数あるときの代表点の選び方（preview.toml [representative] mode）。
+# 既定 "nearest_lidar"（LiDAR に最も近い点）。下の IcePointExtractor 参照。
+REPRESENTATIVE_MODE = _PREVIEW["representative_mode"]
+
 # Unity が読む共有ファイル。
 POSITION_FILE = load_output_config()
 
@@ -139,11 +153,26 @@ WRITE_INTERVAL_SEC = 0.05
 DISPLAY_SCALE = 1.2
 DISPLAY_MAX_MM = RANGE_MAX_MM * DISPLAY_SCALE
 
-# 現物合わせ用の角度オフセット[度]。**センサーの生角のどこを「北」にするか**。
-# 機体を据えたあと、「基準にしたい向き」の生角をここに入れて表示角 0 度へ回す
-# （例: 生角 270 度を 0 度にしたいなら 90.0）。0 度が図のどこに出るかは下の反転で決まる。
-# 判定も描画もこの表示角で行うので、ここを回すと図も出力も一緒に回る。
-ANGLE_OFFSET_DEG = 0.0
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ 角度合わせはこの 1 行だけをいじる（judgment も plot も position.txt も一緒に回る）│
+# └─────────────────────────────────────────────────────────────────────┘
+#
+# 意味: センサーの「生角」を、判定・描画で使う「表示角」へ回す量[度]。
+#
+# 合わせ方: LiDAR は正面を落氷域へ向けて置く。氷は正面（＝関心円の中心 (0,+300)）に
+#   落ちるようにする。関心円は既定の反転では **表示角 180 度＝出力 +Y の側**にあるので、
+#   「筐体の正面の生角」が表示角 180 度に来るように回す:
+#
+#       ANGLE_OFFSET_DEG = (180 − 正面の生角) mod 360
+#
+#   正面の生角 →   0° |  90° | 180° | 270°
+#   入れる値   → 180  |  90  |   0  | 270
+#
+#   分からなければ: valley_tracker.py を可視化つきで起動し、正面へ氷（か手）を出して、
+#   画面の赤い点が真上（12 時方向）に来るまでこの値を 90 ずつ回す。真上＝表示角 180°。
+#
+# **この S1 は正面が生角 0 度**なので 180.0。
+ANGLE_OFFSET_DEG = 180.0
 
 # 左右／上下の反転。設置の向き（LiDAR をどちら向きに置くか・どちらから見た図にするか）で
 # 東西・南北が入れ替わるので、ここ 2 か所で吸収する。**Unity 側の flipX / flipY では
@@ -159,18 +188,13 @@ FLIP_VERTICAL = True
 UPDATE_INTERVAL_MS = 50
 
 #--- ウィンドウの大きさ[インチ] -----------------------------------------
-FIGURE_WIDTH_IN = 9.0
-PANEL_HEIGHT_IN = 4.4        # プロット 1 枚ぶん
-TOP_MARGIN_IN = 0.7
+# 単一の点群プロット。台数が増えてもパネルは割らない（全台を 1 枚に束ねる）。
+FIGURE_WIDTH_IN = 9.5
+FIGURE_HEIGHT_IN = 9.5
+TOP_MARGIN_IN = 1.0          # 上端の 2 行タイトル
 BOTTOM_ROW_HEIGHT_IN = 1.1   # 下端のステータス行
 LEFT_COLUMN_WIDTH_IN = 2.6   # プロットの左に空ける、台ごとの数値欄
 COUNT_TEXT_LEFT_IN = 0.3
-PANEL_GAP_RATIO = 0.55
-
-# プロットの縦中心からの高さ[インチ]。
-COUNT_HEAD_OFFSET_IN = 0.7
-COUNT_VALUE_OFFSET_IN = -0.1
-COUNT_NOW_OFFSET_IN = -0.8
 
 STATUS_LEFT_IN = 0.3
 STATUS_BOTTOM_IN = 0.45
@@ -246,6 +270,15 @@ def _xy_to_polar_deg_mm(x, y):
     )
 
 
+# 代表点の選び方（preview.toml [representative] mode）。
+#   "nearest_lidar"  : LiDAR に最も近い点（＝距離 r が最小）。混合画素（mixed pixel）の
+#                      尻尾は必ず本体より奥へ伸びるので、先頭＝手前側が本体に一番近い。
+#                      小さな落氷にはこちらが既定。
+#   "nearest_center" : 関心円の中心に最も近い点（旧既定）。背景が円内に入り込むような
+#                      置き方で、中心付近だけを信じたいときに使う。
+REPRESENTATIVE_MODES = ("nearest_lidar", "nearest_center")
+
+
 class IcePointExtractor:
     """1 回転ぶんの samples から「関心円内の氷の代表点」を取り出す純ロジック。
 
@@ -253,21 +286,29 @@ class IcePointExtractor:
 
       1. intensity < INTENSITY_MAX の有効点だけを氷の候補にする（氷は反射が弱い）。
       2. 各点を (x, y)[mm] へ変換し、関心円の中心から filter_radius_mm 以内の点だけ残す。
-      3. 残った点のうち中心に最も近い 1 点を代表点として返す（無ければ None）。
+      3. 残った点から mode に従って代表点を 1 つ選んで返す（無ければ None）。
+         - "nearest_lidar"  : 距離 r（＝原点からの hypot）が最小の点
+         - "nearest_center" : 関心円の中心に最も近い点
 
     谷（channel）・max_points_per_valley の概念は無い。障害物対策は intensity と円の狭さで担う。
     状態は持たない（読み取りスレッドからのみ呼ばれる）。
     """
 
-    def __init__(self, intensity_max, circle_center_mm, filter_radius_mm):
+    def __init__(self, intensity_max, circle_center_mm, filter_radius_mm,
+                 mode="nearest_lidar"):
         self._intensity_max = intensity_max
         self._cx, self._cy = circle_center_mm
         self._filter_r2 = filter_radius_mm * filter_radius_mm
+        if mode not in REPRESENTATIVE_MODES:
+            raise ValueError(
+                f"未知の代表点モード {mode!r}（{', '.join(REPRESENTATIVE_MODES)} のいずれか）"
+            )
+        self._mode = mode
 
     def extract(self, samples):
         """(代表点 (x,y) or None, 円内の氷点 [(display_deg, distance_mm), ...]) を返す。"""
         best = None
-        best_d2 = None
+        best_key = None
         in_circle = []
         for p in samples:
             if not _is_valid(p):
@@ -282,8 +323,11 @@ class IcePointExtractor:
             if d2 > self._filter_r2:
                 continue
             in_circle.append((display_deg, distance))
-            if best_d2 is None or d2 < best_d2:
-                best_d2 = d2
+
+            # どちらのモードも「小さいほど代表に近い」キーで比較する
+            key = distance if self._mode == "nearest_lidar" else d2
+            if best_key is None or key < best_key:
+                best_key = key
                 best = (x, y)
         return best, in_circle
 
@@ -452,16 +496,19 @@ class PositionWriter:
 
 
 class LidarUnit:
-    """LiDAR 1 台ぶんの一式（センサー・判定・共有状態・自分のプロット）。
+    """LiDAR 1 台ぶんのセンサー一式（接続・判定・共有状態・読み取りスレッド）。
 
-    寿命は main() が持つ:  start() → （可視化なら）build() → refresh() を毎フレーム → stop()。
+    描画は持たない（全台まとめて `MergedView` が受け持つ）。
+    寿命は main() が持つ:  start() → stop()。
     """
 
     def __init__(self, name, port, baudrate):
         self.name = name
         self.port = port
         self.state = UnitState()
-        self._extractor = IcePointExtractor(INTENSITY_MAX, CIRCLE_CENTER_MM, CIRCLE_FILTER_MM)
+        self._extractor = IcePointExtractor(
+            INTENSITY_MAX, CIRCLE_CENTER_MM, CIRCLE_FILTER_MM, REPRESENTATIVE_MODE
+        )
 
         # コンストラクタは設定を持つだけで、まだポートを開かない（接続は start()）
         self._lidar = RPLidarS1(
@@ -473,15 +520,6 @@ class LidarUnit:
         )
 
         self._thread = None
-        self._ax = None
-        self._all_scat = None
-        self._ice_scat = None
-        self._rep_scat = None
-        self._head_text = None
-        self._value_text = None
-        self._now_text = None
-
-    #--- センサー ---------------------------------------------------------
 
     def start(self, stop_event):
         """接続してスキャンを開始し、この台の読み取りスレッドを走らせる。"""
@@ -508,10 +546,33 @@ class LidarUnit:
         self._lidar.stop_scan()
         self._lidar.close()
 
-    #--- 描画 -------------------------------------------------------------
 
-    def build(self, fig, ax):
-        """自分の極座標プロットを組み立てる（1 度だけ呼ぶ）。"""
+class MergedView:
+    """全台を束ねた単一の点群プロット（複数台＝冗長構成の OR 表示）。
+
+    全台は同じ落氷域を同一座標フレームで見る前提なので、点は変換せずそのまま重ねる:
+      - 全台の有効点（`_is_valid`）を灰色で重ねる
+      - 全台の「関心円内の氷点」（intensity < 閾値 かつ 円内）を赤で重ねる
+      - ライタが選んだ代表点（＝いま Unity へ書いている点）を緑の輪で 1 つ
+
+    左の欄に台ごとの生存確認（直近の有効点数・累計ヒット数）を出す。ある台の数字が
+    伸びない＝その台が効いていない、というのがここだけで分かる。
+
+    寿命は run_plot() が持つ:  build() → refresh() を毎フレーム。
+    """
+
+    def __init__(self, units):
+        self._units = units
+        self._ax = None
+        self._all_scat = None
+        self._ice_scat = None
+        self._rep_scat = None
+        self._unit_text = None
+        self._status_text = None
+
+    def build(self, fig):
+        """単一の極座標プロットと左右の文字欄を組み立てる（1 度だけ呼ぶ）。"""
+        ax = fig.add_subplot(1, 1, 1, projection="polar")
         self._ax = ax
 
         # 図を出力フレームと一致させる。上下反転は 0 度の位置（真上／真下）、
@@ -538,11 +599,11 @@ class LidarUnit:
         ax.plot([np.radians(cc_deg)], [cc_r], marker="+", color="tab:blue",
                 markersize=13, markeredgewidth=1.6, linestyle="none")
 
-        # 有効な点はすべて灰色、円内の氷を赤、採用中の代表点を緑の輪で重ねる
+        # 全台の有効点は灰色、全台の円内の氷を赤、採用中の代表点を緑の輪で重ねる
         self._all_scat = ax.scatter([], [], s=6, c=ALL_POINT_COLOR, zorder=2)
         self._ice_scat = ax.scatter([], [], s=36, c=ICE_POINT_COLOR, zorder=3)
-        self._rep_scat = ax.scatter([], [], s=100, facecolors="none",
-                                    edgecolors="tab:green", linewidths=1.8, zorder=4)
+        self._rep_scat = ax.scatter([], [], s=140, facecolors="none",
+                                    edgecolors="tab:green", linewidths=2.0, zorder=4)
 
         # 検出範囲の外周（赤）／内周（橙・RANGE_MIN=0 のときは描かない）
         circle_theta = np.linspace(0, 2 * np.pi, 361)
@@ -556,82 +617,89 @@ class LidarUnit:
         ax.set_rlim(0, DISPLAY_MAX_MM)
         ax.autoscale(False)
 
-        self._build_count_text(fig)
-        self._set_title(0)
+        self._unit_text = fig.text(0.0, 0.0, "", va="center", ha="left",
+                                   fontsize=11, family="monospace")
+        self._status_text = fig.text(0.0, 0.0, "", va="center", ha="left",
+                                     fontsize=13, family="monospace")
+        self._set_title(0, 0)
 
-    def refresh(self, rep_point):
-        """最新の点群でこの台のプロットを描き替える。毎フレーム呼ぶ。
+    def place_text(self, fig):
+        """左の台ごと欄と下端のステータス行を、いまの窓の大きさに合わせて置き直す。
 
-        rep_point は writer が選んだ代表点 (x,y)[mm] or None（全パネル共通で表示する）。
-        """
-        all_points, ice_points, valid_count, hit_count = self.state.snapshot()
-
-        self._all_scat.set_offsets(_to_offsets(all_points))
-        self._ice_scat.set_offsets(_to_offsets(ice_points))
-
-        if rep_point is None:
-            self._rep_scat.set_offsets(np.zeros((0, 2)))
-        else:
-            deg, rr = _xy_to_polar_deg_mm(*rep_point)
-            self._rep_scat.set_offsets([[np.radians(deg), rr]])
-
-        self._set_title(valid_count)
-        self._set_counts(hit_count)
-
-        return self._all_scat
-
-    def _build_count_text(self, fig):
-        """ウィンドウ左端の数値欄の文字を作る（1 度だけ呼ぶ）。
-
-        置き場所は窓の大きさで変わるので place_count_text() が持つ。
-        """
-        def block(fontsize, **kwargs):
-            return fig.text(
-                0.0, 0.0, "", va="center", ha="left", fontsize=fontsize, **kwargs
-            )
-
-        self._head_text = block(12)
-        self._value_text = block(11, family="monospace")
-        self._now_text = block(11, family="monospace")
-
-    def place_count_text(self, fig):
-        """左の数値欄を、自分のプロットと同じ高さに置き直す。
-
-        位置は図に対する割合なので、リサイズのたびに呼ぶ（窓を広げても実寸が
-        変わらないよう、インチで持った値を毎回換算し直す）。
+        位置は図に対する割合なので、リサイズのたびに呼ぶ（インチで持った値を毎回換算）。
         """
         box = self._ax.get_position()
         center_y = (box.y0 + box.y1) / 2
-        left = COUNT_TEXT_LEFT_IN / fig.get_figwidth()
-        height_in = fig.get_figheight()
-
-        for text, offset_in in (
-            (self._head_text, COUNT_HEAD_OFFSET_IN),
-            (self._value_text, COUNT_VALUE_OFFSET_IN),
-            (self._now_text, COUNT_NOW_OFFSET_IN),
-        ):
-            text.set_position((left, center_y + offset_in / height_in))
-
-    def _set_counts(self, hit_count):
-        """左の数値欄を書き替える。毎フレーム呼ぶ。"""
-        self._head_text.set_text(f"{self.name}\n{hit_count} hits")
-        self._value_text.set_text(
-            f"circle center\n({CIRCLE_CENTER_MM[0]:.0f}, {CIRCLE_CENTER_MM[1]:.0f}) mm\n"
-            f"r {CIRCLE_RADIUS_MM:.0f}  +tol {CIRCLE_TOLERANCE_MM:.0f}"
+        self._unit_text.set_position(
+            (COUNT_TEXT_LEFT_IN / fig.get_figwidth(), center_y)
         )
-        # express モードは quality を持たない（常に 0）ので、閾値が効かないことを明示する
-        self._now_text.set_text(
+        self._status_text.set_position((
+            STATUS_LEFT_IN / fig.get_figwidth(),
+            STATUS_BOTTOM_IN / fig.get_figheight(),
+        ))
+
+    def refresh(self, writer):
+        """全台の最新スナップショットを束ねてプロットを描き替える。毎フレーム呼ぶ。"""
+        all_chunks = []
+        ice_chunks = []
+        unit_lines = []
+        total_valid = 0
+
+        for unit in self._units:
+            all_points, ice_points, valid_count, hit_count = unit.state.snapshot()
+            if len(all_points):
+                all_chunks.append(all_points)
+            if len(ice_points):
+                ice_chunks.append(ice_points)
+            total_valid += valid_count
+            unit_lines.append(
+                f"{unit.name:<7} {valid_count:4d} pts  {hit_count:5d} hits"
+            )
+
+        merged_all = np.vstack(all_chunks) if all_chunks else np.zeros((0, 2))
+        merged_ice = np.vstack(ice_chunks) if ice_chunks else np.zeros((0, 2))
+
+        self._all_scat.set_offsets(_to_offsets(merged_all))
+        self._ice_scat.set_offsets(_to_offsets(merged_ice))
+
+        point, shaving, seq = writer.status()
+        if point is None:
+            self._rep_scat.set_offsets(np.zeros((0, 2)))
+        else:
+            deg, rr = _xy_to_polar_deg_mm(*point)
+            self._rep_scat.set_offsets([[np.radians(deg), rr]])
+
+        self._set_title(total_valid, len(merged_ice))
+
+        quality_line = (
             f"intensity < {INTENSITY_MAX:g}"
             if SCAN_MODE == "standard" else "no quality (express)"
         )
+        self._unit_text.set_text(
+            "\n".join(unit_lines)
+            + "\n\n"
+            + f"circle ({CIRCLE_CENTER_MM[0]:.0f}, {CIRCLE_CENTER_MM[1]:.0f}) mm\n"
+            + f"r {CIRCLE_RADIUS_MM:.0f}  +tol {CIRCLE_TOLERANCE_MM:.0f}\n"
+            + quality_line + "\n"
+            + f"rep: {REPRESENTATIVE_MODE}"
+        )
 
-    def _set_title(self, valid_count):
-        """2 行のタイトルを書き替える（どの台か / 点の出方）。"""
+        loc = "  none        " if point is None else f"({point[0]:7.1f}, {point[1]:7.1f})"
+        self._status_text.set_text(
+            f"seq {seq:>7d}   xy {loc} mm   shaving {'ON ' if shaving else 'off'}\n"
+            f"{POSITION_FILE}"
+        )
+
+        return [self._all_scat, self._ice_scat, self._rep_scat]
+
+    def _set_title(self, total_valid, ice_count):
+        """2 行のタイトルを書き替える（束ねた点数 / スキャン設定）。"""
         self._ax.set_title(
-            f"{self.name}   {self.port}   (range = {RANGE_MIN_CM}-{RANGE_MAX_CM} cm)\n"
+            f"merged OR of {len(self._units)} LiDAR"
+            f"   {total_valid:4d} pts   {ice_count:3d} in circle\n"
             f"{SCAN_FREQUENCY_HZ:.1f} Hz   {SCAN_MODE}"
             f"   max {MAX_POINTS_PER_REV} pts/rev"
-            f"   detected {valid_count:4d} pts",
+            f"   range {RANGE_MIN_CM}-{RANGE_MAX_CM} cm",
             fontsize=10,
         )
 
@@ -653,21 +721,48 @@ def build_units():
 
 
 def start_units(units, stop_event):
-    """全台を開いて読み取りを始める。1 台でも開けなければ全部閉じてから投げ直す。
+    """設定された台を順に開き、開けた台だけの集合を返す。
 
-    開きっぱなしのまま落ちると、次の起動でそのポートを掴めなくなる。
+    複数台は冗長構成（全台が同じ落氷域を同一フレームで見て OR を取る）なので、
+    **1 台開けなくても止めない**。開けなかった台は理由を出して飛ばし、残りで続行する。
+    1 台も開けなければ、原因の当たりをつけて終了する。
+
+    開きっぱなしのまま落ちるポートは lidar.py 側が閉じてから投げるので、ここでの
+    後始末は要らない（掴みっぱなしにならない）。
     """
     started = []
+    failed = []
 
-    try:
-        for unit in units:
+    for unit in units:
+        try:
             unit.start(stop_event)
-            started.append(unit)
-    except Exception:
+        except Exception as e:
+            failed.append(unit)
+            print(
+                f"[{unit.name}] {unit.port} を開けません: {e}\n"
+                f"         → この台を飛ばして続行します",
+                file=sys.stderr,
+            )
+            continue
+        started.append(unit)
+
+    if not started:
         stop_event.set()
-        for unit in started:
-            unit.stop()
-        raise
+        ports = ", ".join(unit.port for unit in units)
+        sys.exit(
+            "LiDAR を 1 台も開けませんでした。\n"
+            f"  設定のポート : {ports}\n"
+            "  ケーブル・補助 5V・ポート名（config.toml [serial]）を確認してください。\n"
+            "  接続中のポートは  ls /dev/tty.usb*  で見えます。"
+        )
+
+    if failed:
+        print(
+            f"{len(started)}/{len(units)} 台で続行します"
+            f"（不参加: {', '.join(unit.name for unit in failed)}）"
+        )
+
+    return started
 
 
 def run_headless(stop_event):
@@ -683,26 +778,22 @@ def run_headless(stop_event):
 
 
 def run_plot(units, writer, stop_event, shutdown):
-    """可視化つきで走らせる。ウィンドウを閉じるか Ctrl-C で安全停止する。"""
+    """可視化つきで走らせる。ウィンドウを閉じるか Ctrl-C で安全停止する。
+
+    台数によらず単一の点群プロット（`MergedView`）。窓の大きさは固定で、台が
+    増えても割らない。
+    """
     import matplotlib.animation as animation
     import matplotlib.pyplot as plt
 
-    figure_height_in = (
-        PANEL_HEIGHT_IN * len(units) + TOP_MARGIN_IN + BOTTOM_ROW_HEIGHT_IN
-    )
-    fig = plt.figure(figsize=(FIGURE_WIDTH_IN, figure_height_in))
+    fig = plt.figure(figsize=(FIGURE_WIDTH_IN, FIGURE_HEIGHT_IN))
 
     manager = fig.canvas.manager
     if manager is not None:
         manager.set_window_title("RPLIDAR S1 tracker")
 
-    for i, unit in enumerate(units):
-        unit.build(fig, fig.add_subplot(len(units), 1, i + 1, projection="polar"))
-
-    # 下端に、いま Unity へ書いている値をそのまま出す。画面の点と出力の突き合わせが
-    # ここだけでできるようにするため（別窓・ログを見に行かなくてよい）
-    status_text = fig.text(0.0, 0.0, "", va="center", ha="left", fontsize=13,
-                           family="monospace")
+    view = MergedView(units)
+    view.build(fig)
 
     def apply_layout(_event=None):
         """インチで決めた配置を、いまの窓の大きさに合わせて割合へ換算し直す。
@@ -713,40 +804,18 @@ def run_plot(units, writer, stop_event, shutdown):
         width_in = fig.get_figwidth()
         height_in = fig.get_figheight()
 
-        left = min(LEFT_COLUMN_WIDTH_IN / width_in, 0.6)
-        bottom = min(BOTTOM_ROW_HEIGHT_IN / height_in, 0.4)
-        top = max(1.0 - TOP_MARGIN_IN / height_in, bottom + 0.2)
+        left = min(LEFT_COLUMN_WIDTH_IN / width_in, 0.45)
+        bottom = min(BOTTOM_ROW_HEIGHT_IN / height_in, 0.2)
+        top = max(1.0 - TOP_MARGIN_IN / height_in, bottom + 0.3)
 
-        fig.subplots_adjust(
-            left=left,
-            right=0.97,
-            top=top,
-            bottom=bottom,
-            hspace=PANEL_GAP_RATIO,
-        )
-
-        for unit in units:
-            unit.place_count_text(fig)
-
-        status_text.set_position((
-            STATUS_LEFT_IN / width_in,
-            STATUS_BOTTOM_IN / height_in,
-        ))
+        fig.subplots_adjust(left=left, right=0.97, top=top, bottom=bottom)
+        view.place_text(fig)
 
     apply_layout()
     fig.canvas.mpl_connect("resize_event", apply_layout)
 
     def update(_frame):
-        point, shaving, seq = writer.status()
-        loc = "  none        " if point is None else f"({point[0]:7.1f}, {point[1]:7.1f})"
-
-        status_text.set_text(
-            f"seq {seq:>7d}   xy {loc} mm"
-            f"   shaving {'ON ' if shaving else 'off'}\n"
-            f"{POSITION_FILE}"
-        )
-
-        return [unit.refresh(point) for unit in units]
+        return view.refresh(writer)
 
     # 参照を捨てると GC でアニメーションが止まるので、ローカルに持っておく
     ani = animation.FuncAnimation(
@@ -784,11 +853,12 @@ def main():
     units = build_units()
     stop_event = threading.Event()
 
-    start_units(units, stop_event)
+    # 開けた台だけで進める（開けなかった台は start_units が飛ばす）。
+    active = start_units(units, stop_event)
 
     writer = PositionWriter(
         POSITION_FILE,
-        [unit.state for unit in units],
+        [unit.state for unit in active],
         SHAVING_HOLD_SEC,
         WRITE_INTERVAL_SEC,
     )
@@ -805,7 +875,8 @@ def main():
     print(
         f"circle: center ({CIRCLE_CENTER_MM[0]:.0f}, {CIRCLE_CENTER_MM[1]:.0f}) mm, "
         f"r {CIRCLE_RADIUS_MM:.0f} (+tol {CIRCLE_TOLERANCE_MM:.0f}); "
-        f"intensity < {INTENSITY_MAX:g}, shaving hold {SHAVING_HOLD_SEC:g}s"
+        f"intensity < {INTENSITY_MAX:g}, shaving hold {SHAVING_HOLD_SEC:g}s; "
+        f"representative = {REPRESENTATIVE_MODE}"
     )
 
     def shutdown():
@@ -814,14 +885,14 @@ def main():
             return
         stop_event.set()
         writer_thread.join(timeout=3.0)
-        for unit in units:
+        for unit in active:
             unit.stop()
 
     try:
         if args.headless:
             run_headless(stop_event)
         else:
-            run_plot(units, writer, stop_event, shutdown)
+            run_plot(active, writer, stop_event, shutdown)
     finally:
         # Ctrl-C・ウィンドウを閉じる、どちらでも必ず停止処理を通す
         shutdown()
