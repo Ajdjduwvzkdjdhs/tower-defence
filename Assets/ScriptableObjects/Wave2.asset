@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Wave2
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.WaveConfigSO
   _duration: 40
-  _spawnInterval: 1
+  _spawnRatePerSecond: 1
   _enemyPool:
   - {fileID: 11400000, guid: 5e18ce3d0089e448cab4cccc0eb609a7, type: 2}
   _allySpawnChance: 0.25

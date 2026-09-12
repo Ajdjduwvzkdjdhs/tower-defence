@@ -7,11 +7,15 @@ namespace KakigoriTD.Gameplay
 {
     /// <summary>
     /// ウェーブ中の敵湧きを管理する MonoBehaviour アダプタ（ADR-8）。
-    /// <see cref="WaveConfigSO.SpawnInterval"/> ごとに <see cref="WaveConfigSO.EnemyPool"/> から 1 体を選び、
-    /// <see cref="EnemyField"/> に方位ランダムで湧かせる。タイミングの純ロジックは <see cref="SpawnClock"/>（EditMode 検証）。
+    /// <see cref="WaveConfigSO.SpawnRatePerSecond"/>（体/秒）から算出した間隔ごとに
+    /// <see cref="WaveConfigSO.EnemyPool"/> から 1 体を選び、<see cref="EnemyField"/> に方位ランダムで湧かせる。
+    /// タイミングの純ロジックは <see cref="SpawnClock"/>（EditMode 検証）。
     ///
     /// ウェーブの時間管理・残敵消去・遷移は <c>WavePlayingState</c>＋<c>GameManager(IGameContext)</c> が担う。
     /// 本クラスは「開始されたら湧かせ、止められたら止める」だけに徹する。
+    ///
+    /// 味方NPC システムは無効化済み（ユーザー指示）: <see cref="SpawnOne"/> で常に <c>hasAlly=false</c> を渡し、
+    /// <see cref="WaveConfigSO.AllySpawnChance"/> / <see cref="WaveConfigSO.AllyType"/> の設定値に関わらず湧かない。
     /// </summary>
     public class WaveManager : MonoBehaviour
     {
@@ -37,7 +41,9 @@ namespace KakigoriTD.Gameplay
         public void StartWave(WaveConfigSO config)
         {
             _config = config;
-            _clock = new SpawnClock(config != null ? config.SpawnInterval : 1.5f);
+            float rate = config != null ? config.SpawnRatePerSecond : 0.667f;
+            // SpawnClock は間隔(秒)で駆動するため、Inspector 上のレート(体/秒)をここで変換する。
+            _clock = new SpawnClock(rate > 0f ? 1f / rate : float.MaxValue);
             _running = true;
             _spawnedThisWave = 0;
         }
@@ -61,14 +67,14 @@ namespace KakigoriTD.Gameplay
             var kind = SpawnSelector.Select(
                 _config.AllySpawnChance,
                 _config.DisguiseChance,
-                _config.AllyType != null,
-                _config.DisguiseType != null,
-                Random.value);
+                hasAlly: false, // 味方システム無効化（ユーザー指示）。WaveConfigSO の設定値に関わらず湧かせない。
+                hasDisguise: _config.DisguiseType != null,
+                roll: Random.value);
 
             Enemy spawned = kind switch
             {
                 SpawnKind.Disguised => _field.SpawnDisguised(_config.DisguiseType),
-                SpawnKind.Ally => _field.SpawnAlly(_config.AllyType),
+                SpawnKind.Ally => _field.SpawnAlly(_config.AllyType), // hasAlly=false のため到達しない
                 _ => SpawnOneEnemy(),
             };
 

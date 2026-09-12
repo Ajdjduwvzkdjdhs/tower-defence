@@ -29,6 +29,7 @@ MonoBehaviour:
   _restRadius: 8
   _entranceSpeed: 6
   _maxEnemies: 48
+  _spawnAngleStepDeg: 15
   _killRadiusUnits: 1.5
   _overlapRadiusUnits: 0.7
   _cooldownCenterSec: 0.6

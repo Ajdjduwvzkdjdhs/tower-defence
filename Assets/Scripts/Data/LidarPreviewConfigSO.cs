@@ -53,6 +53,8 @@ namespace KakigoriTD.Data
         [SerializeField] private float _entranceSpeed = 6f;
         [Tooltip("同時存在の上限。")]
         [SerializeField] private int _maxEnemies = 48;
+        [Tooltip("方位スポーンの角度刻み[deg]。360をこの値で割った位置にのみ湧く（例: 15なら24方向）。")]
+        [SerializeField] private float _spawnAngleStepDeg = 15f;
 
         [Header("撃破（一般化した位置到達）")]
         [Tooltip("雪玉→敵 撃破半径（XZ・ゲーム単位）。")]
@@ -93,6 +95,7 @@ namespace KakigoriTD.Data
         public float RestRadius => _restRadius;
         public float EntranceSpeed => _entranceSpeed;
         public int MaxEnemies => _maxEnemies;
+        public float SpawnAngleStepDeg => _spawnAngleStepDeg;
         public float KillRadiusUnits => _killRadiusUnits;
         public float OverlapRadiusUnits => _overlapRadiusUnits;
         public float CooldownCenterSec => _cooldownCenterSec;
