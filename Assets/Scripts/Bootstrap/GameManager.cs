@@ -23,10 +23,6 @@ namespace KakigoriTD.Bootstrap
         [Header("ウェーブ（順に Wave1/2/3 の WaveConfigSO を割り当て）")]
         [SerializeField] private WaveConfigSO[] _waveConfigs;
 
-        [Header("入力経路")]
-        [Tooltip("LidarPosition=実 LiDAR（連続座標・展示本番）／SimPointer=マウス疑似（開発）。Keyboard/Vision は旧値（廃止・未使用）。")]
-        [SerializeField] private InputMode _inputMode = InputMode.LidarPosition;
-
         [Header("LiDAR 位置入力・雪玉放出・敵スポーンの調整値（未割り当てなら既定値インスタンス）")]
         [SerializeField] private LidarPreviewConfigSO _lidarPreviewConfig;
 
@@ -56,7 +52,7 @@ namespace KakigoriTD.Bootstrap
         private EnemyField _field;
         private IceStock _ice;
         private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
-        private LidarPositionInputSource _lidarPosSource; // LidarPosition モードのロスト警告用に保持
+        private LidarPositionInputSource _lidarPosSource; // ロスト警告用に保持（LiDAR/マウスOR合成でも常時生成）
         private LidarAvalancheVfx _lidarVfx;
         private WaveManager _waveManager;
         private UIManager _ui;
@@ -126,11 +122,12 @@ namespace KakigoriTD.Bootstrap
             UpdateTrackerWarning();
         }
 
-        // LiDAR（LidarPosition モード）で seq が停滞＝ロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
+        // LiDAR の seq が停滞＝ロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
+        // LiDAR/マウスは常時 OR 合成のため、ロスト中でもマウス疑似入力へ自動フォールバックする
+        // （警告はあくまで診断用で、操作不能にはならない）。
         private void UpdateTrackerWarning()
         {
-            bool lidarWarn = _inputMode == InputMode.LidarPosition
-                             && _lidarPosSource != null && _lidarPosSource.IsLost;
+            bool lidarWarn = _lidarPosSource != null && _lidarPosSource.IsLost;
             _ui.SetTrackerWarning(lidarWarn ? "LiDAR 未接続（valley_tracker.py を確認）" : "");
         }
 
@@ -206,27 +203,23 @@ namespace KakigoriTD.Bootstrap
             _field.OnAllyCaught += OnAllyCaughtHandler;
         }
 
-        // LiDAR の連続座標 or マウス疑似から、検知点 P を中心に放射状の雪玉ストリームを放出し、
-        // 一般化位置到達で撃破する（phase-preview-feedback.md）。_inputMode は入力ソースだけを選ぶ。
+        // LiDAR の連続座標とマウス疑似入力を常時 OR 合成し、検知点 P を中心に放射状の雪玉ストリームを
+        // 放出、一般化位置到達で撃破する（phase-preview-feedback.md）。LiDAR に検知点があればそちらを
+        // 優先し、無いとき（未接続・検知範囲外）だけマウス疑似入力にフォールバックする
+        // （ユーザー指示：InputMode による切替を廃止）。
         private void BuildLidarPath()
         {
             var cfg = _lidarPreviewConfig; // BuildField で解決済み
 
-            IPositionInputSource posInput;
-            if (_inputMode == InputMode.LidarPosition)
-            {
-                _lidarPosSource = NewChild("LidarPositionInput").AddComponent<LidarPositionInputSource>();
-                _lidarPosSource.Configure(cfg, HeightAt);
-                var calib = NewChild("LidarCalibration").AddComponent<LidarCalibration>();
-                calib.Configure(_lidarPosSource, cfg, Camera.main);
-                posInput = _lidarPosSource;
-            }
-            else
-            {
-                var sim = NewChild("SimPositionInput").AddComponent<SimPositionInputSource>();
-                sim.Configure(cfg, HeightAt, Camera.main);
-                posInput = sim;
-            }
+            _lidarPosSource = NewChild("LidarPositionInput").AddComponent<LidarPositionInputSource>();
+            _lidarPosSource.Configure(cfg, HeightAt);
+            var calib = NewChild("LidarCalibration").AddComponent<LidarCalibration>();
+            calib.Configure(_lidarPosSource, cfg, Camera.main);
+
+            var sim = NewChild("SimPositionInput").AddComponent<SimPositionInputSource>();
+            sim.Configure(cfg, HeightAt, Camera.main);
+
+            IPositionInputSource posInput = new CompositePositionInputSource(_lidarPosSource, sim);
 
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
             _lidarVfx.Configure(posInput, _field, HeightAt, CreateSnowball, cfg,
