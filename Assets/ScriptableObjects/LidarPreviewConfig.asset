@@ -34,7 +34,7 @@ MonoBehaviour:
   _overlapRadiusUnits: 0.7
   _cooldownCenterSec: 0.6
   _cooldownEdgeSec: 0
-  _spreadCenterDeg: 25
-  _spreadEdgeDeg: 3
+  _spreadCenterDeg: 60
+  _spreadEdgeDeg: 1
   _fieldOffsetKey: 17
   _fieldOffsetStepMm: 10

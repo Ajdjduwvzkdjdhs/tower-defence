@@ -6,10 +6,12 @@ namespace KakigoriTD.Input
     /// LiDAR 位置入力とマウス疑似入力（<see cref="IPositionInputSource"/>）を OR 合成する
     /// （ユーザー指示：<c>InputMode</c> による切替を廃止し、LiDAR とマウスを常時併用する）。
     ///
-    /// LiDAR（<c>primary</c>）に検知点があるときはそちらを優先し、無いときだけマウス疑似入力
-    /// （<c>fallback</c>）にフォールバックする。<see cref="LidarPositionProtocol"/> の watchdog が
-    /// ロスト時に <c>HasPoint</c> を false へ落とす（フェイルセーフ）ため、フォールバック判定は
-    /// <see cref="HasPoint"/> だけで足りる。<see cref="IsLost"/> は診断用に primary 側の生死のみを返す。
+    /// LiDAR（<c>primary</c>）に検知点があるときはそちらを優先し、無いとき（未接続・検知範囲外）だけ
+    /// マウス疑似入力（<c>fallback</c>）にフォールバックする。<see cref="IsLost"/> を含む全プロパティを
+    /// 「現在有効な方（<see cref="Active"/>）」から取る。LiDAR 未接続時は
+    /// <see cref="LidarPositionProtocol"/> の watchdog により <c>primary.IsLost</c> が常時 true になるが、
+    /// このとき <see cref="Active"/> はマウス側（常に <c>IsLost=false</c>）に切り替わっているため、
+    /// フォールバック中に「ロスト＝操作不可」扱いになって詰まることはない。
     /// </summary>
     public class CompositePositionInputSource : IPositionInputSource
     {
@@ -33,7 +35,7 @@ namespace KakigoriTD.Input
         public float DistanceMm => Active != null ? Active.DistanceMm : 0f;
         /// <inheritdoc/>
         public bool IsShaving => Active != null && Active.IsShaving;
-        /// <summary>LiDAR（primary）側のロスト状態のみを表す診断用フラグ。</summary>
-        public bool IsLost => _primary != null && _primary.IsLost;
+        /// <inheritdoc/>
+        public bool IsLost => Active != null && Active.IsLost;
     }
 }

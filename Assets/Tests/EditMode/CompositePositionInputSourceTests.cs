@@ -56,14 +56,26 @@ namespace KakigoriTD.Tests.EditMode
         }
 
         [Test]
-        public void IsLost_ReflectsLidarOnly_RegardlessOfSim()
+        public void IsLost_False_WhenLidarLostButFallbackActive()
         {
+            // LiDAR 未接続（IsLost=true）でもマウスへフォールバックしている間は
+            // 「ロスト＝操作不可」扱いにならないこと（LidarAvalancheVfx の !IsLost ゲート対策）。
             var lidar = new StubPositionInput { HasPoint = false, IsLost = true };
+            var sim = new StubPositionInput { HasPoint = true, IsShaving = true };
+            var c = new CompositePositionInputSource(lidar, sim);
+
+            Assert.That(c.HasPoint, Is.True);
+            Assert.That(c.IsShaving, Is.True);
+            Assert.That(c.IsLost, Is.False);
+        }
+
+        [Test]
+        public void IsLost_ReflectsLidar_WhenLidarActive()
+        {
+            var lidar = new StubPositionInput { HasPoint = true, IsLost = true }; // 通常はHasPoint時にIsLostにはならないが念のため
             var sim = new StubPositionInput { HasPoint = true };
             var c = new CompositePositionInputSource(lidar, sim);
 
-            // ロスト中でもマウスへフォールバックして操作は継続する。
-            Assert.That(c.HasPoint, Is.True);
             Assert.That(c.IsLost, Is.True);
         }
 
