@@ -33,7 +33,7 @@ namespace KakigoriTD.Gameplay
         private float _speed;
         private float _elapsed;
         private Func<float, float, float> _heightAt;
-        private Vector3 _spin;     // 見た目の転がり
+        private ParticleSystem _ps;
 
         // 撃破駆動（ADR-27）: この雪玉が先頭行の敵の実位置に届いたら 1 回だけ撃破コールバックを呼ぶ。
         private Func<float> _frontRowDistance; // 谷の先頭行の谷軸距離（毎フレーム再評価・敵の前進に追従）。null で純 cosmetic。
@@ -43,6 +43,11 @@ namespace KakigoriTD.Gameplay
         // 一般化位置到達（phase-preview-feedback §3.4）: 谷を持たない LiDAR 経路用。毎フレーム自分の現在位置を渡し、
         // 半径内の敵を 1 体撃破できたら true が返る。true で _reachedFront を立てて以後は純滑走（1 雪玉 1 撃）。
         private Func<Vector3, bool> _tryKillNear;
+
+        private void Awake()
+        {
+            _ps = GetComponent<ParticleSystem>();
+        }
 
         /// <summary>
         /// 山頂寄りの一点から谷の外向きへ射出する。完了時に onDone を呼ぶ（所有者がプール返却する）。
@@ -71,9 +76,10 @@ namespace KakigoriTD.Gameplay
             _reachedFront = false;
             _speed = _startSpeed;
             _elapsed = 0f;
-            _spin = UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(180f, 540f);
 
             Apply();
+            _ps.Clear(true);
+            _ps.Play(true);
         }
 
         /// <summary>
@@ -97,9 +103,10 @@ namespace KakigoriTD.Gameplay
             _reachedFront = false;
             _speed = _startSpeed;
             _elapsed = 0f;
-            _spin = UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(180f, 540f);
 
             Apply();
+            _ps.Clear(true);
+            _ps.Play(true);
         }
 
         private void Update()
@@ -109,7 +116,6 @@ namespace KakigoriTD.Gameplay
 
             _speed = Mathf.Min(_speed + _accel * dt, _maxSpeed);
             _radius += _speed * dt;
-            transform.Rotate(_spin * dt, Space.Self);
             Apply();
 
             // 撃破駆動（ADR-27）: 先頭行の敵の実位置に届いた瞬間、その谷の先頭行を 1 行だけ撃破。
@@ -132,6 +138,12 @@ namespace KakigoriTD.Gameplay
                 _onDone = null;
                 cb?.Invoke(this); // ObjectPool.Release → SetActive(false) で Update 停止
             }
+        }
+
+        // ObjectPool.Release → SetActive(false) のたびに呼ばれる。次回 Launch まで残留粒子を残さない。
+        private void OnDisable()
+        {
+            _ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
         // 現在の radius/lateral を斜面上のワールド座標へ写す（y は斜面に乗せる・ADR-21）。
