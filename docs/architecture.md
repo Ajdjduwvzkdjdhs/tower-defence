@@ -29,6 +29,7 @@
 | 撃破の駆動 | 実際に流れている Snowball(VFX) が先頭行の敵の実位置に届いた瞬間にその谷の先頭行を1行撃破（1雪玉=1行）。別フロントの模擬を廃止＝見た目と同期・入力ちらつきに頑健。後続行の即死は谷ごとの撃破クールダウン（TryApplyAvalanche・既定0.2s）でレート制御 | ADR-27 |
 | 展示ビルド化 | 3Dアート（山メッシュ＋FBXアクター＋Animator）・演出・マルチシーン（Title→TH→Result）・LiDAR入力（`seq,channel,shaving` 3列）・`unity` CLI＋`com.unity.pipeline` 開発連携。**git履歴からの遡及要約・要レビュー** | ADR-28 |
 | LiDAR 連続座標入力 | LiDAR は谷でなく氷の座標 `seq,x,y,shaving` を送る。検知点から放射状に雪玉ストリーム→一般化位置到達で1体撃破。d 連動で cooldown(0.6→0)/角度spread(25→3)。氷消費は無効。角度は設置時 config 固定・平行移動のみキー calib。**Unity 側実装済み／Python・実機は未着手（Proposed）** | ADR-29 |
+| ゲーム性刷新 | 3Wave 制を廃し、単一ステージの「目標撃破数レース」へ。爆発兵の無制限連鎖・盾兵（雪玉N発）・コンボ・ゲージMAXで自動発動する必殺ビーム。スコアはクリア＝クリアタイム／失敗＝到達撃破数。味方NPC・変装敵・ペナルティ・氷ストックは削除 | ADR-30 |
 
 ---
 
@@ -384,3 +385,27 @@
 - **検証状況**: Unity 側は EditMode **187 本**（`LidarPositionProtocol` 13 / `LidarPointMapper` 9 / `EnemyMatrix.Remove` 4 / `EnemyRegistry` 5 / `LidarPreviewConfigSO` 5 ＋既存 151）＋ PlayMode 2 本（`LidarAvalancheVfx` の放出／撃破パス到達／`IsEmitting` の toggle）緑。`unity command` で確認。**Python 側（`valley_tracker.py` の連続座標化）と実機 end-to-end は未着手**（`preview.example.toml` のみ用意。関数単位パッチは phase-preview-feedback §2.3）。
 
 - **昇格条件（Proposed → Accepted）**: ①`valley_tracker.py` の改修と `preview.toml` の現物合わせ ②LiDAR 実機で「氷を落とす→その位置から雪玉→当たった敵が消える」「中心＝広く弱い / 外周＝狭く強い」を確認 ③マルチシーン通し（Title→TH→Result）で回帰なし ④旧経路の削除 or 正式残置の判断。
+
+## ADR-30: 3Wave 制を廃し、単一ステージの「目標撃破数レース」へ（爆発連鎖・盾兵・コンボ・必殺ビーム）— Accepted（`64-vansuv`）
+
+- **背景**: 従来は 3 Wave 制で、Wave ごとに敵の特徴を変え、味方NPC・変装敵で「撃ってよいか」のジレンマを出す設計だった（ADR-17/19）。だが展示での体験としては「大勢の敵を倒す爽快感」が薄く、ジレンマ系の要素は既に実質停止していた（`WaveManager` が `hasAlly:false` 固定、`ConsumeIce=false` 既定、`EnemyMatrix` は実参照ゼロ）。ゲーム性そのものを差し替える。
+
+- **決定**:
+  - **単一ステージ化**: `WaveIntroState` / `WavePlayingState` / `WaveLullState` と `WaveConfigSO`×3 を廃止し、`BattleState` ＋ `StageConfigSO` 1 本に統合。Wave バナー・小休止・Wave 終了時の残敵一掃は消える（コンボが途切れないようにするため）。
+  - **終了条件**: クリア＝`StageConfigSO.TargetKillCount`（既定100）体撃破 ／ 敗北＝砦HP 0。同フレームに両立したら**敗北を優先**（旧 `WavePlayingState` の流儀を踏襲）。
+  - **スコア**: `Scoring.Compute(fortHp, penalty)` を廃止し `StageResult` に置換。**クリア＝クリアタイム**（短いほど上位・ランキング対象）／**失敗＝到達撃破数**（「62 体で力尽きた」・ランキング対象外）。砦HP はスコアに含めず**生存リソースに純化**する（削られてもタイムを縮めれば勝てる＝攻めの動機）。
+  - **撃破スループット**: 通常の雪玉は**単体撃破のまま**維持（`EnemyKillSelection.SelectFront` の前列判定を残す）。テンポは `LidarPreviewConfigSO._cooldownCenterSec` を 0.6 → **0.25** に短縮して稼ぐ。**範囲殲滅は爆発兵の専売**にする（通常雪玉を AoE 化すると盾兵の設計意図が崩れるため）。
+  - **爆発兵（`BombTrooper`）と連鎖**: 撃破すると爆発半径内の敵を全滅させ、範囲内の爆発兵はさらに誘爆して**無制限に連鎖**する。段数制限・半径減衰といった**不可視のルールは入れない**——観客に「爆弾に当てた→画面中が吹き飛ぶ」という因果が一目で伝わることを優先し、制御は**出現率と爆発半径という可視のパラメータだけ**で行う。探索は純ロジック `ExplosionChain.Resolve`（BFS・二重処理なし）。
+  - **盾兵（`ShieldTrooper`）**: 雪玉 `StageConfigSO.ShieldHits`（既定5）発で撃破、爆発なら耐久を無視して一撃。**完全無敵にはしない**——`SelectFront` は「重なり半径内により古い生存敵がいる敵は前列でない」として除外するため、不死身の盾が居座るとその背後が永久に撃破不能なデッドゾーンになる。耐久制なら必ず退くので詰みが起きない。現場で「何度当てても無反応＝故障」と誤解されるのも防ぐ。
+  - **コンボ（`ComboTracker`）**: 前回撃破から `ComboWindowSec`（既定2.0秒）以内なら継続。**爆発の連鎖撃破も 1 体ずつ加算**する（20体連鎖＝+20）。爆弾を狙うのが本作で唯一の能動的な上手さなので、それがコンボとゲージの両方に効くようにする。
+  - **必殺ビーム砲（`SpecialGauge` + `BeamCannon`）**: ゲージ＝`PerKill × (1 + ComboBonus × (combo-1))`（**撃破数がメイン・コンボがボーナス**）。MAX で**自動発動**する——展示にはプレイヤーが押せるボタンが無く（`ConfirmPressed` は開発用キーボードのみ）、来場者は説明を読まないため、発動条件の理解コストを 0 にする。効果は**全方位一掃**（照準入力が無い以上、方向を持たせると操作と無関係に見える）。**ビーム撃破は撃破数に算入するがゲージには算入せず**（ビーム→大量撃破→即MAX の自己充填ループを断つ）、コンボは加算も中断もしない中立扱い。
+  - **難易度ランプ**: 軸は**撃破数の進捗**（`KillProgress.Progress01`）。ランプさせるのは**爆発兵率・盾兵率の 2 つだけ**で、`StageConfigSO` の `AnimationCurve` として持つ（Inspector でグラフとして見えるので現場で山場を目で調整できる）。**湧きレート（`SpawnRatePerSecond`）は固定値**とし、盤面の混雑は「湧き速度 − 撃破速度」の自然な平衡に任せる。ステージの長さ・難度調整の主ノブは `TargetKillCount`。
+  - **旧資産の削除**: `EnemyMatrix` / `IceStock` / `PenaltyTally` / `Scoring` / `AllyNPC` / `DisguisedEnemy` / `WaveConfigSO` と対応テストを削除。`DisguisedEnemy`（`Enemy` 派生＋専用プール＋見た目マーカー）の構造は `BombTrooper` / `ShieldTrooper` に転用した。パラメータを 0 にして無効化する方式は展示事故の温床になるため採らない。
+  - **結果のシーン受け渡し**: `GameResultHolder`（static のみ・MonoBehaviour にしないので ADR-5 の Singleton 方針は不変）に `StageResult` を置き、**クリア→`ResultScene` / 失敗→`GameOverScene`** へ遷移する（従来は勝利時のみ遷移し、敗北時は TH に留まっていた）。TH の HUD と遷移先の両方で結果を出す。
+  - **演出はプレースホルダ優先**: 爆発は `ExplosionRing`（敵の足元から赤い円が広がる簡易版）、ビームは画面の白フラッシュ。正式な VFX は別担当が作るため、差し替え箇所を `ExplosionRing.cs` ＋ `GameManager.CreateExplosionRing()` の 2 箇所に閉じてある。モデルは既存の `EnemyBombTrooper.prefab` / `EnemyShieldTrooper.prefab`。
+
+- **不変（覆さない）**: ADR-29 の LiDAR 連続座標入力・放射状の雪玉ストリーム・d 連動ギミック、`EnemyField` の 360度スポーンと隊列（列×段）・繰り上がり、`EnemyKillSelection.SelectFront`、`Enemy`/`Fort`/`Projectile`/`ProjectileFactory`、プール（ADR-4）、入力抽象 `IInputSource`（ADR-6）、Singleton は `GameManager` のみ（ADR-5）、調整値は SO（ADR-1）、Core は UnityEngine 非依存（ADR-8）、物理不使用。敵の挙動も現状維持（入場歩行 → 静止半径で停止 → 砦へ遠隔射撃）で、圧力は「倒し損ねた敵の同時火力の蓄積」が担う。
+
+- **検証状況**: Core 純ロジックは EditMode を新設（`ComboTracker` 9 / `SpecialGauge` 8 / `KillProgress` 7 / `ExplosionChain` 9 / `StageResult` 5 / `SpawnSelector` 7 / `States` 10）。**Unity CLI が未導入の環境だったため、`csc` で 3 アセンブリ（Core / Runtime / Tests）の型チェックと、Core テスト 73 本のオフライン実行まで実施済み。Unity Editor での `run_tests` と Play 検証は未実施**。
+
+- **昇格条件（残作業）**: ①`StageConfig.asset` / `BombTrooper.asset` / `ShieldTrooper.asset` の作成と `TH_Stage.prefab` への割り当て ②`GameOverScene.unity` への `GameOverScene.cs` 配置 ③Editor で EditMode 全件緑 ④Play 検証（連鎖・盾耐久・コンボ・ビーム自動発動・クリア/敗北の遷移）⑤ゲージ係数の現物合わせ（1ゲーム約2回MAX）。

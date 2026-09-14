@@ -1,9 +1,9 @@
 namespace KakigoriTD.Core
 {
     /// <summary>
-    /// ウェーブ中の湧きタイミング（純ロジック、ADR-8）。UnityEngine 非依存で EditMode 検証する。
+    /// 湧きタイミング（純ロジック、ADR-8）。UnityEngine 非依存で EditMode 検証する。
     /// <c>spawnInterval</c> 秒ごとに 1 体湧く（最初の湧きは t=spawnInterval）。
-    /// <c>WaveManager</c>（MonoBehaviour）がウェーブ稼働中だけ <see cref="Tick"/> を呼び、谷へ配る。
+    /// <c>SpawnDirector</c>（MonoBehaviour）が戦闘中だけ <see cref="Tick"/> を呼ぶ。
     /// </summary>
     public class SpawnClock
     {
@@ -27,7 +27,7 @@ namespace KakigoriTD.Core
             return n < 0 ? 0 : n;
         }
 
-        /// <summary>進行をリセット（ウェーブ開始/停止時）。</summary>
+        /// <summary>進行をリセット（戦闘の開始/停止時）。</summary>
         public void Reset()
         {
             _elapsed = 0f;

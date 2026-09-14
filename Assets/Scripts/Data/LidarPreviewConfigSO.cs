@@ -41,13 +41,11 @@ namespace KakigoriTD.Data
         [Header("雪玉ストリーム")]
         [SerializeField] private float _spawnRate = 24f;
         [SerializeField] private float _endRadius = 10f;
-        [Tooltip("氷消費の有効/無効。既定 false＝氷は無限（システム側リソース管理を使わない方針）。")]
-        [SerializeField] private bool _consumeIce = false;
 
         [Header("敵スポーン（360度）")]
         [Tooltip("入場開始の絶対半径（山中心から）。外周のこの位置に湧いて内側へ歩く。")]
         [SerializeField] private float _entranceRadius = 11f;
-        [Tooltip("静止半径。ここに到達して静止し、発射を始める。同じ半径なので密集すると自然に重なる。")]
+        [Tooltip("最前列（1段目）の静止半径。ここに到達して静止し、発射を始める。")]
         [SerializeField] private float _restRadius = 8f;
         [Tooltip("入場の歩行速度。")]
         [SerializeField] private float _entranceSpeed = 6f;
@@ -56,13 +54,22 @@ namespace KakigoriTD.Data
         [Tooltip("方位スポーンの角度刻み[deg]。360をこの値で割った位置にのみ湧く（例: 15なら24方向）。")]
         [SerializeField] private float _spawnAngleStepDeg = 15f;
 
+        [Header("敵の隊列（同じ方位に並ぶときの前後）")]
+        [Tooltip("同じ方位に並ぶ敵の前後間隔。0 だと重なって見えるので、敵の見た目の幅より大きく取る。")]
+        [SerializeField] private float _queueSpacing = 1f;
+        [Tooltip("1方位に並べる最大段数。全方位が満段になったらそれ以上は湧かない（重ねない）。")]
+        [SerializeField] private int _queueMaxDepth = 3;
+        [Tooltip("前列が倒れたときの繰り上がり歩行速度（ADR-20）。")]
+        [SerializeField] private float _queueAdvanceSpeed = 3.5f;
+
         [Header("撃破（一般化した位置到達）")]
         [Tooltip("雪玉→敵 撃破半径（XZ・ゲーム単位）。")]
         [SerializeField] private float _killRadiusUnits = 0.6f;
-        [Tooltip("前列判定の重なり半径。この距離内により古い生存敵がいる敵は「まだ前列でない」として撃破対象から外す。")]
-        [SerializeField] private float _overlapRadiusUnits = 0.7f;
-        [Tooltip("d=0（中心）での撃破クールダウン秒。中心＝広く弱い。")]
-        [SerializeField] private float _cooldownCenterSec = 0.6f;
+        [Tooltip("前列判定の重なり半径。この距離内により古い生存敵がいる敵は「まだ前列でない」として撃破対象から外す。" +
+                 "隊列の前後間隔より小さいと後段が直接倒せてしまうため、EnemyField 側で間隔以上に引き上げる。")]
+        [SerializeField] private float _overlapRadiusUnits = 1.1f;
+        [Tooltip("d=0（中心）での撃破クールダウン秒。中心＝広く弱い。ADR-30 で 0.6→0.25 に短縮。")]
+        [SerializeField] private float _cooldownCenterSec = 0.25f;
         [Tooltip("d=radiusMm（外周）での撃破クールダウン秒。外周＝狭く強い。")]
         [SerializeField] private float _cooldownEdgeSec = 0f;
 
@@ -90,12 +97,14 @@ namespace KakigoriTD.Data
         public float RadiusMm => _radiusMm;
         public float SpawnRate => _spawnRate;
         public float EndRadius => _endRadius;
-        public bool ConsumeIce => _consumeIce;
         public float EntranceRadius => _entranceRadius;
         public float RestRadius => _restRadius;
         public float EntranceSpeed => _entranceSpeed;
         public int MaxEnemies => _maxEnemies;
         public float SpawnAngleStepDeg => _spawnAngleStepDeg;
+        public float QueueSpacing => _queueSpacing;
+        public int QueueMaxDepth => _queueMaxDepth;
+        public float QueueAdvanceSpeed => _queueAdvanceSpeed;
         public float KillRadiusUnits => _killRadiusUnits;
         public float OverlapRadiusUnits => _overlapRadiusUnits;
         public float CooldownCenterSec => _cooldownCenterSec;
@@ -112,7 +121,7 @@ namespace KakigoriTD.Data
             return Mathf.Clamp01(dMm / _radiusMm);
         }
 
-        /// <summary>撃破クールダウン秒を d[mm] から線形補間（中心 0.6 → 外周 0.0）。</summary>
+        /// <summary>撃破クールダウン秒を d[mm] から線形補間（中心 0.25 → 外周 0.0）。</summary>
         public float CooldownSecFor(float dMm)
             => Mathf.Lerp(_cooldownCenterSec, _cooldownEdgeSec, NormalizedDistance(dMm));
 

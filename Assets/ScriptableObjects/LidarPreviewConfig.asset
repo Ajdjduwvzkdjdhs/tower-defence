@@ -24,15 +24,17 @@ MonoBehaviour:
   _radiusMm: 300
   _spawnRate: 24
   _endRadius: 10
-  _consumeIce: 0
   _entranceRadius: 11
   _restRadius: 8
   _entranceSpeed: 6
   _maxEnemies: 48
   _spawnAngleStepDeg: 15
+  _queueSpacing: 1
+  _queueMaxDepth: 3
+  _queueAdvanceSpeed: 3.5
   _killRadiusUnits: 1.5
-  _overlapRadiusUnits: 0.7
-  _cooldownCenterSec: 0.6
+  _overlapRadiusUnits: 1.1
+  _cooldownCenterSec: 0.25
   _cooldownEdgeSec: 0
   _spreadCenterDeg: 60
   _spreadEdgeDeg: 1

@@ -1,34 +1,29 @@
 namespace KakigoriTD.Core
 {
-    public enum SpawnKind { Enemy, Ally, Disguised }
+    /// <summary>湧かせる敵の種別（ADR-30）。</summary>
+    public enum SpawnKind { Normal, Bomber, Shield }
 
     /// <summary>
-    /// 湧き種別（敵／味方／変装）の純ロジック（ADR-8 / Phase3）。
-    /// 優先順位: 変装 → 味方 → 敵。種別が無効（chance=0 or hasXxx=false）ならスキップ。
+    /// 湧き種別（通常／爆発兵／盾兵）の抽選。純ロジック（ADR-8）。
+    /// 優先順位は 爆発兵 → 盾兵 → 通常。確率 0 の種別はスキップされる。
     /// roll は [0,1) の外部注入で決定的にテスト可能にする。
+    ///
+    /// 出現率は進捗（撃破数 / 目標撃破数）に応じたカーブから <c>SpawnDirector</c> が評価して渡す。
+    /// カーブ（<c>AnimationCurve</c>）は UnityEngine 型のため Core には持ち込まない。
     /// </summary>
     public static class SpawnSelector
     {
-        /// <summary>
-        /// 湧き種別を選択する。
-        /// </summary>
-        /// <param name="allyChance">味方出現確率 [0,1]。</param>
-        /// <param name="disguiseChance">変装出現確率 [0,1]。</param>
-        /// <param name="hasAlly">このウェーブに味方種別が設定されているか。</param>
-        /// <param name="hasDisguise">このウェーブに変装種別が設定されているか。</param>
-        /// <param name="roll">乱数値 [0,1)。外部から注入（Random.value を渡す）。</param>
-        public static SpawnKind Select(float allyChance, float disguiseChance,
-                                       bool hasAlly, bool hasDisguise, float roll)
+        /// <param name="bomberChance">爆発兵の出現確率 [0,1]。</param>
+        /// <param name="shieldChance">盾兵の出現確率 [0,1]。</param>
+        /// <param name="roll">乱数値 [0,1)。外部から注入（<c>Random.value</c> を渡す）。</param>
+        public static SpawnKind Select(float bomberChance, float shieldChance, float roll)
         {
-            if (hasDisguise && roll < disguiseChance)
-                return SpawnKind.Disguised;
+            if (roll < bomberChance) return SpawnKind.Bomber;
 
-            // 変装の抽選を外れた後、残りの確率帯で味方を抽選する。
-            // 単純に allyChance を再判定する（独立抽選）。
-            if (hasAlly && roll < allyChance)
-                return SpawnKind.Ally;
+            // 爆発兵の帯を外した残りで盾兵を抽選する（帯が重ならないよう連続した区間で判定）。
+            if (roll < bomberChance + shieldChance) return SpawnKind.Shield;
 
-            return SpawnKind.Enemy;
+            return SpawnKind.Normal;
         }
     }
 }
