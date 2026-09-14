@@ -1,5 +1,11 @@
 # preview-feedback ブランチ 引き継ぎ
 
+> **2026-09-11 追記**: `preview-feedback` は `main` へマージ済み（`510df22`）。以降の作業は
+> `improve-detection-gameplay` ブランチで継続中 → **[`docs/improve-detection-gameplay-handoff.md`](improve-detection-gameplay-handoff.md) を先に読むこと**。
+> 本ドキュメントは §1〜§3 のアーキテクチャ・調整値・検証状況が **今も正**（main に入って生きている）なので、
+> LiDAR 連続座標入力・360度敵・雪玉放出の仕組みを追うときの一次資料として引き続き参照する。§5〜§7 の
+> 「残タスク」「ハマりどころ」は新しい引き継ぎ書のほうに更新版がある。
+
 内覧会フィードバック対応。**このブランチ = LiDAR を連続座標入力に置換し、敵を 360 度化し、
 検知点から雪玉を放出して重なり順に撃破する**大改修。ローカルで積み上げ、`origin/preview-feedback` へ push 済み
 （PR なし・main 未マージ）。

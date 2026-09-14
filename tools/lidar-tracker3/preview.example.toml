@@ -26,7 +26,12 @@ tolerance_mm     = 100.0          # はみ出し許容。フィルタは「中�
 # 至近の反射は円の中に入る。それらは config.toml の [detection] range_min_cm で切ること。
 
 [representative]
-# 円内に氷点が複数あるときの代表点の選び方。現状 "nearest_center" のみ（円中心に最も近い点）。
-mode = "nearest_center"
+# 円内に氷点が複数あるときの代表点の選び方。
+#   "nearest_lidar"  … LiDAR に最も近い点（距離 r が最小）。既定。
+#                      混合画素（mixed pixel）の尻尾は本体より必ず奥へ伸びるので、
+#                      手前側の点＝本体に一番近い。小さな落氷はこちら。
+#   "nearest_center" … 関心円の中心に最も近い点（旧既定）。背景が円内に入り込む
+#                      置き方で中心付近だけを信じたいとき。
+mode = "nearest_lidar"
 
 # 削り(shaving)ホールドは config.toml の [ice] shaving_hold_sec を流用する（このファイルには置かない）。

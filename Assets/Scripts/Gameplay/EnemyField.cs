@@ -10,7 +10,8 @@ namespace KakigoriTD.Gameplay
     /// 360度化した単一の敵マネージャ（phase-preview-feedback.md / ADR-29 の 360度拡張）。
     /// 4 つの <c>ChannelController</c> ＋ <c>EnemyMatrix</c> の行 ＋ <c>EnemyRegistry</c> を置き換える。
     ///
-    ///  - スポーン: 方位 0〜360° ランダム → 外周（<see cref="LidarPreviewConfigSO.EntranceRadius"/>）から
+    ///  - スポーン: 方位を <see cref="LidarPreviewConfigSO.SpawnAngleStepDeg"/>（既定15°）刻みの離散値から
+    ///    ランダムに選び → 外周（<see cref="LidarPreviewConfigSO.EntranceRadius"/>）から
     ///    歩いて入場 → 静止半径（<see cref="LidarPreviewConfigSO.RestRadius"/>）で静止し発射を始める。
     ///    同じ静止半径なので密集すると自然に重なる。
     ///  - 撃破: 雪玉の一般化位置到達。<see cref="EnemyKillSelection.SelectFront"/> で「重なっていたら
@@ -38,6 +39,7 @@ namespace KakigoriTD.Gameplay
         private float _overlapRadius = 0.7f;
         private int _maxEnemies = 48;
         private float _knockbackDistance = 3f;
+        private float _spawnAngleStepDeg = 15f;
 
         private readonly List<Enemy> _enemies = new List<Enemy>();          // 添字 = 古い順
         private readonly List<Vector3> _posScratch = new List<Vector3>();   // SelectFront 用（GC 回避）
@@ -76,6 +78,7 @@ namespace KakigoriTD.Gameplay
                 _entranceSpeed = config.EntranceSpeed;
                 _overlapRadius = config.OverlapRadiusUnits;
                 _maxEnemies = config.MaxEnemies;
+                _spawnAngleStepDeg = config.SpawnAngleStepDeg;
             }
         }
 
@@ -112,15 +115,25 @@ namespace KakigoriTD.Gameplay
             return disguised;
         }
 
-        // 方位ランダムで外周に snap → 静止半径へ歩かせる（ADR-22 と同じ入場・発射ゲートの流儀）。
+        // 方位を _spawnAngleStepDeg 刻みの離散値からランダムに選び、外周に snap → 静止半径へ歩かせる
+        // （ADR-22 と同じ入場・発射ゲートの流儀）。
         private void PlaceNew(Enemy e)
         {
-            float az = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+            float az = RandomStepAzimuth();
             var dir = new Vector3(Mathf.Sin(az), 0f, Mathf.Cos(az)); // XZ 単位ベクトル
             e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up); // 砦（中心）を向く・cosmetic
 
             e.SetTarget(OnSlope(dir * _entranceRadius), snap: true, _entranceSpeed);
             e.SetTarget(OnSlope(dir * _restRadius), snap: false, _entranceSpeed);
+        }
+
+        // 0..360° を _spawnAngleStepDeg 刻みで区切った方位の中からランダムに 1 つ選ぶ（ラジアン返し）。
+        private float RandomStepAzimuth()
+        {
+            float stepDeg = _spawnAngleStepDeg > 0f ? _spawnAngleStepDeg : 15f;
+            int steps = Mathf.Max(1, Mathf.RoundToInt(360f / stepDeg));
+            int stepIndex = UnityEngine.Random.Range(0, steps);
+            return stepIndex * (Mathf.PI * 2f / steps);
         }
 
         private Vector3 OnSlope(Vector3 p)

@@ -1,0 +1,3 @@
+config.toml						検出範囲そのものの設定
+preview.toml						検出データの加工の設定
+Unity/TH/TH_Stage/GameManager/Lidar Preview Config	検出データの加工（こちらでも設定）と取り扱い設定

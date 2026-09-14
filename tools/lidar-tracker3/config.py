@@ -12,6 +12,7 @@
 谷の分類をせず、`preview.toml` の関心円だけを使うため。
 """
 
+import glob
 import os
 import sys
 import tomllib
@@ -88,16 +89,44 @@ def _require_number(value, where, key, minimum=None):
     return float(value)
 
 
+def _autodetect_ports():
+    """USB シリアルのポートを名前順で拾う（`port`/`ports` が "auto" のとき）。
+
+    macOS の /dev/tty.usbserial-* / /dev/cu.usbserial-* と Linux の /dev/ttyUSB* を見る。
+    同じ実体が tty. と cu. の両方で出たら tty. を採る（config.example.toml がその名前）。
+    LiDAR 以外のシリアル機器も拾いうるが、valley_tracker 側が開くときに health()
+    ハンドシェイクで弾く（応答しない台は「飛ばして続行」になる）。
+    """
+    # tty. を先に並べて、同じ実体が tty./cu. 両方で出たら tty. を残す
+    found = (
+        sorted(glob.glob("/dev/tty.usbserial-*"))
+        + sorted(glob.glob("/dev/cu.usbserial-*"))
+        + sorted(glob.glob("/dev/ttyUSB*"))
+    )
+    seen = set()
+    ports = []
+    for path in found:
+        key = path.rsplit("usbserial-", 1)[-1] if "usbserial-" in path else path
+        if key in seen:
+            continue
+        seen.add(key)
+        ports.append(path)
+    return ports
+
+
 def load_serial_config():
     """config.toml からシリアル接続設定を読み込み、(ports, baudrate) を返す。
 
     ports は接続する LiDAR のポートのリストで、並び順がそのまま LiDAR1, LiDAR2 …
-    （＝画面の上から下）になる。書き方は 2 通りで、
+    （＝画面の左の台ごと欄の上から下）になる。書き方は 3 通りで、
 
         port  = "/dev/tty.usbserial-0001"                 # 1 台だけ
-        ports = ["/dev/tty.usbserial-0001", "...0002"]    # 複数台
+        ports = ["/dev/tty.usbserial-0001", "...0002"]    # 複数台（明示）
+        port  = "auto"   /   ports = "auto"               # 挿さっている USB シリアルを全部
 
-    どちらでもよい（両方あるときは ports を採る）。
+    どれでもよい（`ports` と `port` の両方があるときは `ports` を採る）。"auto" は
+    挿し替えのたびに config を書き換えず 1〜数台を切り替えたいとき用。据え位置が
+    シビアで取り違えを避けたい現場では、明示リストの方が安全。
 
     ボーレートは全台共通。機種を混ぜる想定は無いので台数ぶん持たせていない。
     S1 は 256000（A シリーズの 115200 でも T-mini Plus の 230400 でもない）。
@@ -116,31 +145,39 @@ def load_serial_config():
             "config.example.toml を参考に設定してください。"
         )
 
-    if "ports" in serial_cfg:
-        ports = serial_cfg["ports"]
+    raw_ports = serial_cfg.get("ports", serial_cfg.get("port"))
 
-        if not isinstance(ports, list) or not ports:
-            sys.exit(
-                "config.toml の [serial] ports は 1 つ以上の文字列のリストで"
-                f"指定してください（現在: {ports!r}）。"
-            )
-        if not all(isinstance(port, str) for port in ports):
-            sys.exit(
-                "config.toml の [serial] ports の要素は文字列で指定してください"
-                f"（現在: {ports!r}）。"
-            )
-    elif "port" in serial_cfg:
-        # 1 台だけの旧来の書き方。リストに包んで以降を共通化する
-        ports = [serial_cfg["port"]]
-    else:
+    if raw_ports is None:
         sys.exit(
             "config.toml の [serial] に port（1 台）か ports（複数台）が"
             "ありません。config.example.toml を参考に設定してください。"
         )
 
+    # "auto"（port でも ports でも、文字列 "auto" または ["auto"]）は自動検出。
+    if raw_ports == "auto" or raw_ports == ["auto"]:
+        ports = _autodetect_ports()
+        if not ports:
+            sys.exit(
+                "[serial] port = \"auto\" ですが、USB シリアルのポートが見つかりません。\n"
+                "  ケーブル・補助 5V を確認してください（ls /dev/tty.usb* で確認できます）。"
+            )
+        print(f"[serial] auto-detect: {', '.join(ports)}")
+        return ports, baudrate
+
+    if isinstance(raw_ports, str):
+        ports = [raw_ports]
+    elif isinstance(raw_ports, list) and raw_ports and all(
+        isinstance(p, str) for p in raw_ports
+    ):
+        ports = raw_ports
+    else:
+        sys.exit(
+            "config.toml の [serial] port/ports は文字列か、1 つ以上の文字列の"
+            f"リストで指定してください（現在: {raw_ports!r}）。"
+        )
+
     # 同じポートを 2 度開くと後から開いた方が失敗するので、起動前に弾く。
-    # 台数ぶんウィンドウを分割してしまう前に気づける。
-    duplicates = {port for port in ports if ports.count(port) > 1}
+    duplicates = {p for p in ports if ports.count(p) > 1}
     if duplicates:
         sys.exit(
             "config.toml の [serial] ports に同じポートが複数あります: "
@@ -268,7 +305,12 @@ def load_ice_config():
 DEFAULT_CIRCLE_CENTER_MM = (0.0, 300.0)
 DEFAULT_CIRCLE_RADIUS_MM = 300.0
 DEFAULT_CIRCLE_TOLERANCE_MM = 100.0
-DEFAULT_REPRESENTATIVE_MODE = "nearest_center"
+# 円内に氷点が複数あるときの代表点の選び方。valley_tracker.py の REPRESENTATIVE_MODES と対。
+#   "nearest_lidar"  : LiDAR に最も近い点（既定）。混合画素の尻尾は本体より奥へ伸びるので、
+#                      手前側＝本体に一番近い。小さな落氷向け。
+#   "nearest_center" : 関心円の中心に最も近い点（旧既定）。
+REPRESENTATIVE_MODES = ("nearest_lidar", "nearest_center")
+DEFAULT_REPRESENTATIVE_MODE = "nearest_lidar"
 
 
 def load_preview_config():
@@ -304,11 +346,19 @@ def load_preview_config():
             sys.exit(f"preview.toml の [circle] {key} は {minimum} 以上で指定してください。")
         return v
 
+    mode = rep.get("mode", DEFAULT_REPRESENTATIVE_MODE)
+    if mode not in REPRESENTATIVE_MODES:
+        sys.exit(
+            f"preview.toml の [representative] mode は "
+            f"{' / '.join(REPRESENTATIVE_MODES)} のいずれかで指定してください"
+            f"（現在: {mode!r}）。"
+        )
+
     return {
         "center_offset_mm": (cx, cy),
         "radius_mm": _num(circle, "radius_mm", DEFAULT_CIRCLE_RADIUS_MM, minimum=1.0),
         "tolerance_mm": _num(circle, "tolerance_mm", DEFAULT_CIRCLE_TOLERANCE_MM),
-        "representative_mode": rep.get("mode", DEFAULT_REPRESENTATIVE_MODE),
+        "representative_mode": mode,
     }
 
 
