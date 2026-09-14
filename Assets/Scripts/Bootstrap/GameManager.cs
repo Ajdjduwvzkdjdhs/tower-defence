@@ -45,7 +45,7 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
-        [SerializeField] private GameObject _enemyPrefab;
+        [SerializeField] private GameObject _enemyPrefab; // 爆発演出も含めて敵プレハブ側（ExplosiveDeath）でまとまっている
         [Header("展示用設定")]
         [SerializeField] private float _resultLimit = 3f;// WINしてからリザルト画面に移動する時間
         private Fort _fort;

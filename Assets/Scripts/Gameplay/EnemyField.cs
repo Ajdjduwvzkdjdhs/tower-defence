@@ -121,7 +121,9 @@ namespace KakigoriTD.Gameplay
         {
             float az = RandomStepAzimuth();
             var dir = new Vector3(Mathf.Sin(az), 0f, Mathf.Cos(az)); // XZ 単位ベクトル
-            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up); // 砦（中心）を向く・cosmetic
+            // 砦（中心）を向く・cosmetic。さらに-30度前傾させ、真上に近いゲーム用カメラからでも
+            // 敵の見分けが付くようにする（敵プレハブの種類を問わず、ここ1箇所で全敵に効く）。
+            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up) * Quaternion.Euler(-30f, 0f, 0f);
 
             e.SetTarget(OnSlope(dir * _entranceRadius), snap: true, _entranceSpeed);
             e.SetTarget(OnSlope(dir * _restRadius), snap: false, _entranceSpeed);
@@ -171,6 +173,27 @@ namespace KakigoriTD.Gameplay
             return true;
         }
 
+        /// <summary>
+        /// worldPos から radius 内の敵をすべて撃破する（爆発の巻き込み用）。exclude は撃破処理中の当人
+        /// （二重処理防止）。巻き込んだ敵がさらに爆発を誘発する連鎖を許容するため、共有スキャッチではなく
+        /// ローカルリストで処理する（再入で壊れないように）。連鎖で先に死んだ分は IsAlive で弾く。
+        /// </summary>
+        public void KillAllWithin(Vector3 worldPos, float radius, Enemy exclude = null)
+        {
+            var toKill = new List<Enemy>();
+            for (int i = 0; i < _enemies.Count; i++)
+            {
+                var e = _enemies[i];
+                if (e == null || e == exclude || !e.IsAlive) continue;
+                if (Vector3.Distance(e.transform.position, worldPos) <= radius) toKill.Add(e);
+            }
+            for (int i = 0; i < toKill.Count; i++)
+            {
+                var e = toKill[i];
+                if (e != null && e.IsAlive) KillOne(e);
+            }
+        }
+
         private void KillOne(Enemy e)
         {
             if (e == null) return;
@@ -184,6 +207,12 @@ namespace KakigoriTD.Gameplay
         // プール未設定（EditMode の直接呼び出し）でも安全に動くよう ?. で守る。
         private bool PerformKill(Enemy e)
         {
+            // 巻き込み爆発（KillAllWithin）が IsAlive を見て二重処理を防ぐため、演出より前に
+            // 生存フラグを倒しておく（重なった敵同士が互いをまだ「生存中」とみなして無限に
+            // 爆発を誘発し合う再帰バグを防ぐ）。Kill() は非virtualの単一実装なのでここで先に
+            // 呼んでも後段の ally.Kill()/disguised.Kill() は冪等（二重に呼んでも安全）。
+            e.Kill();
+
             _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
 
             if (_burstPool != null)
@@ -193,6 +222,16 @@ namespace KakigoriTD.Gameplay
                 Vector3 landing = e.transform.position + outward * _knockbackDistance;
                 if (_heightAt != null) landing.y = _heightAt(landing.x, landing.z);
                 _burstPool.Get().Play(e.transform, landing, _burstPool.Release);
+            }
+
+            // 爆発するかどうかは敵プレハブ自身が持つ ExplosiveDeath の有無で決まる（EnemyField 側では
+            // 敵種別を問わない）。モデル・傾き・爆発演出を1つのプレハブにまとめてあるので、
+            // GameManager の敵プレハブ差し替え1箇所だけで「爆発する敵かどうか」も一緒に切り替わる。
+            var explosive = e.GetComponent<ExplosiveDeath>();
+            if (explosive != null)
+            {
+                var self = e;
+                explosive.Explode((pos, radius) => KillAllWithin(pos, radius, self));
             }
 
             if (e is AllyNPC ally)
