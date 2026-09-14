@@ -38,6 +38,8 @@ namespace KakigoriTD.Bootstrap
 
         [Header("調整値（spec §主要パラメータ）")]
         [SerializeField] private int _fortHpMax = 1000;
+        [Tooltip("砦を山頂の斜面高さから上下にずらすオフセット。負の値で少し埋める。")]
+        [SerializeField] private float _fortHeightOffset = 0f;
         [SerializeField] private float _iceTotal = 50f;
         [SerializeField] private float _waveLull = 5f;
         [SerializeField] private float _waveIntroDuration = 1.2f;
@@ -254,7 +256,7 @@ namespace KakigoriTD.Bootstrap
             go.name = "Fort";
             go.transform.SetParent(transform);
             go.transform.localScale = new Vector3(1.3f, 1.3f, 1f);
-            go.transform.position = new Vector3(0f, HeightAt(0f, 0f), 0f); // 山頂に据える（ADR-21）
+            go.transform.position = new Vector3(0f, HeightAt(0f, 0f) + _fortHeightOffset, 0f); // 山頂に据える（ADR-21）
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _fortMat;
             _fort = go.AddComponent<Fort>();
