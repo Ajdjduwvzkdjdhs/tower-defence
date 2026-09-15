@@ -52,6 +52,7 @@ namespace KakigoriTD.Gameplay
         private float _overlapRadius = 1.1f;
         private int _maxEnemies = 48;
         private float _knockbackDistance = 3f;
+        private const float ExplosionKnockbackScale = 2.5f; // 巻き込まれた敵は通常撃破より遠くへ飛ばして「爆発で死んだ」と分かるようにする
         private float _spawnAngleStepDeg = 15f;
         private float _queueSpacing = 1f;
         private int _queueMaxDepth = 3;
@@ -365,6 +366,7 @@ namespace KakigoriTD.Gameplay
                 AddColumn(EnemyQueueLayout.ColumnOf(_victimScratch[i].TargetPosition, steps));
 
             // 起点（雪玉で倒された爆発兵）→ 巻き込まれた敵、の順に撃破を確定する。
+            Vector3 blastCenter = origin.transform.position;
             PerformKill(origin);
             _enemies.Remove(origin);
             OnEnemyKilled?.Invoke(originSource);
@@ -372,12 +374,15 @@ namespace KakigoriTD.Gameplay
             for (int i = 0; i < _victimScratch.Count; i++)
             {
                 var v = _victimScratch[i];
-                PerformKill(v);
+                PerformKill(v, blastCenter);
                 _enemies.Remove(v);
                 OnEnemyKilled?.Invoke(KillSource.Explosion); // 連鎖20体ならコンボも +20（ADR-30）
             }
 
             for (int i = 0; i < _columnScratch.Count; i++) RepackColumn(_columnScratch[i]);
+
+            // 現場で「巻き込みが起きているか」を Console で確かめられるようにする（爆発は稀なので負荷は無視できる）。
+            Debug.Log($"[Explosion] 爆発 {_chainDetonated.Count} 回 / 巻き込み {_victimScratch.Count} 体 (半径 {origin.ExplosionRadius:F1})");
         }
 
         private void AddColumn(int column)
@@ -388,16 +393,20 @@ namespace KakigoriTD.Gameplay
         }
 
         // 撃破演出（雪しぶき puff・身代わり蒸発 burst）＋ Kill ＋ プール返却。
+        // blastCenter を渡すと「爆心から外へ」通常より遠くに吹き飛ばす（爆発の巻き込みを見分けるため）。
+        // 渡さなければ従来どおり山頂から外向きに飛ぶ。
         // プール未設定（EditMode の直接呼び出し）でも安全に動くよう ?. で守る。
-        private void PerformKill(Enemy e)
+        private void PerformKill(Enemy e, Vector3? blastCenter = null)
         {
             _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
 
             if (_burstPool != null)
             {
-                Vector3 outward = new Vector3(e.transform.position.x, 0f, e.transform.position.z);
+                Vector3 origin = blastCenter ?? Vector3.zero;
+                Vector3 outward = new Vector3(e.transform.position.x - origin.x, 0f, e.transform.position.z - origin.z);
                 outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : Vector3.forward;
-                Vector3 landing = e.transform.position + outward * _knockbackDistance;
+                float distance = blastCenter.HasValue ? _knockbackDistance * ExplosionKnockbackScale : _knockbackDistance;
+                Vector3 landing = e.transform.position + outward * distance;
                 if (_heightAt != null) landing.y = _heightAt(landing.x, landing.z);
                 _burstPool.Get().Play(e.transform, landing, _burstPool.Release);
             }

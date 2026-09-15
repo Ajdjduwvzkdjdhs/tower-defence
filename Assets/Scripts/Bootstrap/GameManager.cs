@@ -368,10 +368,10 @@ namespace KakigoriTD.Bootstrap
         }
 
         // 爆発のプレースホルダ演出（ADR-30）。正式な VFX は別担当が作るので、差し替えはここと
-        // ExplosionRing.cs の 2 箇所で閉じる。Cylinder を薄く潰して地面の円として使う。
+        // ExplosionRing.cs の 2 箇所で閉じる。膨らむ発光球（斜面に埋まらず真上からも範囲が分かる）。
         private ExplosionRing CreateExplosionRing()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "ExplosionRing";
             DestroyCollider(go);
             go.GetComponent<MeshRenderer>().sharedMaterial = _ringMat;
