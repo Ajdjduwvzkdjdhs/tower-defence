@@ -55,10 +55,11 @@ namespace KakigoriTD.Data
         [SerializeField] private float _spawnAngleStepDeg = 15f;
 
         [Header("敵の隊列（同じ方位に並ぶときの前後）")]
-        [Tooltip("同じ方位に並ぶ敵の前後間隔。0 だと重なって見えるので、敵の見た目の幅より大きく取る。")]
-        [SerializeField] private float _queueSpacing = 1f;
-        [Tooltip("1方位に並べる最大段数。全方位が満段になったらそれ以上は湧かない（重ねない）。")]
-        [SerializeField] private int _queueMaxDepth = 3;
+        [Tooltip("同じ方位に並ぶ敵の前後間隔。0 だと重なって見えるので、敵の見た目の幅より大きく取る。"
+               + "上限の目安は隣の列との距離（2π×静止半径÷列数 ≒ 2.09）÷1.05 ≒ 1.99。これを超えると前列判定が隣の列まで拾う。")]
+        [SerializeField] private float _queueSpacing = 1.8f;
+        [Tooltip("1方位に並べる最大段数。全方位が満段になったらそれ以上は湧かない（重ねない）。爆発兵＋盾兵のペアは 2 段必要。")]
+        [SerializeField] private int _queueMaxDepth = 2;
         [Tooltip("前列が倒れたときの繰り上がり歩行速度（ADR-20）。")]
         [SerializeField] private float _queueAdvanceSpeed = 3.5f;
 

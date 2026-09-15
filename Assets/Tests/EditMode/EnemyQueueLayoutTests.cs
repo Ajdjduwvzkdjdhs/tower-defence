@@ -130,5 +130,52 @@ namespace KakigoriTD.Tests.EditMode
             Assert.That(column, Is.Not.EqualTo(5));
             Assert.That(slot, Is.EqualTo(0));
         }
+
+        // ---- ペア確保（爆発兵＋盾兵を同じ列に前後で置く・ADR-30） ----
+
+        [Test]
+        public void PairAlloc_EmptyField_TakesPreferredColumn()
+        {
+            bool ok = EnemyQueueLayout.TryAllocateColumnWithFreeDepth(new List<Vector3>(), Steps, 5, Rest, Spacing, 2, 2, out int column);
+            Assert.That(ok, Is.True);
+            Assert.That(column, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void PairAlloc_ColumnWithFrontOccupied_IsSkipped()
+        {
+            // 希望列の 1 段目に誰かいる → 2 段とも空いている隣の列へ逃がす
+            var occupied = new List<Vector3> { Slot(5, 0) };
+            bool ok = EnemyQueueLayout.TryAllocateColumnWithFreeDepth(occupied, Steps, 5, Rest, Spacing, 2, 2, out int column);
+            Assert.That(ok, Is.True);
+            Assert.That(column, Is.Not.EqualTo(5));
+            Assert.That(Mathf.Abs(column - 5), Is.EqualTo(1), "隣の列へ逃がす");
+        }
+
+        [Test]
+        public void PairAlloc_ColumnWithOnlyRearOccupied_IsSkipped()
+        {
+            // 2 段目だけ埋まっていてもペアは置けない（前後で並べたいので両方空きが必要）
+            var occupied = new List<Vector3> { Slot(5, 1) };
+            bool ok = EnemyQueueLayout.TryAllocateColumnWithFreeDepth(occupied, Steps, 5, Rest, Spacing, 2, 2, out int column);
+            Assert.That(ok, Is.True);
+            Assert.That(column, Is.Not.EqualTo(5));
+        }
+
+        [Test]
+        public void PairAlloc_DepthExceedsMaxDepth_ReturnsFalse()
+        {
+            bool ok = EnemyQueueLayout.TryAllocateColumnWithFreeDepth(new List<Vector3>(), Steps, 5, Rest, Spacing, maxDepth: 1, depth: 2, out _);
+            Assert.That(ok, Is.False);
+        }
+
+        [Test]
+        public void PairAlloc_EveryColumnHasFrontEnemy_ReturnsFalse()
+        {
+            var occupied = new List<Vector3>();
+            for (int c = 0; c < Steps; c++) occupied.Add(Slot(c, 0));
+            bool ok = EnemyQueueLayout.TryAllocateColumnWithFreeDepth(occupied, Steps, 3, Rest, Spacing, 2, 2, out _);
+            Assert.That(ok, Is.False, "全列の先頭が埋まっていればペアはどこにも置けない");
+        }
     }
 }

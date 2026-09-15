@@ -39,9 +39,9 @@ namespace KakigoriTD.Data
                + "3.0 だと隣の列にしか届かず巻き込みがほぼ起きない。")]
         [SerializeField] private float _explosionRadius = 4.5f;
 
-        [Header("盾兵（雪玉では倒しにくい）")]
+        [Header("盾兵（雪玉では倒しにくい。必ず爆発兵の後ろにペアで湧く）")]
         [SerializeField] private EnemyTypeSO _shieldType;
-        [Tooltip("開始時（撃破 0 体）の出現確率 0..1。")]
+        [Tooltip("開始時（撃破 0 体）の出現確率 0..1。この確率で「爆発兵＋盾兵」のペアが湧く。")]
         [Range(0f, 1f)] [SerializeField] private float _shieldChanceStart = 0.05f;
         [Tooltip("終了時（目標撃破数に到達）の出現確率 0..1。開始→終了を進捗で線形補間。")]
         [Range(0f, 1f)] [SerializeField] private float _shieldChanceEnd = 0.20f;

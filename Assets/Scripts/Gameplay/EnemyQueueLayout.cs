@@ -91,6 +91,37 @@ namespace KakigoriTD.Gameplay
             return false;
         }
 
+        /// <summary>
+        /// 先頭から <paramref name="depth"/> 段が**すべて空いている列**を 1 つ確保する（ペア湧き用・ADR-30）。
+        /// 爆発兵（前）＋盾兵（後ろ）のように「同じ列に前後で並べたい」ときに使う。
+        /// <paramref name="preferredColumn"/> から ±1, ±2 … と探し、無ければ false。
+        /// 呼び出し側は slot 0 .. depth-1 をそのまま使える。
+        /// </summary>
+        public static bool TryAllocateColumnWithFreeDepth(IReadOnlyList<Vector3> occupiedTargets, int stepCount,
+            int preferredColumn, float restRadius, float spacing, int maxDepth, int depth, out int column)
+        {
+            column = NormalizeColumn(preferredColumn, stepCount);
+            if (stepCount <= 0 || depth <= 0 || depth > maxDepth) return false;
+
+            float threshold = Mathf.Max(MinSpacing, spacing) * 0.5f;
+            float th2 = threshold * threshold;
+
+            int half = stepCount / 2;
+            for (int offset = 0; offset <= half; offset++)
+            {
+                for (int sign = 1; sign >= -1; sign -= 2)
+                {
+                    int c = NormalizeColumn(preferredColumn + offset * sign, stepCount);
+                    bool allFree = true;
+                    for (int s = 0; s < depth && allFree; s++)
+                        allFree = !IsOccupied(occupiedTargets, SlotPosition(c, s, stepCount, restRadius, spacing), th2);
+                    if (allFree) { column = c; return true; }
+                    if (offset == 0) break;
+                }
+            }
+            return false;
+        }
+
         private static bool TryFreeSlotIn(IReadOnlyList<Vector3> occupiedTargets, int column, int stepCount,
             float restRadius, float spacing, int maxDepth, out int slot)
         {

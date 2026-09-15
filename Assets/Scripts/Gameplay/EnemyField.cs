@@ -176,6 +176,38 @@ namespace KakigoriTD.Gameplay
             return s;
         }
 
+        /// <summary>
+        /// 爆発兵（前）＋盾兵（後ろ）を**同じ列に前後で**湧かせる（ADR-30）。
+        /// 盾兵の正攻法は「前の爆発兵を倒して爆発に巻き込む」なので、盾兵が爆発兵より前に立つ配置を作らない。
+        /// 爆発兵を先にリストへ入れる（＝古い）ため、繰り上がり後も爆発兵が内側（前）に残る。
+        /// 2 段とも空いている列が無ければ何も湧かせず null を返す。
+        /// </summary>
+        public BombTrooper SpawnBomberShieldPair(EnemyTypeSO bomberType, EnemyTypeSO shieldType, out ShieldTrooper shield)
+        {
+            shield = null;
+            if (_enemies.Count + 2 > _maxEnemies) return null;
+
+            int steps = StepCount;
+            CollectOccupiedSlots();
+            if (!EnemyQueueLayout.TryAllocateColumnWithFreeDepth(_slotScratch, steps, UnityEngine.Random.Range(0, steps),
+                    _restRadius, _queueSpacing, _queueMaxDepth, depth: 2, out int column))
+                return null;
+
+            var bomber = _bomberPool.Get();
+            bomber.SetExplosionRadius(_explosionRadius);
+            bomber.Init(bomberType, _projectileFactory, _fort);
+            PlaceAt(bomber, column, slot: 0);
+            _enemies.Add(bomber);
+
+            shield = _shieldPool.Get();
+            shield.SetMaxHits(_shieldHits);
+            shield.Init(shieldType, _projectileFactory, _fort);
+            PlaceAt(shield, column, slot: 1);
+            _enemies.Add(shield);
+
+            return bomber;
+        }
+
         // 方位を _spawnAngleStepDeg 刻みの離散値からランダムに選び、その列の空き段を確保して
         // 外周に snap → 空き段へ歩かせる（ADR-22 と同じ入場・発射ゲートの流儀）。
         // 空きが無ければ false（呼び出し側はスポーンを見送る＝敵を重ねない）。
@@ -187,15 +219,21 @@ namespace KakigoriTD.Gameplay
                     _restRadius, _queueSpacing, _queueMaxDepth, out int column, out int slot))
                 return false;
 
+            PlaceAt(e, column, slot); // 砦（中心）を向き、外周から段へ歩く。奥の段は最低 1 段分だけ外から入れる
+            return true;
+        }
+
+        // 指定の列・段へ入場させる（外周に snap → 段へ歩く）。PlaceNew の配置部分を切り出したもの。
+        private void PlaceAt(Enemy e, int column, int slot)
+        {
+            int steps = StepCount;
             var dir = EnemyQueueLayout.Direction(column, steps);
-            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up); // 砦（中心）を向く・cosmetic
+            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up);
 
             float rest = EnemyQueueLayout.SlotRadius(slot, _restRadius, _queueSpacing);
-            // 入場開始は外周。奥の段は静止位置が外周に迫るので、最低 1 段分だけ外から入れる。
             float entrance = Mathf.Max(_entranceRadius, rest + _queueSpacing);
             e.SetTarget(OnSlope(dir * entrance), snap: true, _entranceSpeed);
             e.SetTarget(OnSlope(dir * rest), snap: false, _entranceSpeed);
-            return true;
         }
 
         // 生存敵が確保済みのスロット（＝目標位置）を集める。移動中の現在位置ではなく目標位置が正。

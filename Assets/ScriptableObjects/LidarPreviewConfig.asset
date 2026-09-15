@@ -29,8 +29,8 @@ MonoBehaviour:
   _entranceSpeed: 6
   _maxEnemies: 48
   _spawnAngleStepDeg: 15
-  _queueSpacing: 1
-  _queueMaxDepth: 3
+  _queueSpacing: 1.8
+  _queueMaxDepth: 2
   _queueAdvanceSpeed: 3.5
   _killRadiusUnits: 1.5
   _overlapRadiusUnits: 1.1
