@@ -228,7 +228,7 @@ namespace KakigoriTD.Bootstrap
             IPositionInputSource posInput = new CompositePositionInputSource(_lidarPosSource, sim);
 
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
-            _lidarVfx.Configure(posInput, _field, HeightAt, CreateSnowball, cfg,
+            _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg,
                 cfg.ConsumeIce ? _ice : null);
             _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
@@ -363,12 +363,12 @@ namespace KakigoriTD.Bootstrap
             return burst;
         }
 
-        private Snowball CreateSnowball()
+        private AvalancheSnowEffect CreateAvalancheEffect()
         {
             var go = GameObject.Instantiate(_snowEffectPrefab);
-            go.name = "Snowball";
+            go.name = "AvalancheSnowEffect";
             DestroyCollider(go);
-            return go.AddComponent<Snowball>();
+            return go.AddComponent<AvalancheSnowEffect>();
         }
 
         private Projectile CreateProjectile()
