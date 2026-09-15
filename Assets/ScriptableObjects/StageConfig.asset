@@ -13,62 +13,18 @@ MonoBehaviour:
   m_Name: StageConfig
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.StageConfigSO
   _targetKillCount: 100
-  _spawnRatePerSecond: 0.667
+  _spawnRatePerSecond: 2
   _enemyPool:
   - {fileID: 11400000, guid: 5e18ce3d0089e448cab4cccc0eb609a7, type: 2}
   - {fileID: 11400000, guid: a1b2c3d40089e448cab4cccc0eb6a001, type: 2}
   _bomberType: {fileID: 11400000, guid: 119f88911a644463d9c7f681fbcdcc1f, type: 2}
-  _bomberChanceCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0.1
-      inSlope: 0
-      outSlope: 0.15
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0.25
-      inSlope: 0.15
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _explosionRadius: 3
+  _bomberChanceStart: 0.1
+  _bomberChanceEnd: 0.25
+  _explosionRadius: 4.5
   _shieldType: {fileID: 11400000, guid: 1f8ee5aeaa38845668b854c96feb2157, type: 2}
-  _shieldChanceCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0.05
-      inSlope: 0
-      outSlope: 0.15
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0.2
-      inSlope: 0.15
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _shieldHits: 5
+  _shieldChanceStart: 0.05
+  _shieldChanceEnd: 0.2
+  _shieldHits: 20
   _comboWindowSec: 2
   _gaugeMax: 40
   _gaugePerKill: 1

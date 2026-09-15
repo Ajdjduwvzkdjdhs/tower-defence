@@ -449,7 +449,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 - [ ] `StageConfig.asset` / `BombTrooper.asset` / `ShieldTrooper.asset` を作成し `TH_Stage.prefab` に割り当て済み
 - [ ] `GameOverScene.unity` に `GameOverScene.cs` が載っている
 - [ ] Play 検証: 爆発兵を倒すと赤い円が広がり周囲が消える／連鎖が伝播する
-- [ ] Play 検証: 盾兵は雪玉5発で倒れ、爆発に巻き込むと一撃で倒れる
+- [x] Play 検証: 盾兵は雪玉 N 発（既定20）で倒れ、爆発に巻き込むと一撃で倒れる
 - [ ] Play 検証: コンボが連鎖で跳ね上がり、2秒放置で 0 に戻る
 - [ ] Play 検証: ゲージMAXで自動的にビームが出て盤面が一掃され、**その撃破ではゲージが再充填されない**
 - [ ] Play 検証: `TargetKillCount` 到達 → `ResultScene`（クリアタイム表示）／砦HP 0 → `GameOverScene`（到達撃破数表示）
