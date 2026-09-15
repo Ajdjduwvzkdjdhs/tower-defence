@@ -60,6 +60,9 @@ MonoBehaviour:
   _allyHitPenalty: 50
   _tgsAllyPrefab: {fileID: 0}
   _enemyPrefab: {fileID: 0}
+  _specialAttackConfig: {fileID: 0}
+  _beamCannonPrefab: {fileID: 4294224916716114018, guid: f77f82c4d7487451da5891c044dd9e19, type: 3}
+  _specialAttackShockwavePrefab: {fileID: 4060460244147941742, guid: 7c073a6fc018b48a4a22a09ff57d4d0d, type: 3}
   _resultLimit: 3
 --- !u!1 &184031253997498005
 GameObject:

@@ -56,6 +56,9 @@ namespace KakigoriTD.Gameplay
         public bool IsEmpty => _enemies.Count == 0;
         public bool IsFull => _enemies.Count >= _maxEnemies;
 
+        /// <summary>敵が歩みを止めて攻撃を始める静止半径（Fort 中心)。必殺技のリング演出の半径合わせ用。</summary>
+        public float RestRadius => _restRadius;
+
         public void Configure(ProjectileFactory projectileFactory, Fort fort,
             Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
             Func<SnowPuff> createPuff, Func<DissolveBurst> createBurst,
