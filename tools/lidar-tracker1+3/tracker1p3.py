@@ -81,12 +81,16 @@ UPDATE_INTERVAL_MS = 50
 _MAX_BASELINE_MM = max([p["baseline_mm"] for p in S1_CFG["pairs"]], default=0.0)
 DISPLAY_HALF_EXTENT_MM = max(CIRCLE_FILTER_MM, _MAX_BASELINE_MM / 2.0 + CIRCLE_FILTER_MM) * 1.25
 
-ALL_POINT_COLOR = "0.75"
-ICE_POINT_COLOR = "tab:red"
 TMINI_MARKER_COLOR = "tab:orange"
 S1_MARKER_COLOR = "tab:purple"
 FINAL_MARKER_COLOR = "tab:green"
 RAY_COLOR = "0.55"
+
+# 物理LiDAR 1台ごとの点群の色（どの台がどちらを向いているか目視で切り分けるため）。
+# T-mini各台・S1各生ユニット、あわせて最大6台ぶん。単色（赤一色）だと「どの台が
+# 逆を向いているか」が分からないので、台ごとに変える。円マーカー色（橙/紫/緑/青）
+# とは意図的に重ならない配色にしてある。
+UNIT_COLORS = ["tab:red", "tab:brown", "tab:pink", "tab:olive", "tab:cyan", "tab:gray"]
 
 
 #=============================
@@ -304,11 +308,16 @@ def build_tmini_readers():
 
     readers = []
     for u in cfg["units"]:
+        # 台ごとの angle_offset_deg 上書き（config.toml [[tmini.units]]）。無ければ
+        # [tmini] の共通値。個体のエンコーダのゼロ点ズレを吸収する。
+        angle_offset_deg = u["angle_offset_deg"]
+        if angle_offset_deg is None:
+            angle_offset_deg = cfg["angle_offset_deg"]
         cloud_filter = CloudFilter(
             range_min_mm=range_min_mm,
             range_max_mm=range_max_mm,
             intensity_max=cfg["intensity_max"],
-            angle_offset_deg=cfg["angle_offset_deg"],
+            angle_offset_deg=angle_offset_deg,
             flip_horizontal=cfg["flip_horizontal"],
             flip_vertical=cfg["flip_vertical"],
             circle_center_mm=CIRCLE_CENTER_MM,
@@ -335,12 +344,17 @@ def build_s1_pairs():
         pos_a = (-half, 0.0)
         pos_b = (half, 0.0)
 
-        def make_filter(offset):
+        # 台ごとの angle_offset_deg 上書き（config.toml [[s1.pairs]] angle_offset_a/b）。
+        # 無ければ [s1] の共通値。個体のエンコーダのゼロ点ズレを吸収する。
+        angle_offset_a = p["angle_offset_a"] if p["angle_offset_a"] is not None else cfg["angle_offset_deg"]
+        angle_offset_b = p["angle_offset_b"] if p["angle_offset_b"] is not None else cfg["angle_offset_deg"]
+
+        def make_filter(offset, angle_offset_deg):
             return CloudFilter(
                 range_min_mm=range_min_mm,
                 range_max_mm=range_max_mm,
                 intensity_max=cfg["intensity_max"],
-                angle_offset_deg=cfg["angle_offset_deg"],
+                angle_offset_deg=angle_offset_deg,
                 flip_horizontal=cfg["flip_horizontal"],
                 flip_vertical=cfg["flip_vertical"],
                 circle_center_mm=CIRCLE_CENTER_MM,
@@ -354,8 +368,10 @@ def build_s1_pairs():
         sensor_b = sensors.RPLidarS1(
             p["port_b"], cfg["baudrate"], scan_mode=cfg["mode"], scan_frequency_hz=cfg["frequency_hz"]
         )
-        reader_a = LidarReader("s1", f"{p['name']}.a", p["port_a"], sensor_a, make_filter(pos_a), pos_mm=pos_a)
-        reader_b = LidarReader("s1", f"{p['name']}.b", p["port_b"], sensor_b, make_filter(pos_b), pos_mm=pos_b)
+        reader_a = LidarReader("s1", f"{p['name']}.a", p["port_a"], sensor_a,
+                               make_filter(pos_a, angle_offset_a), pos_mm=pos_a)
+        reader_b = LidarReader("s1", f"{p['name']}.b", p["port_b"], sensor_b,
+                               make_filter(pos_b, angle_offset_b), pos_mm=pos_b)
         pairs.append(S1Pair(p["name"], reader_a, reader_b))
     return pairs
 
@@ -478,8 +494,10 @@ class AveragingWriter:
 class CombinedView:
     """T-mini・S1 を束ねた単一プロット。
 
-      - 灰色 : 全ユニットの有効点（共有フレームへ変換済み）
-      - 赤   : 全ユニットの関心円内・氷候補点
+      - 台ごとの色: 各物理LiDAR（T-mini各台・S1各生ユニット）の点群を別々の色で描く。
+        薄い点＝その台の全有効点、濃い点＝その台の関心円内・氷候補点。
+        どの台がどちら向きに据わっているか（正面がズレていないか）を色で見分けるため
+        （赤一色だと台の区別がつかない、という問題への対応）。凡例は右上。
       - 橙三角: T-mini 各台の代表点（点群平均）
       - 紫四角: S1 各ペアの交点（交点法の推定点）＋薄いレイ2本（デバッグ用）
       - 緑の輪: 最終的にUnityへ送る代表点（有効な代表点の平均）
@@ -492,9 +510,16 @@ class CombinedView:
         self._tmini = tmini_readers
         self._pairs = s1_pairs
         self._writer = writer
+        # 色分け対象＝全ての物理LiDAR（T-mini各台 + S1各生ユニット）。
+        self._units = list(tmini_readers) + [
+            unit for pair in s1_pairs for unit in (pair.unit_a, pair.unit_b)
+        ]
+        self._unit_colors = {
+            reader.name: UNIT_COLORS[i % len(UNIT_COLORS)]
+            for i, reader in enumerate(self._units)
+        }
         self._ax = None
-        self._all_scat = None
-        self._ice_scat = None
+        self._cloud_scats = {}   # reader.name -> (all_scat, ice_scat)
         self._tmini_scat = None
         self._s1_scat = None
         self._final_scat = None
@@ -538,8 +563,16 @@ class CombinedView:
             line_b, = ax.plot([], [], color=RAY_COLOR, linewidth=1.0, linestyle=":", zorder=1)
             self._ray_lines.append((line_a, line_b))
 
-        self._all_scat = ax.scatter([], [], s=6, c=ALL_POINT_COLOR, zorder=3)
-        self._ice_scat = ax.scatter([], [], s=30, c=ICE_POINT_COLOR, zorder=4)
+        for reader in self._units:
+            color = self._unit_colors[reader.name]
+            all_scat = ax.scatter([], [], s=6, c=color, alpha=0.35, zorder=3)
+            ice_scat = ax.scatter([], [], s=34, c=color, alpha=0.95, zorder=4, label=reader.name)
+            self._cloud_scats[reader.name] = (all_scat, ice_scat)
+
+        if self._units:
+            ax.legend(loc="upper right", fontsize=8, framealpha=0.85,
+                      markerscale=1.3, title="LiDAR", title_fontsize=8)
+
         self._tmini_scat = ax.scatter([], [], s=110, marker="^", facecolors="none",
                                       edgecolors=TMINI_MARKER_COLOR, linewidths=1.8, zorder=5)
         self._s1_scat = ax.scatter([], [], s=110, marker="s", facecolors="none",
@@ -565,18 +598,21 @@ class CombinedView:
         far = (pos[0] + dx * scale, pos[1] + dy * scale)
         return pos, far
 
+    def _update_cloud(self, reader):
+        """1台ぶんの点群スキャッタを更新する。呼び出し側の unit_lines 用に値も返す。"""
+        cloud, in_circle, hit_count = reader.state.snapshot()
+        all_scat, ice_scat = self._cloud_scats[reader.name]
+        all_scat.set_offsets(np.asarray(cloud, dtype=float).reshape(-1, 2))
+        ice_scat.set_offsets(np.asarray(in_circle, dtype=float).reshape(-1, 2))
+        return len(in_circle), hit_count
+
     def refresh(self):
-        all_chunks, ice_chunks = [], []
         unit_lines = []
 
         for r in self._tmini:
-            cloud, in_circle, hit_count = r.state.snapshot()
-            if cloud:
-                all_chunks.append(cloud)
-            if in_circle:
-                ice_chunks.append(in_circle)
+            n_in_circle, hit_count = self._update_cloud(r)
             point, fresh = r.state.resolve(HOLD_SEC)
-            unit_lines.append(f"{r.name:<9}{len(in_circle):3d}p{hit_count:5d}h {'LIVE' if fresh else '----'}")
+            unit_lines.append(f"{r.name:<9}{n_in_circle:3d}p{hit_count:5d}h {'LIVE' if fresh else '----'}")
 
         tmini_points = []
         for r in self._tmini:
@@ -587,12 +623,8 @@ class CombinedView:
         s1_points = []
         for i, pair in enumerate(self._pairs):
             pos_a, avg_a, pos_b, avg_b = pair.debug_rays(HOLD_SEC)
-            for reader, avg in ((pair.unit_a, avg_a), (pair.unit_b, avg_b)):
-                cloud, in_circle, hit_count = reader.state.snapshot()
-                if cloud:
-                    all_chunks.append(cloud)
-                if in_circle:
-                    ice_chunks.append(in_circle)
+            for reader in (pair.unit_a, pair.unit_b):
+                self._update_cloud(reader)
 
             line_a, line_b = self._ray_lines[i]
             if avg_a is not None:
@@ -615,15 +647,6 @@ class CombinedView:
             status = "LIVE" if point is not None else ("half" if (avg_a is not None) != (avg_b is not None) else "----")
             unit_lines.append(f"{pair.name:<9}a{a_hit:4d}h b{b_hit:4d}h {status}")
 
-        merged_all = np.asarray(
-            [pt for chunk in all_chunks for pt in chunk], dtype=float
-        ).reshape(-1, 2)
-        merged_ice = np.asarray(
-            [pt for chunk in ice_chunks for pt in chunk], dtype=float
-        ).reshape(-1, 2)
-
-        self._all_scat.set_offsets(merged_all)
-        self._ice_scat.set_offsets(merged_ice)
         self._tmini_scat.set_offsets(np.asarray(tmini_points, dtype=float).reshape(-1, 2))
         self._s1_scat.set_offsets(np.asarray(s1_points, dtype=float).reshape(-1, 2))
 
@@ -643,7 +666,11 @@ class CombinedView:
             f"{POSITION_FILE}"
         )
 
-        return [self._all_scat, self._ice_scat, self._tmini_scat, self._s1_scat, self._final_scat]
+        artists = [self._tmini_scat, self._s1_scat, self._final_scat]
+        for all_scat, ice_scat in self._cloud_scats.values():
+            artists.append(all_scat)
+            artists.append(ice_scat)
+        return artists
 
 
 #=============================

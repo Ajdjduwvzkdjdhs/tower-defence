@@ -175,7 +175,14 @@ def load_tmini_config():
         if port in seen_ports:
             sys.exit(f"config.toml の [[tmini.units]] にポートの重複があります: {port}")
         seen_ports.add(port)
-        parsed_units.append({"name": name, "port": port})
+        # 台ごとの向き上書き（省略時は [tmini] の共通値を使う）。個体差（エンコーダの
+        # ゼロ点が筐体に対してズレている等）を吸収するためのもの。
+        angle_offset_deg = (
+            _num(u, "angle_offset_deg", None, where) if "angle_offset_deg" in u else None
+        )
+        parsed_units.append({
+            "name": name, "port": port, "angle_offset_deg": angle_offset_deg,
+        })
 
     cfg = {
         "baudrate": int(_num(tmini, "baudrate", DEFAULT_TMINI_BAUDRATE, "[tmini]", minimum=1)),
@@ -232,8 +239,12 @@ def load_s1_config():
         if "baseline_mm" not in p:
             sys.exit(f"config.toml の {where} に baseline_mm（2 台の間隔[mm]）がありません。")
         baseline_mm = _num(p, "baseline_mm", None, where, minimum=1.0)
+        # 台ごとの向き上書き（省略時は [s1] の共通値を使う）。個体差を吸収するためのもの。
+        angle_offset_a = _num(p, "angle_offset_a", None, where) if "angle_offset_a" in p else None
+        angle_offset_b = _num(p, "angle_offset_b", None, where) if "angle_offset_b" in p else None
         parsed_pairs.append({
             "name": name, "port_a": port_a, "port_b": port_b, "baseline_mm": baseline_mm,
+            "angle_offset_a": angle_offset_a, "angle_offset_b": angle_offset_b,
         })
 
     cfg = {

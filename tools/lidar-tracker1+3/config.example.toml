@@ -35,6 +35,7 @@ intensity_max = 200      # T-mini Plus は 8bit（0-255）
 [[tmini.units]]
 name = "TMini-A"
 port = "/dev/tty.usbserial-XXXX"
+# angle_offset_deg = 0.0   # この台だけ向きが違うときの上書き。省略時は [tmini] の共通値
 
 [[tmini.units]]
 name = "TMini-B"
@@ -63,6 +64,8 @@ name        = "S1-A"
 port_a      = "/dev/tty.usbserial-0001"   # 共有フレームの -X 側（baseline/2 だけ左）
 port_b      = "/dev/tty.usbserial-0002"   # 共有フレームの +X 側（baseline/2 だけ右）
 baseline_mm = 600.0                       # ← 2 台の設置間隔。ここが「二つの距離」の設定値
+# angle_offset_a = 0.0   # port_a 側だけ向きが違うときの上書き。省略時は [s1] の共通値
+# angle_offset_b = 0.0   # port_b 側も同様
 
 [[s1.pairs]]
 name        = "S1-B"
