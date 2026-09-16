@@ -1,0 +1,83 @@
+# このファイルをコピーして config.toml を作成し、現物のポート・間隔に合わせて書き換える。
+#   cp config.example.toml config.toml
+# config.toml は Git 管理対象外（.gitignore 済み）。
+#
+# 構成: T-mini Plus は 1 台ずつ独立（[[tmini.units]]）。S1 は必ずペア
+# （[[s1.pairs]]、交点法）。詳しい理屈は README.md と tracker1p3.py の冒頭コメント。
+
+[circle]
+# 全ユニット共通の関心円（落氷域そのもの）。T-mini も S1 も、各ユニットの検出点を
+# 共有フレーム（このツールの出力座標系）へ変換してからこの円で絞る。
+# センサーごとには置かない（落氷域は 1 つしかないため）。
+center_offset_mm = [0.0, 300.0]   # 下端が原点で接する（= radius_mm と同じ値）
+radius_mm        = 300.0
+tolerance_mm     = 100.0
+
+
+[tmini]
+# T-mini Plus 共通設定。1 台でも 2 台でも独立に動く（片方が繋がらなくても続行）。
+baudrate      = 230400   # T-mini Plus 固定
+frequency_hz  = 10.0
+
+# 生角→表示角の回転量、左右/上下の反転。全 T-mini 共通（同じ向きで据える前提）。
+# 合わせ方は tools/lidar-tracker3/valley_tracker.py の ANGLE_OFFSET_DEG のコメント参照。
+angle_offset_deg = 0.0
+flip_horizontal  = true
+flip_vertical    = true
+
+[tmini.detection]
+range_min_cm = 0
+range_max_cm = 80
+
+[tmini.ice]
+intensity_max = 200      # T-mini Plus は 8bit（0-255）
+
+[[tmini.units]]
+name = "TMini-A"
+port = "/dev/tty.usbserial-XXXX"
+
+[[tmini.units]]
+name = "TMini-B"
+port = "/dev/tty.usbserial-YYYY"
+
+
+[s1]
+# S1 共通設定。必ずペアで使う（[[s1.pairs]]）。片方しか開けないペアはペアごと無効。
+baudrate     = 256000    # S1 固定
+frequency_hz = 10.0
+mode         = "standard"  # quality が付くのはこちらだけ
+
+angle_offset_deg = 0.0
+flip_horizontal  = true
+flip_vertical    = true
+
+[s1.detection]
+range_min_cm = 0
+range_max_cm = 80
+
+[s1.ice]
+intensity_max = 50       # S1 standard は 6bit（0-63）
+
+[[s1.pairs]]
+name        = "S1-A"
+port_a      = "/dev/tty.usbserial-0001"   # 共有フレームの -X 側（baseline/2 だけ左）
+port_b      = "/dev/tty.usbserial-0002"   # 共有フレームの +X 側（baseline/2 だけ右）
+baseline_mm = 600.0                       # ← 2 台の設置間隔。ここが「二つの距離」の設定値
+
+[[s1.pairs]]
+name        = "S1-B"
+port_a      = "/dev/tty.usbserial-0003"
+port_b      = "/dev/tty.usbserial-0004"
+baseline_mm = 600.0
+
+
+[hold]
+# 各トラッカー（T-mini 各台 / S1 各生ユニット）が最後の検出を保持する秒数。
+# 「削るのを止めてから雪崩が止まるまでの遅延」に直結する当日の主要ノブ（他ツールと同じ）。
+shaving_hold_sec = 1.5
+
+
+[output]
+# Unity が読む共有ファイルの出力先。相対パスは config.toml の場所が基準。
+# 解決順は 環境変数 KAKIGORI_POSITION_FILE → ここ → スクリプト相対 out/position.txt。
+position_file = "out/position.txt"
