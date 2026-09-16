@@ -26,6 +26,9 @@ namespace KakigoriTD.UI
         private int _resultScore;
         private int _resultPenalty;
 
+        private int _specialKills, _specialThreshold;
+        private bool _specialCharged;
+
         /// <summary>砦・氷を注入し、砦HP イベントを購読する。</summary>
         public void Configure(Fort fort, IceStock ice)
         {
@@ -71,6 +74,14 @@ namespace KakigoriTD.UI
         /// <summary>リザルト表示を消す（再挑戦時）。</summary>
         public void ClearResult() => _resultShown = false;
 
+        /// <summary>必殺技「ビーム砲」の撃破ゲージ（右下）。GameManager が毎フレーム設定。</summary>
+        public void SetSpecialGauge(int kills, int threshold, bool charged)
+        {
+            _specialKills = kills;
+            _specialThreshold = threshold;
+            _specialCharged = charged;
+        }
+
         private void OnGUI()
         {
             GUI.contentColor = Color.white;
@@ -93,6 +104,27 @@ namespace KakigoriTD.UI
             float hp01 = _maxHp > 0 ? (float)_hp / _maxHp : 0f;
             Bar(new Rect(16, 68, 320, 22), hp01, new Color(0.4f, 0.95f, 0.5f));
             GUI.Label(new Rect(344, 68, 260, 22), $"砦HP {_hp}/{_maxHp}");
+
+            // 必殺技「ビーム砲」ゲージ（右下）。閾値0（未設定）なら非表示。
+            if (_specialThreshold > 0)
+            {
+                const float w = 260f, h = 48f, margin = 16f;
+                var box = new Rect(Screen.width - w - margin, Screen.height - h - margin, w, h);
+                GUI.color = new Color(0f, 0f, 0f, 0.5f);
+                GUI.DrawTexture(box, Texture2D.whiteTexture);
+                GUI.color = Color.white;
+
+                float gauge01 = _specialCharged ? 1f : (_specialThreshold > 0 ? (float)_specialKills / _specialThreshold : 0f);
+                var barRect = new Rect(box.x + 10, box.y + 10, box.width - 20, 16);
+                Bar(barRect, gauge01, _specialCharged ? new Color(0.75f, 0.35f, 1f) : new Color(0.55f, 0.25f, 0.8f));
+
+                var labelRect = new Rect(box.x + 10, box.y + 27, box.width - 20, 18);
+                GUI.contentColor = _specialCharged ? new Color(0.85f, 0.55f, 1f) : Color.white;
+                GUI.Label(labelRect, _specialCharged
+                    ? "必殺技 発動中！"
+                    : $"必殺技ゲージ  {_specialKills}/{_specialThreshold}");
+                GUI.contentColor = Color.white;
+            }
 
             // 中央バナー（WaveIntro / WaveLull。リザルト表示中は非表示）
             if (!string.IsNullOrEmpty(_banner) && !_resultShown)
