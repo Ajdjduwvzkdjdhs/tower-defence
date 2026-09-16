@@ -66,11 +66,16 @@ ls /dev/tty.usb*
 | 落氷域そのもの（関心円） | `[circle]`（`center_offset_mm` / `radius_mm` / `tolerance_mm`）。T-mini・S1 共通で 1 つだけ |
 | T-mini / S1 それぞれの検出範囲・intensity 閾値 | `[tmini.detection]` / `[tmini.ice]`、`[s1.detection]` / `[s1.ice]`（quality のレンジが違うので別）|
 | 検出の隙間を埋める保持秒数 | `[hold]` の `shaving_hold_sec`。T-mini 各台・S1 各生ユニット共通 |
-| 生角の向き合わせ | `[tmini]` / `[s1]` の `angle_offset_deg` / `flip_horizontal` / `flip_vertical`（種別ごとに 1 つ。台ごとの個別値は無い＝全台同じ向きで据える前提） |
+| 生角の向き合わせ | `[tmini]` / `[s1]` の `angle_offset_deg` / `flip_horizontal` / `flip_vertical`（種別ごとの既定値。台ごとに違うなら `[[tmini.units]]` の `angle_offset_deg` や `[[s1.pairs]]` の `angle_offset_a`/`angle_offset_b` で上書き） |
 
-`port_a` は共有フレームの −X 側（基線の半分だけ左）、`port_b` は +X 側に自動的に置かれる
-（`baseline_mm` から計算。設定は間隔だけでよい）。逆に挿すと交点が左右反転した位置に出る
-ので、GUI で交点マーカーが実際の落氷位置とズレて見えたら `port_a`/`port_b` を入れ替える。
+`port_a` は共有フレームの **−X 側**、`port_b` は **+X 側**に自動的に置かれる
+（`(±baseline_mm/2, 0)`。設定は間隔だけでよい）。−X／+X は「**電源ポートを背にして
+正面を向いたときの左／右**」と対にしてある（正面＝表示角 180°＝出力 +Y）ので、
+**port_a＝左、port_b＝右**になるように挿す。逆に挿すと交点が左右反転した位置に出るので、
+GUI で交点マーカーが実際の落氷位置とズレて見えたら `port_a`/`port_b` を入れ替える。
+
+`baseline_mm` は **S1 2 台間の全長**（中心＝T-mini からの片道距離の 2 倍）。
+「T-mini から片側 295mm ずつ」なら `baseline_mm = 590.0`。
 
 ## Unity 側の出力パスを変える
 
@@ -108,6 +113,9 @@ GUI は単一の直交座標プロット 1 枚（ポーラーではない。S1 �
 - **台ごとの色**: 各物理LiDAR（T-mini 各台・S1 各生ユニット、最大 6 台）の点群を別々の色で
   描く（薄い点＝その台の全有効点、濃い点＝その台の関心円内・氷候補点）。右上に凡例。
   どの台が正しい向きを向いていないかを、単色（赤一色）ではなく色の位置で見分けるため。
+  **凡例・左欄・ログに出る名前は config.toml の `name` ではなく実際のポート番号
+  （例 `/dev/tty.usbserial-0001` → `0001`）で統一**してある。台数が多いと `name` の
+  ラベルより現物のポート番号（`ls /dev/tty.usb*` で見えるもの）で照合する方が早いため。
 - 橙の三角: T-mini 各台の代表点（点群平均）— 最大 2 個
 - 紫の四角: S1 各ペアの交点（交点法の推定点）＋薄い点線 2 本（デバッグ用のレイ）— 最大 2 個
 - 緑の輪: 最終的に Unity へ送る代表点（有効な代表点の平均）— 1 個

@@ -301,6 +301,15 @@ class S1Pair:
 # config → オブジェクト
 #=============================
 
+def _port_label(port):
+    """ポート文字列から短い表示名を作る（例: /dev/tty.usbserial-0001 -> "0001"）。
+
+    GUI・ログに出す個々の物理LiDARの名前はこれで統一する。台数が増えるほど
+    「どのLiDARか」を config.toml の name より現物のポート番号で照合する方が早いため。
+    """
+    return port.rsplit("-", 1)[-1] if "-" in port else port
+
+
 def build_tmini_readers():
     cfg = TMINI_CFG
     range_min_mm = cfg["range_min_cm"] * 10.0
@@ -328,7 +337,7 @@ def build_tmini_readers():
             u["port"], cfg["baudrate"], scan_frequency_hz=cfg["frequency_hz"]
         )
         readers.append(
-            LidarReader("tmini", u["name"], u["port"], sensor, cloud_filter, pos_mm=(0.0, 0.0))
+            LidarReader("tmini", _port_label(u["port"]), u["port"], sensor, cloud_filter, pos_mm=(0.0, 0.0))
         )
     return readers
 
@@ -368,9 +377,9 @@ def build_s1_pairs():
         sensor_b = sensors.RPLidarS1(
             p["port_b"], cfg["baudrate"], scan_mode=cfg["mode"], scan_frequency_hz=cfg["frequency_hz"]
         )
-        reader_a = LidarReader("s1", f"{p['name']}.a", p["port_a"], sensor_a,
+        reader_a = LidarReader("s1", _port_label(p["port_a"]), p["port_a"], sensor_a,
                                make_filter(pos_a, angle_offset_a), pos_mm=pos_a)
-        reader_b = LidarReader("s1", f"{p['name']}.b", p["port_b"], sensor_b,
+        reader_b = LidarReader("s1", _port_label(p["port_b"]), p["port_b"], sensor_b,
                                make_filter(pos_b, angle_offset_b), pos_mm=pos_b)
         pairs.append(S1Pair(p["name"], reader_a, reader_b))
     return pairs
