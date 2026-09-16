@@ -369,6 +369,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 7452610469403989624, guid: b1471bc5a50df43b49917172345934aa, type: 3}
     - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
+      propertyPath: _explosionPrefab
+      value: 
+      objectReference: {fileID: 5913507487287125569, guid: 27f3f88464a6e4995ac44a6e2adf651c, type: 3}
+    - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
       propertyPath: _fortHeightOffset
       value: -1
       objectReference: {fileID: 0}
@@ -421,7 +425,8 @@ PrefabInstance:
       value: 2.84
       objectReference: {fileID: 0}
     m_RemovedComponents: []
-    m_RemovedGameObjects: []
+    m_RemovedGameObjects:
+    - {fileID: 9040599894214438085, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}

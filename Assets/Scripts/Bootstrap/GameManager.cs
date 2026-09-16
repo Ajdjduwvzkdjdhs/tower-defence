@@ -45,11 +45,16 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
-        [SerializeField] private GameObject _enemyPrefab;
         [SerializeField] private GameObject _snowEffectPrefab; // 雪崩の雪玉見た目（ParticleSystem付きPrefab）
+        [SerializeField] private GameObject _enemyPrefab; // 爆発演出も含めて敵プレハブ側（ExplosiveDeath）でまとまっている
+        [Header("必殺技「ビーム砲」（未割り当てなら既定値インスタンス／プレハブ無しでもロジックのみ動作）")]
+        [SerializeField] private SpecialAttackConfigSO _specialAttackConfig;
+        [SerializeField] private GameObject _beamCannonPrefab;
+        [SerializeField] private GameObject _specialAttackShockwavePrefab;
         [Header("展示用設定")]
         [SerializeField] private float _resultLimit = 3f;// WINしてからリザルト画面に移動する時間
         private Fort _fort;
+        private SpecialAttackController _specialAttack;
         private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
         private EnemyField _field;
@@ -92,6 +97,7 @@ namespace KakigoriTD.Bootstrap
             _input = NewChild("InputSource").AddComponent<KeyboardInputSource>();
 
             BuildField();
+            BuildSpecialAttack();
 
             _waveManager = NewChild("WaveManager").AddComponent<WaveManager>();
             _waveManager.Configure(_field);
@@ -207,6 +213,17 @@ namespace KakigoriTD.Bootstrap
                 CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, CreateDissolveBurst,
                 HeightAt, _lidarPreviewConfig);
             _field.OnAllyCaught += OnAllyCaughtHandler;
+        }
+
+        // 必殺技「ビーム砲」。敵を一定数倒すとチャージ完了→自動発動（SpecialAttackController に一任）。
+        private void BuildSpecialAttack()
+        {
+            if (_specialAttackConfig == null)
+                _specialAttackConfig = ScriptableObject.CreateInstance<SpecialAttackConfigSO>();
+
+            _specialAttack = NewChild("SpecialAttack").AddComponent<SpecialAttackController>();
+            _specialAttack.Configure(_field, _fort.transform, _specialAttackConfig,
+                _beamCannonPrefab, _specialAttackShockwavePrefab);
         }
 
         // LiDAR の連続座標とマウス疑似入力を常時 OR 合成し、検知点 P を中心に放射状の雪玉ストリームを
@@ -396,6 +413,9 @@ namespace KakigoriTD.Bootstrap
 
         private void UpdateStatusUI()
         {
+            if (_specialAttack != null)
+                _ui.SetSpecialGauge(_specialAttack.KillsSinceCharge, _specialAttack.Threshold, _specialAttack.IsCharged);
+
             var cur = _machine.Current;
             if (cur is TitleState)
             {
