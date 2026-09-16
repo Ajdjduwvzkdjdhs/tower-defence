@@ -6,6 +6,9 @@ using KakigoriTD.Factory;
 using KakigoriTD.Gameplay;
 using KakigoriTD.Input;
 using KakigoriTD.UI;
+using UnityEngine.SceneManagement;
+using System.Collections;
+
 
 namespace KakigoriTD.Bootstrap
 {
@@ -187,8 +190,18 @@ namespace KakigoriTD.Bootstrap
             else
             {
                 _audio?.PlayGameOver();
+                StartCoroutine(FadeAndLoadScene());
             }
             ;
+        }
+
+        private IEnumerator FadeAndLoadScene()
+        {
+
+            yield return new WaitForSeconds(3.0f);
+            // フェード完了後にシーン切り替え
+            SceneManager.LoadScene("GameOverScene");
+            yield break;
         }
         // リザルトシーンに転送する用です。展示に向けて急遽作成。
         private System.Collections.IEnumerator ResultSceneTransition(float delaySeconds)
@@ -385,7 +398,7 @@ namespace KakigoriTD.Bootstrap
             var go = GameObject.Instantiate(_snowEffectPrefab);
             go.name = "AvalancheSnowEffect";
 
-                 // 2) ParticleSystemコンポーネントを取得
+            // 2) ParticleSystemコンポーネントを取得
             //    子にPSがある場合も拾えるようにGetComponentInChildrenを使う
             var ps = go.GetComponent<ParticleSystem>();
             if (ps == null)
