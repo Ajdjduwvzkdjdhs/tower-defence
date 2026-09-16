@@ -367,6 +367,20 @@ namespace KakigoriTD.Bootstrap
         {
             var go = GameObject.Instantiate(_snowEffectPrefab);
             go.name = "AvalancheSnowEffect";
+
+                 // 2) ParticleSystemコンポーネントを取得
+            //    子にPSがある場合も拾えるようにGetComponentInChildrenを使う
+            var ps = go.GetComponent<ParticleSystem>();
+            if (ps == null)
+            {
+                // 子オブジェクトにParticleSystemを探す
+                ps = go.GetComponentInChildren<ParticleSystem>();
+            }
+
+            // 3) 衝突モジュールを有効化し、ワールドモードに設定
+            var col = ps.collision;
+            col.enabled = true;                                 // 衝突モジュールを有効化
+            col.type = ParticleSystemCollisionType.World;       // 衝突タイプをWorldに
             DestroyCollider(go);
             return go.AddComponent<AvalancheSnowEffect>();
         }
