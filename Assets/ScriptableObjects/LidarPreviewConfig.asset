@@ -25,7 +25,7 @@ MonoBehaviour:
   _spawnRate: 24
   _endRadius: 10
   _entranceRadius: 11
-  _restRadius: 8
+  _restRadius: 7.5
   _entranceSpeed: 6
   _maxEnemies: 48
   _spawnAngleStepDeg: 15
