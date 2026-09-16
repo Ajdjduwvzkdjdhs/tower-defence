@@ -377,6 +377,10 @@ PrefabInstance:
       value: -1
       objectReference: {fileID: 0}
     - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
+      propertyPath: _snowEffectPrefab
+      value: 
+      objectReference: {fileID: 2396241823905385122, guid: 651ce7e4902e64733a1d1693ff091bea, type: 3}
+    - target: {fileID: 331428665106823950, guid: 30d5beab3992342648f141dc04dd6a8c, type: 3}
       propertyPath: _visionFlipHorizontal
       value: 1
       objectReference: {fileID: 0}
