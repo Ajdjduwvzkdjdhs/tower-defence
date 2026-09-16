@@ -11,29 +11,35 @@ tools/lidar-tracker（T-mini Plus）と tools/lidar-tracker3（S1）の継ぎ接
     実体より奥へ伸びるので信用せず、「センサー位置 → 検出点群の平均点」が作る
     **方位角**だけを信用する。2 台を既知の間隔（`baseline_mm`）で並べ、それぞれの
     直線を延長した**交点**を実体の位置と見なす。片方の台しか開けない・片方の台が
-    円内に何も見ていない、という瞬間はその瞬間だけ交点を出さない（後述のホールド
-    で埋める）。**1 台だけの S1 は絶対に有効入力にしない**（1 台では交点が作れず、
-    従来どおり混合画素の影響をそのまま受けるため）。
+    いまこの瞬間円内に何も見ていない、というときはその瞬間だけ交点を出さない
+    （保持はしない。後述「ホールドは最終出力にだけ効かせる」）。**1 台だけの S1 は
+    絶対に有効入力にしない**（1 台では交点が作れず、従来どおり混合画素の影響を
+    そのまま受けるため）。
 
-  - 最終出力は、その時点で有効な「T-mini 単体の代表点」「S1 ペアの交点」（最大 4 個:
-    T-mini x2 + S1 ペア x2）の**単純平均**。1 個も無ければ検知なし。
+  - 最終出力は、その時点で**いま**有効な「T-mini 単体の代表点」「S1 ペアの交点」
+    （最大 4 個: T-mini x2 + S1 ペア x2）の**単純平均**。1 個も無ければ、直前の
+    最終平均を `[hold] shaving_hold_sec` の間だけ引き継ぐ（後述）。
 
 構成（トラッカー数 x 2 スレッド + 書き込み1 + 可視化ならメインスレッド）:
   - 読み取りスレッド : 物理 LiDAR 1 台につき 1 本（`LidarReader._reader_loop`）。
                        1 回転ぶんを読み、関心円内点群とその平均点を自分の
-                       `HoldState` に書く。
-  - ライタスレッド   : 50ms ごとに「T-mini 各台の代表点」「S1 各ペアの交点
-                       （2 台の HoldState から都度計算）」を集め、有効なものの
-                       平均を共有ファイルへ 1 行書く（`AveragingWriter`）。
+                       `LiveState` に書く（保持しない。検出できなければ即 None）。
+  - ライタスレッド   : 50ms ごとに「T-mini 各台のいまの代表点」「S1 各ペアのいまの
+                       交点（2 台の LiveState から都度計算）」を集めて平均し、
+                       **その最終平均だけ**を hold_sec ぶん保持して共有ファイルへ
+                       1 行書く（`AveragingWriter`）。
   - メインスレッド   : 可視化ありなら単一の Cartesian プロット（`CombinedView`）を
                        FuncAnimation で再描画。--headless なら待つだけ。
 
-ホールド（検出の隙間を埋める）:
-  各 `HoldState`（T-mini 各台、S1 各生ユニット）は「最後に検出した点」を
-  `[hold] shaving_hold_sec` の間だけ保持する。S1 ペアの交点は、都度その瞬間の
-  両生ユニットの保持値から計算し直す（交点そのものは別途ホールドしない。
-  両生ユニットが保持している間は同じ交点が出続けるので、二重にホールドする
-  意味が無い）。
+ホールドは最終出力にだけ効かせる（各系統の代表点はリアルタイム）:
+  各 `LiveState`（T-mini 各台、S1 各生ユニット）も `S1Pair` の交点も、**保持しない**。
+  いまの 1 回転で検出できていなければ、間を置かず None になる。保持・遅延は
+  `AveragingWriter` が出す**最終的な 1 点（Unity へ送る値）にだけ**効く: 個々の
+  系統の代表点をホールドしてしまうと、片方の系統が検出できていない間もその
+  系統の**古い**値が生き残り、もう片方のいま正しく検出できている系統の値を平均で
+  引っ張ってしまう（実機で確認された不具合、2026-09）。系統ごとの結果は常に
+  「いま検出できているか／いないか」を素直に反映させ、平均した**結果だけ**を
+  `[hold] shaving_hold_sec` の間だけ延命する。
 
 座標系（共有フレーム、[mm]）:
   T-mini の frame 原点＝そのユニットの位置＝共有フレームの原点そのもの
@@ -150,12 +156,15 @@ class CloudFilter:
 # 保持状態（トラッカー共通）
 #=============================
 
-class HoldState:
+class LiveState:
     """1 台の生 LiDAR ぶんの共有状態（読み取りスレッド → ライタ／描画スレッド）。
 
-    tools/lidar-tracker3 の `UnitState` と同じ形: 直近の代表点＋検出時刻を持ち、
-    hold_sec 以内なら resolve() がその点を返す。T-mini はこれをそのまま自分の
-    代表点として使い、S1 は 2 台ぶんの HoldState から都度 `S1Pair` が交点を作る。
+    **ホールドはしない**（保持・遅延は最終出力側＝`AveragingWriter` だけの役目。
+    「遅延は各系統の代表点ではなく、Unity へ送る最終平均にのみ効かせる」という
+    仕様のため）。ここは直近 1 回転の結果をそのまま反映するだけ: その回転で
+    何も検出できなければ、代表点は間を置かずに None になる。1 回転前の値を
+    引きずらない。T-mini はこれをそのまま自分の代表点として使い、S1 は
+    2 台ぶんの LiveState から都度 `S1Pair` が交点を作る。
     """
 
     def __init__(self):
@@ -170,18 +179,15 @@ class HoldState:
         with self._lock:
             self._cloud = cloud
             self._in_circle = in_circle
+            self._point = avg_point   # 検出なし(None)もそのまま反映する（保持しない）
             if avg_point is not None:
-                self._point = avg_point
                 self._detected_at = time.monotonic()
                 self._hit_count += 1
 
-    def resolve(self, hold_sec):
-        """(点 or None, hold内かどうか) を返す。一度も検出していなければ (None, False)。"""
+    def current(self):
+        """直近 1 回転の代表点（検出できていなければ None）。保持・遅延なし。"""
         with self._lock:
-            if self._detected_at is None:
-                return None, False
-            fresh = (time.monotonic() - self._detected_at) <= hold_sec
-            return (self._point if fresh else None), fresh
+            return self._point
 
     def snapshot(self):
         with self._lock:
@@ -193,7 +199,7 @@ class HoldState:
 #=============================
 
 class LidarReader:
-    """1 台の物理 LiDAR ＋ 読み取りスレッド ＋ 関心円フィルタ ＋ HoldState。
+    """1 台の物理 LiDAR ＋ 読み取りスレッド ＋ 関心円フィルタ ＋ LiveState。
 
     T-mini はこれ単体が「トラッカー」（`.resolve()` が最終候補点になる）。
     S1 はこれをペアで束ねて `S1Pair` が交点を作る（`.resolve()` は単体としても
@@ -207,7 +213,7 @@ class LidarReader:
         self.pos_mm = pos_mm      # 共有フレームでのこのユニットの位置
         self._sensor = sensor
         self._filter = cloud_filter
-        self.state = HoldState()
+        self.state = LiveState()
         self._thread = None
         # start_s1_pairs がペアの片方だけ開いたあと諦めて stop() するときは、
         # まだ全体の stop_event が立っていない（起動シーケンス途中のため）。
@@ -263,8 +269,9 @@ class LidarReader:
             self._thread.join(timeout=2.0)
             self._thread = None
 
-    def resolve(self, hold_sec):
-        return self.state.resolve(hold_sec)[0]
+    def resolve(self):
+        """直近 1 回転の代表点。保持・遅延なし（リアルタイム）。"""
+        return self.state.current()
 
 
 #=============================
@@ -274,8 +281,8 @@ class LidarReader:
 class S1Pair:
     """S1 2 台のペア。代表点＝両者の (センサー位置→平均点) 直線の交点。
 
-    両生ユニットが hold_sec 以内に検出していないと交点は作らない
-    （＝S1 は 2 台揃わないと有効入力にならない、を毎フレーム反映する）。
+    両生ユニットが**いまこの瞬間**検出できていないと交点は作らない（保持しない。
+    ＝S1 は 2 台揃わないと有効入力にならない、をリアルタイムに反映する）。
     """
 
     def __init__(self, name, unit_a, unit_b):
@@ -283,17 +290,18 @@ class S1Pair:
         self.unit_a = unit_a
         self.unit_b = unit_b
 
-    def resolve(self, hold_sec):
-        a, _ = self.unit_a.state.resolve(hold_sec)
-        b, _ = self.unit_b.state.resolve(hold_sec)
+    def resolve(self):
+        """直近 1 回転どうしから作る交点。保持・遅延なし（リアルタイム）。"""
+        a = self.unit_a.state.current()
+        b = self.unit_b.state.current()
         if a is None or b is None:
             return None
         return geometry.line_intersection(self.unit_a.pos_mm, a, self.unit_b.pos_mm, b)
 
-    def debug_rays(self, hold_sec):
-        """可視化用: (posA, avgA or None, posB, avgB or None) を返す。"""
-        a, _ = self.unit_a.state.resolve(hold_sec)
-        b, _ = self.unit_b.state.resolve(hold_sec)
+    def debug_rays(self):
+        """可視化用: (posA, avgA or None, posB, avgB or None)。こちらも保持なし。"""
+        a = self.unit_a.state.current()
+        b = self.unit_b.state.current()
         return self.unit_a.pos_mm, a, self.unit_b.pos_mm, b
 
 
@@ -440,11 +448,19 @@ def start_s1_pairs(pairs, stop_event):
 #=============================
 
 class AveragingWriter:
-    """有効な全トラッカー（T-mini 各台 + S1 各ペア）の代表点を束ね、平均を書く。
+    """有効な全トラッカー（T-mini 各台 + S1 各ペア）の"いま"の代表点を束ねて平均し、
+    その**最終出力だけ**を hold_sec ぶん保持して書く。
 
-    1 個でも有効なら shaving=1 でその平均、1 個も無ければ検知なし（`seq,,,0`）。
-    書き込みは temp へ書き切って `os.replace()` の原子的 rename（partial read 排除）。
-    `seq` は検知の有無に関わらず単調増加し、Unity は `seq` の停止で「ロスト」を検知する。
+    各トラッカー自身の代表点はリアルタイム（`LidarReader`/`S1Pair` は保持しない）。
+    保持・遅延は「Unity へ送る最終的な平均点」に対してのみ効かせる。そうしないと、
+    片方の系統が検出できていない間もその系統の**古い**代表点が生き残り、もう片方の
+    いま正しく検出できている系統の値を平均で引っ張ってしまう（実機で確認された不具合）。
+
+    1 個でも**いま**検出していれば shaving=1 でその瞬間の平均。1 個も無ければ、
+    直前に出せていた最終平均を hold_sec の間だけ引き継ぐ（shaving=1 のまま）。
+    それも過ぎたら検知なし（`seq,,,0`）。書き込みは temp へ書き切って
+    `os.replace()` の原子的 rename（partial read 排除）。`seq` は検知の有無に
+    関わらず単調増加し、Unity は `seq` の停止で「ロスト」を検知する。
     """
 
     def __init__(self, path, trackers, hold_sec, interval_sec):
@@ -456,15 +472,19 @@ class AveragingWriter:
         self._seq = 0
         self._lock = threading.Lock()
         self._last = (None, False, 0, {})  # (avg_point, shaving, seq, {tracker_name: point or None})
+        # 最終出力だけのホールド状態（ライタスレッドのみが読み書きするので lock 不要）。
+        self._held_point = None
+        self._held_at = None
 
-    def resolve_all(self):
-        contributions = {t.name: t.resolve(self._hold_sec) for t in self._trackers}
+    def resolve_instant(self):
+        """いまこの瞬間の、各トラッカーの代表点（保持なし）とその平均を返す。"""
+        contributions = {t.name: t.resolve() for t in self._trackers}
         live = [p for p in contributions.values() if p is not None]
         avg = geometry.average_point(live) if live else None
-        return avg, (avg is not None), contributions
+        return avg, contributions
 
     def status(self):
-        """(avg_point or None, shaving, seq, {tracker_name: point or None}) を返す。"""
+        """(最終出力の点 or None, shaving, seq, {tracker_name: いまの代表点 or None}) を返す。"""
         with self._lock:
             return self._last
 
@@ -472,17 +492,27 @@ class AveragingWriter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
         while not stop_event.is_set():
-            avg, shaving, contributions = self.resolve_all()
+            instant_avg, contributions = self.resolve_instant()
+
+            now = time.monotonic()
+            if instant_avg is not None:
+                self._held_point = instant_avg
+                self._held_at = now
+
+            if self._held_at is not None and (now - self._held_at) <= self._hold_sec:
+                out_point, shaving = self._held_point, True
+            else:
+                out_point, shaving = None, False
 
             with self._lock:
                 self._seq += 1
-                self._last = (avg, shaving, self._seq, contributions)
+                self._last = (out_point, shaving, self._seq, contributions)
                 seq = self._seq
 
-            if avg is None:
+            if out_point is None:
                 line = f"{seq},,,0\n"
             else:
-                line = f"{seq},{avg[0]:.1f},{avg[1]:.1f},{1 if shaving else 0}\n"
+                line = f"{seq},{out_point[0]:.1f},{out_point[1]:.1f},{1 if shaving else 0}\n"
 
             try:
                 with open(self._tmp_path, "w", encoding="utf-8") as f:
@@ -620,18 +650,18 @@ class CombinedView:
 
         for r in self._tmini:
             n_in_circle, hit_count = self._update_cloud(r)
-            point, fresh = r.state.resolve(HOLD_SEC)
-            unit_lines.append(f"{r.name:<9}{n_in_circle:3d}p{hit_count:5d}h {'LIVE' if fresh else '----'}")
+            point = r.state.current()
+            unit_lines.append(f"{r.name:<9}{n_in_circle:3d}p{hit_count:5d}h {'LIVE' if point is not None else '----'}")
 
         tmini_points = []
         for r in self._tmini:
-            p, _ = r.state.resolve(HOLD_SEC)
+            p = r.state.current()
             if p is not None:
                 tmini_points.append(p)
 
         s1_points = []
         for i, pair in enumerate(self._pairs):
-            pos_a, avg_a, pos_b, avg_b = pair.debug_rays(HOLD_SEC)
+            pos_a, avg_a, pos_b, avg_b = pair.debug_rays()
             for reader in (pair.unit_a, pair.unit_b):
                 self._update_cloud(reader)
 
@@ -647,7 +677,7 @@ class CombinedView:
             else:
                 line_b.set_data([], [])
 
-            point = pair.resolve(HOLD_SEC)
+            point = pair.resolve()
             if point is not None:
                 s1_points.append(point)
 
