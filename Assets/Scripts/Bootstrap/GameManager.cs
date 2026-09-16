@@ -198,8 +198,8 @@ namespace KakigoriTD.Bootstrap
         private IEnumerator FadeAndLoadScene()
         {
 
-            yield return new WaitForSeconds(3.0f);
-            // フェード完了後にシーン切り替え
+            yield return new WaitForSeconds(1.0f);
+            // シーン切り替え
             SceneManager.LoadScene("GameOverScene");
             yield break;
         }
