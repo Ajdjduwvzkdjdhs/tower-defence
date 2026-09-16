@@ -406,7 +406,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3582705525404224190, guid: 651ce7e4902e64733a1d1693ff091bea, type: 3}
       propertyPath: CollisionModule.type
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3582705525404224190, guid: 651ce7e4902e64733a1d1693ff091bea, type: 3}
       propertyPath: 'CollisionModule.m_Planes.Array.data[0]'
