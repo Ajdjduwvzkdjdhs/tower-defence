@@ -700,8 +700,15 @@ def main():
     s1_pairs = build_s1_pairs()
     stop_event = threading.Event()
 
-    active_tmini = start_tmini(tmini_readers, stop_event)
+    # **S1 を先に、T-mini を後に開く。** 実機で確認した現象: T-mini は公式 SDK
+    # （コンパイル済み C++、内部で独自に USB/シリアルへ触る）を使い、1 台の起動だけで
+    # 2.5〜3.5 秒の重いやりとりをする。T-mini の起動（成功・失敗を問わず）の**直後**に
+    # 別のシリアルポートを新規に開くと、そのポートが「応答ヘッダが不正（0 埋め）」で
+    # 壊れる現象が高い再現性で確認された（詳細は README「起動順序について」）。
+    # S1 は生プロトコル実装で身が軽いので、先に全部開いてしまえば T-mini 側の
+    # 重い処理の影響を受けない。
     active_pairs = start_s1_pairs(s1_pairs, stop_event)
+    active_tmini = start_tmini(tmini_readers, stop_event)
     trackers = active_tmini + active_pairs
 
     if not trackers:
