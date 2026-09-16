@@ -16,6 +16,7 @@ namespace KakigoriTD.Gameplay
         public event Action<AllyNPC> OnExpired;
 
         private float _lifetimeTimer;
+        private bool _wasInPosition;
 
         /// <summary>
         /// 味方として初期化する。factory=null/target=null を渡して無発射を保証し、
@@ -25,12 +26,21 @@ namespace KakigoriTD.Gameplay
         {
             base.Init(type, null, null);
             _lifetimeTimer = type != null ? type.AllyLifetime : 6f;
+            _wasInPosition = false;
         }
 
         protected override void Update()
         {
             if (!IsAlive) return;
             MoveTowardTarget(); // base.Update は呼ばないため明示的に呼ぶ（ADR-20）
+
+            // 味方は攻撃しないため、所定位置に着いたらその場で歩行モーションを回し続けない（一度だけ停止）。
+            if (!_wasInPosition && IsInPosition)
+            {
+                _wasInPosition = true;
+                SetAnimationPlaying(false);
+            }
+
             _lifetimeTimer -= Time.deltaTime;
             if (_lifetimeTimer <= 0f)
             {

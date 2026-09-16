@@ -50,7 +50,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 558e87a59a0824794be04e83e557c058, type: 3}
       propertyPath: m_Name
-      value: "TGS_\u5175\u58EB\u8D64 \u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3"
+      value: "Main_TGS_\u5175\u58EB\u8D64 \u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3"
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: 558e87a59a0824794be04e83e557c058, type: 3}
+      propertyPath: m_Controller
+      value: 
+      objectReference: {fileID: 9100000, guid: f32eb016139cc471d9e9009ba9c402cb, type: 2}
+    - target: {fileID: 5866666021909216657, guid: 558e87a59a0824794be04e83e557c058, type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8000364332737032240, guid: 558e87a59a0824794be04e83e557c058, type: 3}
       propertyPath: m_LocalPosition.x

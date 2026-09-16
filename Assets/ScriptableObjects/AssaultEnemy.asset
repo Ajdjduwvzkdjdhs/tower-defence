@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.EnemyTypeSO
   _moveSpeed: 1
   _fireInterval: 0.8
+  _initialFireDelay: 0
   _projectile: {fileID: 11400000, guid: c216f61ffc4f146f79549bc0598a0649, type: 2}
+  _prefab: {fileID: 7002790396835147781, guid: 56263b12fde9749858f54dd5deeeefea, type: 3}
   _isAlly: 0
   _isDisguised: 0
   _tint: {r: 1, g: 0.5, b: 0.1, a: 1}

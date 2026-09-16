@@ -50,7 +50,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
       propertyPath: m_Name
-      value: "TGS_\u5E02\u6C11\u30D8\u3099\u30FC\u30B7\u3099\u30E52"
+      value: TGS_Ally
       objectReference: {fileID: 0}
     - target: {fileID: 8000364332737032240, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
       propertyPath: m_LocalPosition.x
@@ -63,5 +63,35 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5657326788875785964}
   m_SourcePrefab: {fileID: 100100000, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
+--- !u!1 &7452610469403989624 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: f95f2a9ffba8240068ed0c95c77b13ce, type: 3}
+  m_PrefabInstance: {fileID: 7759020931487607593}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &5657326788875785964
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7452610469403989624}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: c4ddaaab2c93341138079462e073791d, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

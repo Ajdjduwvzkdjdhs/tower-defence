@@ -26,8 +26,11 @@ namespace KakigoriTD.Gameplay
         private ProjectileFactory _projectileFactory;
         private Fort _fort;
         private Func<float, float, float> _heightAt;
+        private Func<EnemyTypeSO, Enemy> _createEnemy;
 
-        private ObjectPool<Enemy> _enemyPool;
+        // prefab は EnemyTypeSO.Prefab ごとに異なるため、敵型ごとに ObjectPool を持つ（ADR-4 の使い回しを維持）。
+        private readonly Dictionary<EnemyTypeSO, ObjectPool<Enemy>> _enemyPools = new Dictionary<EnemyTypeSO, ObjectPool<Enemy>>();
+        private readonly Dictionary<Enemy, ObjectPool<Enemy>> _enemyPoolByInstance = new Dictionary<Enemy, ObjectPool<Enemy>>();
         private ObjectPool<AllyNPC> _allyPool;
         private ObjectPool<DisguisedEnemy> _disguisedPool;
         private ObjectPool<SnowPuff> _puffPool;
@@ -60,15 +63,15 @@ namespace KakigoriTD.Gameplay
         public float RestRadius => _restRadius;
 
         public void Configure(ProjectileFactory projectileFactory, Fort fort,
-            Func<Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
+            Func<EnemyTypeSO, Enemy> createEnemy, Func<AllyNPC> createAlly, Func<DisguisedEnemy> createDisguised,
             Func<SnowPuff> createPuff, Func<DissolveBurst> createBurst,
             Func<float, float, float> heightAt, LidarPreviewConfigSO config)
         {
             _projectileFactory = projectileFactory;
             _fort = fort;
             _heightAt = heightAt;
+            _createEnemy = createEnemy;
 
-            _enemyPool = new ObjectPool<Enemy>(createEnemy);
             _allyPool = new ObjectPool<AllyNPC>(createAlly);
             _disguisedPool = new ObjectPool<DisguisedEnemy>(createDisguised);
             _puffPool = new ObjectPool<SnowPuff>(createPuff);
@@ -90,11 +93,47 @@ namespace KakigoriTD.Gameplay
         public Enemy SpawnEnemy(EnemyTypeSO type)
         {
             if (IsFull) return null;
-            var e = _enemyPool.Get();
+            // SO が prefab 未設定だと GameManager.CreateEnemy が NRE（type.Prefab は null）になる。
+            // ここで弾いて「スポーン不可＝null 返し」を安全にする。
+            if (type == null || type.Prefab == null)
+            {
+                string soName = type != null ? type.name : "(null)";
+                Debug.LogWarning($"EnemyTypeSO.Prefab 未設定（SO名: {soName}）のため敵をスポーンできません。");
+                return null;
+            }
+            var pool = PooledEnemyFor(type);
+            var e = pool.Get();
+            _enemyPoolByInstance[e] = pool;
             e.Init(type, _projectileFactory, _fort);
             PlaceNew(e);
             _enemies.Add(e);
             return e;
+        }
+
+        // 敵型ごとにプールを惰延生成する（prefab は EnemyTypeSO.Prefab で型ごとに異なるため）。
+        private ObjectPool<Enemy> PooledEnemyFor(EnemyTypeSO type)
+        {
+            if (!_enemyPools.TryGetValue(type, out var pool))
+            {
+                pool = new ObjectPool<Enemy>(() => _createEnemy(type));
+                _enemyPools[type] = pool;
+            }
+            return pool;
+        }
+
+        // 返却時は生成元プールへ戻す（敵が複数種共用の _enemies に入るため instance 管理で逆参照）。
+        private void ReleaseEnemyToPool(Enemy e)
+        {
+            if (_enemyPoolByInstance.TryGetValue(e, out var pool))
+            {
+                _enemyPoolByInstance.Remove(e);
+                pool.Release(e);
+            }
+            else
+            {
+                Debug.LogWarning("Enemy の帰属プールが見つからなかったため破棄しました。");
+                Destroy(e.gameObject);
+            }
         }
 
         public AllyNPC SpawnAlly(EnemyTypeSO allyType)
@@ -251,7 +290,7 @@ namespace KakigoriTD.Gameplay
                 return false;
             }
             e.Kill();
-            _enemyPool?.Release(e);
+            ReleaseEnemyToPool(e);
             return false;
         }
 
@@ -284,10 +323,11 @@ namespace KakigoriTD.Gameplay
                 else
                 {
                     e.Kill();
-                    _enemyPool?.Release(e);
+                    ReleaseEnemyToPool(e);
                 }
             }
             _enemies.Clear();
+            _enemyPoolByInstance.Clear();
         }
     }
 }

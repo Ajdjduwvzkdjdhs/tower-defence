@@ -49,7 +49,6 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
         [SerializeField] private GameObject _snowEffectPrefab; // 雪崩の雪玉見た目（ParticleSystem付きPrefab）
-        [SerializeField] private GameObject _enemyPrefab; // 爆発演出も含めて敵プレハブ側（ExplosiveDeath）でまとまっている
         [Header("必殺技「ビーム砲」（未割り当てなら既定値インスタンス／プレハブ無しでもロジックのみ動作）")]
         [SerializeField] private SpecialAttackConfigSO _specialAttackConfig;
         [SerializeField] private GameObject _beamCannonPrefab;
@@ -74,7 +73,7 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat;
+        private Material _fortMat, _snowPuffMat;
         private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
 
         private void Awake()
@@ -83,8 +82,6 @@ namespace KakigoriTD.Bootstrap
             Instance = this;
 
             _fortMat = MakeUnlit(new Color(0.92f, 0.95f, 1.0f));
-            _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
-            _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
             _dissolveMat = MakeDissolve(new Color(0.75f, 1.90f, 2.60f, 1f)); // 発光帯：白〜水色
             _emberMat = MakeEmber(new Color(0.55f, 0.85f, 1.00f, 1f));       // 立ち上る粒
@@ -330,31 +327,16 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = cur;
         }
 
-        // private Enemy CreateEnemy()
-        // {
-        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        //     go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
-        //     DestroyCollider(go);
-        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
-        //     return go.AddComponent<Enemy>();
-        // }
-        private Enemy CreateEnemy()
+        // prefab は EnemyTypeSO.Prefab（SOごと）で渡される。SO 未設定（null）の弾き出しは
+        // EnemyField.SpawnEnemy が先行して行うため、ここでは無条件で Instantiate する。
+        private Enemy CreateEnemy(EnemyTypeSO type)
         {
-            var go = GameObject.Instantiate(_enemyPrefab);
+            var go = GameObject.Instantiate(type.Prefab);
             go.name = "Enemy";
             DestroyCollider(go);
             return go.AddComponent<Enemy>();
         }
 
-        // 味方NPC: sharedMaterial は敵と共用（per-instance MPB で青に上書き）。
-        // private AllyNPC CreateAlly()
-        // {
-        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        //     go.name = "Ally"; go.transform.localScale = Vector3.one * 0.5f;
-        //     DestroyCollider(go);
-        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
-        //     return go.AddComponent<AllyNPC>();
-        // }
         private AllyNPC CreateAlly()
         {
             var go = GameObject.Instantiate(_tgsAllyPrefab);
@@ -363,13 +345,13 @@ namespace KakigoriTD.Bootstrap
             return go.AddComponent<AllyNPC>();
         }
 
-        // 変装敵: 青 tint は per-instance MPB で付く。tell マーカーは DisguisedEnemy.OnInitialized で生成。
+        // 変装敵: 味方(TGS_Ally)と同じ prefab で見た目を揃えて擬態する。tell マーカーは
+        // DisguisedEnemy.OnInitialized で追加する（同色でも判別できるように）。
         private DisguisedEnemy CreateDisguised()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "DisguisedEnemy"; go.transform.localScale = Vector3.one * 0.5f;
+            var go = GameObject.Instantiate(_tgsAllyPrefab);
+            go.name = "DisguisedEnemy";
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
             return go.AddComponent<DisguisedEnemy>();
         }
 
@@ -420,7 +402,7 @@ namespace KakigoriTD.Bootstrap
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Projectile"; go.transform.localScale = Vector3.one * 0.35f;
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _projMat;
+            go.GetComponent<MeshRenderer>().enabled = false; // 見た目を非表示（ロジックのみ）
             return go.AddComponent<Projectile>();
         }
 
