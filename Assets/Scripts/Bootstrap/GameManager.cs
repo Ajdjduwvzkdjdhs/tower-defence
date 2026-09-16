@@ -45,6 +45,7 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _waveIntroDuration = 1.2f;
         [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
         [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
+        [SerializeField] private GameObject _snowEffectPrefab; // 雪崩の雪玉見た目（ParticleSystem付きPrefab）
         [SerializeField] private GameObject _enemyPrefab; // 爆発演出も含めて敵プレハブ側（ExplosiveDeath）でまとまっている
         [Header("必殺技「ビーム砲」（未割り当てなら既定値インスタンス／プレハブ無しでもロジックのみ動作）")]
         [SerializeField] private SpecialAttackConfigSO _specialAttackConfig;
@@ -70,7 +71,7 @@ namespace KakigoriTD.Bootstrap
         private int _currentWaveIndex;
         private float _waveStartTime;
 
-        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat, _snowballMat;
+        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat;
         private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
 
         private void Awake()
@@ -82,7 +83,6 @@ namespace KakigoriTD.Bootstrap
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
-            _snowballMat = MakeUnlit(new Color(0.97f, 0.98f, 1.0f)); // 雪玉（斜面を流れる雪崩の粒）
             _dissolveMat = MakeDissolve(new Color(0.75f, 1.90f, 2.60f, 1f)); // 発光帯：白〜水色
             _emberMat = MakeEmber(new Color(0.55f, 0.85f, 1.00f, 1f));       // 立ち上る粒
 
@@ -123,8 +123,8 @@ namespace KakigoriTD.Bootstrap
             bool IsClearKey = UnityEngine.InputSystem.Keyboard.current.leftShiftKey.wasPressedThisFrame;
             bool IsGameOverKey = UnityEngine.InputSystem.Keyboard.current.rightShiftKey.wasPressedThisFrame;
 
-            if(IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
-            else if(IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
+            if (IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+            else if (IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
 
             UpdateStatusUI();
             UpdateTrackerWarning();
@@ -178,19 +178,23 @@ namespace KakigoriTD.Bootstrap
         {
             _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
-            if (isWin){ 
+            if (isWin)
+            {
                 _audio?.PlayClear();
                 // WINの際には3秒後にシーン遷移
                 StartCoroutine(ResultSceneTransition(_resultLimit));
-            }else {
+            }
+            else
+            {
                 _audio?.PlayGameOver();
-            };
+            }
+            ;
         }
         // リザルトシーンに転送する用です。展示に向けて急遽作成。
         private System.Collections.IEnumerator ResultSceneTransition(float delaySeconds)
         {
             yield return new WaitForSeconds(delaySeconds);
-    
+
             // シーン遷移処理
             UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
         }
@@ -241,7 +245,7 @@ namespace KakigoriTD.Bootstrap
             IPositionInputSource posInput = new CompositePositionInputSource(_lidarPosSource, sim);
 
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
-            _lidarVfx.Configure(posInput, _field, HeightAt, CreateSnowball, cfg,
+            _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg,
                 cfg.ConsumeIce ? _ice : null);
             _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
@@ -376,13 +380,26 @@ namespace KakigoriTD.Bootstrap
             return burst;
         }
 
-        private Snowball CreateSnowball()
+        private AvalancheSnowEffect CreateAvalancheEffect()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = "Snowball"; go.transform.localScale = Vector3.one * 0.22f;
+            var go = GameObject.Instantiate(_snowEffectPrefab);
+            go.name = "AvalancheSnowEffect";
+
+                 // 2) ParticleSystemコンポーネントを取得
+            //    子にPSがある場合も拾えるようにGetComponentInChildrenを使う
+            var ps = go.GetComponent<ParticleSystem>();
+            if (ps == null)
+            {
+                // 子オブジェクトにParticleSystemを探す
+                ps = go.GetComponentInChildren<ParticleSystem>();
+            }
+
+            // 3) 衝突モジュールを有効化し、ワールドモードに設定
+            var col = ps.collision;
+            col.enabled = true;                                 // 衝突モジュールを有効化
+            col.type = ParticleSystemCollisionType.World;       // 衝突タイプをWorldに
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _snowballMat;
-            return go.AddComponent<Snowball>();
+            return go.AddComponent<AvalancheSnowEffect>();
         }
 
         private Projectile CreateProjectile()
