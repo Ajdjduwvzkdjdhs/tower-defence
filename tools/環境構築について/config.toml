@@ -1,0 +1,131 @@
+# このファイルをコピーして config.toml を作成し、ご自身の環境に合わせて書き換えてください。
+#   cp config.example.toml config.toml
+# config.toml は Git 管理対象外（.gitignore 済み）なので、各自のマシンごとに設定できます。
+
+[serial]
+# 接続するシリアルポート。並び順がそのまま LiDAR1, LiDAR2 …（＝画面の上から下）になる。
+# 2 台目を挿したら `ls /dev/tty.usb*` で確認して、下のコメントを実際のポート名に直して外す。
+ports = [
+    "/dev/tty.usbserial-0002",
+    "/dev/tty.usbserial-0001",
+]
+
+# ボーレート（通常は変更不要）。全台共通。
+baudrate = 230400
+
+
+[scan]
+# LiDAR の回転数[Hz]。省略すると 10.0。T-mini Plus の対応範囲は 5〜12。
+#
+# 回転が速いほど同じ場所を捉え直す間隔が短くなる（落下する氷を追いやすい）が、
+# サンプリングレートは 4kHz で一定なので、1 回転あたりの点数は反比例して減る:
+#     1 回転の最大点数 = 4000 / frequency_hz
+#     5Hz → 800 点 / 10Hz → 400 点 / 12Hz → 333 点
+# 実際の点数はウィンドウのタイトルに出るので、見ながら合わせる。
+frequency_hz = 12.0
+
+
+[detection]
+# LiDAR の検出範囲[cm]。この外の点は破棄する（SDK の range_min / range_max 相当）。
+# セクションごと省略可能で、その場合は range_min_cm = 0, range_max_cm = 80 が使われる。
+
+# 内側の境界。センサー筐体・治具・支柱など、常に至近距離で返る反射を切る。
+# 0 なら内側は切らない。0 以外にすると橙色の円で描画される。
+range_min_cm = 0
+
+# 外側の境界＝「関心円」。赤い円で描画される。
+# 壁や周囲の人を落として、かき氷機まわりの落氷だけを見るための主要なノブ。
+# T-mini Plus の実力値は約 0.02〜12 m なので、1200 より大きくしても意味はない。
+range_max_cm = 80
+
+
+[ice]
+# 落氷とみなす条件（valley_tracker.py のみ使用。scan_plot_realtime.py には効かない）。
+# 設置場所と当日の光環境で変わる現物合わせの値。
+
+# 氷とみなす Intensity の上限。この値**未満**の点だけを氷の候補にする。
+# 氷は反射が弱く Intensity が低い / 障害物（人・機体・造形物）は高い、という傾向に乗る。
+# 下げると障害物を拾いにくくなる代わりに氷も取りこぼす。省略すると 200。
+intensity_max = 100
+
+# 1 台の 1 回転で、1 つの谷に許す点数の上限。これを超えた谷は「障害物が写っている」と
+# みなし、照準にも削り判定にも寄与させない。氷は 1〜3 点程度でしか写らないのに対し、
+# 障害物はまとまった点で写るという傾向に乗る。省略すると 5。
+#
+# これが無いと、障害物が 1 つの谷にだけ写っているとき競合相手がいないまま採用され、
+# 削っていないのに雪崩が流れ続ける（最も体験を壊す誤り）。
+max_points_per_valley = 5
+
+# 最後に氷を検出してから、その谷を照準として保持し続ける秒数。0 で無期限
+# （次の検出まで谷を手放さない）。長く取っても実害は小さい（削っていなければ
+# 雪崩は流れない）ので、谷が -1 に飛ぶようなら伸ばす。省略すると 5.0。
+channel_hold_sec = 5.0
+
+# 最後に氷を検出してから、削り中とみなし続ける秒数。この値がそのまま
+# 「削るのを止めてから雪崩が止まるまでの遅延」になる。省略すると 1.5。
+#
+# LiDAR は氷を毎回転は拾えない（実測で 0.75〜2 秒に 1 回）ので、取りこぼし間隔より
+# 短くすると氷が流れているのに雪崩が途切れる。当日の主要な調整ノブ。
+shaving_hold_sec = 1.5
+
+
+# 4 方向の谷の範囲。角度と距離の「極座標の矩形」で指定する。
+#
+# LiDAR は 4 つの谷の配置の**外側**（北の谷の正面）に立つので、北の谷と南の谷は
+# ほぼ同じ方位角に重なる。角度だけでは切り分けられないため、距離もセットで要る。
+#
+# 名前と Unity の channel の対応は固定（north=0 / west=1 / south=2 / east=3）で、
+# 4 つすべてが必須。角度は valley_tracker.py の画面に見えているとおりの値
+# （0 度＝画面上・時計回り。ANGLE_OFFSET_DEG 適用後）で、0 度をまたいでよい
+# （angle_start_deg > angle_end_deg ならそこで折り返す）。
+#
+# **LiDAR の正面は 225〜315 度**（中心 270 度）。極座標プロットでは 0 度が画面上・
+# 時計回りなので、270 度は画面の左になる。scan_plot_realtime.py の既定計測セクタ
+# （COUNT_SECTOR_START_DEG / END_DEG = 225 / 315）と同じ範囲で、4 つの谷はすべて
+# この 90 度の中に収まる。範囲外を指定しても点が来ないので必ず検出できない。
+#
+# 下の値は**当たりを付けるための仮値**で、正面 90 度を素直に 4 分割してある:
+#   west 225-250 / north・south 250-290（距離で切り分け）/ east 290-315
+# valley_tracker.py を起動すると各谷が青く塗られるので、実際に氷を落としながら
+# 赤い点が正しい谷に入るよう詰める。距離は [detection] range_min_cm..range_max_cm の
+# 内側に収めること（外に出た点はそもそも破棄されるため）。
+#
+# **west と east の左右は現物で確認すること。** LiDAR をどちら向きに置くかで
+# 225 度側が west か east かが入れ替わる。逆なら、この 2 つの角度を入れ替える
+# （Unity 側の _visionFlipHorizontal では直さない。補正が二重になって原因が読めなくなる）。
+
+[valleys.north]
+# 一番手前。LiDAR 正面の中心・近距離。south と同じ方位角で、距離だけが違う。
+angle_start_deg = 250
+angle_end_deg = 290
+dist_min_cm = 15
+dist_max_cm = 40
+
+[valleys.west]
+# 正面 90 度の 225 度側。左右が逆なら east と角度を入れ替える。
+angle_start_deg = 225
+angle_end_deg = 250
+dist_min_cm = 25
+dist_max_cm = 65
+
+[valleys.south]
+# 一番奥。north と同じ方位角で、距離だけが違う。
+angle_start_deg = 250
+angle_end_deg = 290
+dist_min_cm = 50
+dist_max_cm = 80
+
+[valleys.east]
+# 正面 90 度の 315 度側。左右が逆なら west と角度を入れ替える。
+angle_start_deg = 290
+angle_end_deg = 315
+dist_min_cm = 25
+dist_max_cm = 65
+
+
+[output]
+# Unity が読む共有ファイルの出力先（valley_tracker.py のみ使用）。
+# 解決順は 環境変数 KAKIGORI_POSITION_FILE → ここ → スクリプト相対 out/position.txt。
+# 相対パスは config.toml の場所が基準。既定のままで Unity Editor から読める
+# （Unity 側 VisionConfig.asset の _relativePath と対になっている）。
+position_file = "out/position.txt"
