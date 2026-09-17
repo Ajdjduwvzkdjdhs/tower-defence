@@ -35,6 +35,9 @@ namespace KakigoriTD.Gameplay
         /// <summary>放出（＝雪崩）の on/off が変化したフレームに発火（音の雪崩ループ用・エッジ）。</summary>
         public event Action<bool> OnAvalancheChanged;
 
+        /// <summary>雪崩の演出が移動中に通過した現在位置で毎フレーム発火（山を白く塗る演出用）。</summary>
+        public event Action<Vector3> OnAvalanchePassed;
+
         /// <summary>このフレームに放出しているか（デバッグ表示用）。</summary>
         public bool IsEmitting => _wasEmitting;
 
@@ -81,7 +84,7 @@ namespace KakigoriTD.Gameplay
             {
                 _spawnAccum -= 1f;
                 // 雪崩の発生位置の真上に 1 個生成し、外向き（XZ の中心→検知点）へ粒子を流す。
-                _pool.Get().Spawn(p, _heightAt, _config.EndRadius, TryKill, _pool.Release);
+                _pool.Get().Spawn(p, _heightAt, _config.EndRadius, TryKill, RaisePassed, _pool.Release);
             }
         }
 
@@ -91,5 +94,7 @@ namespace KakigoriTD.Gameplay
             float d = (_input != null && _input.HasPoint) ? _input.DistanceMm : _lastDMm;
             return _field.TryKillNearest(worldPos, _config.KillRadiusUnits, _config.CooldownSecFor(d), Time.time);
         }
+
+        private void RaisePassed(Vector3 pos) => OnAvalanchePassed?.Invoke(pos);
     }
 }
