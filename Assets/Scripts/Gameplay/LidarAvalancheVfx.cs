@@ -9,14 +9,14 @@ namespace KakigoriTD.Gameplay
 {
     /// <summary>
     /// LiDAR 位置入力（連続座標）版の雪崩。谷を持たず、検知点 P（<see cref="IPositionInputSource.WorldPoint"/>）
-    /// から**山中心を通る放射方向へ**雪玉ストリームを放出し、雪玉が半径内の敵を 1 体撃破する
-    /// （phase-preview-feedback.md §3.4）。旧 AvalancheVfx（谷ストリーム＋ADR-27 先頭行到達）の
-    /// 置き換え。物理不使用・雪玉はプール（ADR-4/21/25/27 の方針は踏襲）。
+    /// の**真上に snowEffectPrefab（ParticleSystem 付き）を生成し最初から再生**する（雪玉転がし廃止）。
+    /// 粒子速度の XZ 成分は山中心→検知点の外向きベクトルへ整え（AvalancheSnowEffect が向き設定）、
+    /// 山から外側へ流れる（phase-preview-feedback.md §3.4 の後継・物理不使用）。
+    /// 演出はプール（<see cref="AvalancheSnowEffect"/>、ADR-4 踏襲）、撃破は移動中の位置で半径判定し 1 個 1 撃。
     ///
     /// d（＝検知点の中心距離[mm]）に連動して:
     ///  - **撃破クールダウン** <see cref="LidarPreviewConfigSO.CooldownSecFor"/>（中心 0.6s → 外周 0.0s）
-    ///  - **拡散の角度ばらつき** <see cref="LidarPreviewConfigSO.SpreadDegFor"/>（中心 ±25° → 外周 ±3°）
-    /// 中心付近＝広く弱い / 外周＝狭く強い。
+    /// 中心付近＝クールダウン長め / 外周＝連射可。
     ///
     /// 氷は無限（ADR-30 で <c>IceStock</c> ごと廃止。システム側のリソース管理を使わない方針）。
     /// </summary>
@@ -25,11 +25,10 @@ namespace KakigoriTD.Gameplay
         private IPositionInputSource _input;
         private EnemyField _field;
         private Func<float, float, float> _heightAt;
-        private ObjectPool<Snowball> _pool;
+        private ObjectPool<AvalancheSnowEffect> _pool;
         private LidarPreviewConfigSO _config;
 
         private float _spawnAccum;
-        private Vector3 _lastDir = Vector3.forward;
         private float _lastDMm;
         private bool _wasEmitting;
 
@@ -40,14 +39,14 @@ namespace KakigoriTD.Gameplay
         public bool IsEmitting => _wasEmitting;
 
         public void Configure(IPositionInputSource input, EnemyField field,
-            Func<float, float, float> heightAt, Func<Snowball> createSnowball,
+            Func<float, float, float> heightAt, Func<AvalancheSnowEffect> createEffect,
             LidarPreviewConfigSO config)
         {
             _input = input;
             _field = field;
             _heightAt = heightAt;
             _config = config;
-            _pool = new ObjectPool<Snowball>(createSnowball, prewarm: 24);
+            _pool = new ObjectPool<AvalancheSnowEffect>(createEffect, prewarm: 8);
             _spawnAccum = 0f;
             _wasEmitting = false;
         }
@@ -77,20 +76,12 @@ namespace KakigoriTD.Gameplay
             Vector3 p = _input.WorldPoint;
             _lastDMm = _input.DistanceMm;
 
-            Vector3 flat = new Vector3(p.x, 0f, p.z);
-            float startRadius = flat.magnitude;
-            Vector3 radialDir = startRadius > 1e-3f ? flat / startRadius : _lastDir; // 中心ちょうどは前フレームの向き
-            _lastDir = radialDir;
-
-            float spreadDeg = _config.SpreadDegFor(_lastDMm);
-
             _spawnAccum += _config.SpawnRate * Time.deltaTime;
             while (_spawnAccum >= 1f)
             {
                 _spawnAccum -= 1f;
-                float a = UnityEngine.Random.Range(-spreadDeg, spreadDeg);
-                Vector3 dir = Quaternion.AngleAxis(a, Vector3.up) * radialDir; // 拡散＝方位角を回した放射方向
-                _pool.Get().Launch(dir, startRadius, 0f, _config.EndRadius, _heightAt, _pool.Release, TryKill);
+                // 雪崩の発生位置の真上に 1 個生成し、外向き（XZ の中心→検知点）へ粒子を流す。
+                _pool.Get().Spawn(p, _heightAt, _config.EndRadius, TryKill, _pool.Release);
             }
         }
 

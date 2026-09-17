@@ -1,0 +1,32 @@
+[project]
+name = "lidar-tracker1p3"
+version = "0.1.0"
+description = "Kakigori TD: T-mini Plus x2（単体）+ RPLIDAR S1 x4（2ペアの交点法）を束ねた検知（lidar-tracker / lidar-tracker3 の継ぎ接ぎ）"
+readme = "README.md"
+# config.py が tomllib を使うため 3.11+ が必須。兄弟ツールと揃えて 3.14。
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
+    "pyserial>=3.5",
+    "ydlidar",
+]
+
+# T-mini Plus 用の公式 SDK バインディング。PyPI には無く、SWIG + CMake でビルドする。
+# tools/lidar-tracker が ./setup-sdk.sh で vendor/ に clone しパッチ済みのものを、
+# ここでも path 依存として再利用する（clone・パッチ済みの同じソースを、この
+# プロジェクト自身の .venv 用にもう一度ビルドするだけ。git 再 clone は発生しない）。
+# tools/lidar-tracker3 の S1 ドライバは pyserial のみなのでネイティブビルドは無い。
+[tool.uv.sources]
+ydlidar = { path = "../lidar-tracker/vendor/YDLidar-SDK" }
+
+# SDK の CMakeLists が CMake 4 で削除された古いポリシーに依存しているため、
+# ビルド時だけ CMake 3 系を使わせる（tools/lidar-tracker と同じ理由）。
+[tool.uv.extra-build-dependencies]
+ydlidar = ["cmake<4"]
+
+# macOS 専用ガード（_DARWIN）。tools/lidar-tracker と同じ理由・同じ値。
+# Linux では立ててはいけない（net/if.h と linux/if.h が衝突する）ので、
+# macOS 以外ではこの行ごと削ること。
+[tool.uv.extra-build-variables]
+ydlidar = { CXXFLAGS = "-D_DARWIN" }

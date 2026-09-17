@@ -120,4 +120,4 @@ InitTestScene*.unity*
 .DS_Store
 
 # LiDAR env memo: keep the note, not the machine-specific config copy
-/tools/環境構築について/config.toml
+# /tools/環境構築について/config.toml 実環境を共有するため

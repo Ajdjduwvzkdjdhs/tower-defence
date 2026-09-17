@@ -53,6 +53,9 @@ namespace KakigoriTD.Data
         [SerializeField] private int _maxEnemies = 48;
         [Tooltip("方位スポーンの角度刻み[deg]。360をこの値で割った位置にのみ湧く（例: 15なら24方向）。")]
         [SerializeField] private float _spawnAngleStepDeg = 15f;
+        [Tooltip("敵を砦向きに置くときの前傾角[deg]。ゲーム用カメラがほぼ真上（プロジェクタ）なので、"
+               + "直立だと頭しか見えず種類が見分けられない。0 で直立。")]
+        [SerializeField] private float _enemyTiltDeg = 30f;
 
         [Header("敵の隊列（同じ方位に並ぶときの前後）")]
         [Tooltip("同じ方位に並ぶ敵の前後間隔。0 だと重なって見えるので、敵の見た目の幅より大きく取る。"
@@ -103,6 +106,7 @@ namespace KakigoriTD.Data
         public float EntranceSpeed => _entranceSpeed;
         public int MaxEnemies => _maxEnemies;
         public float SpawnAngleStepDeg => _spawnAngleStepDeg;
+        public float EnemyTiltDeg => _enemyTiltDeg;
         public float QueueSpacing => _queueSpacing;
         public int QueueMaxDepth => _queueMaxDepth;
         public float QueueAdvanceSpeed => _queueAdvanceSpeed;

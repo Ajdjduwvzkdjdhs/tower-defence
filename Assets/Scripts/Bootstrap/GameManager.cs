@@ -45,9 +45,20 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private GameObject _bomberPrefab;
         [Tooltip("盾兵のモデル。Assets/Prefabs/EnemyShieldTrooper.prefab。")]
         [SerializeField] private GameObject _shieldPrefab;
+        [Header("演出プレハブ")]
+        [Tooltip("雪崩の見た目（ParticleSystem 付き）。Assets/Prefabs/AvalancheSnow 系。未割り当てだと雪崩が出ない。")]
+        [SerializeField] private GameObject _snowEffectPrefab;
+        [Header("必殺技「ビーム砲」の演出（発動条件は StageConfigSO のゲージ。未割り当てなら既定値／見た目無しでロジックのみ動作）")]
+        [SerializeField] private SpecialAttackConfigSO _specialAttackConfig;
+        [Tooltip("山頂に出現するビーム砲のモデル。Assets/Prefabs/BeamCannon.prefab。")]
+        [SerializeField] private GameObject _beamCannonPrefab;
+        [Tooltip("衝撃波（ExplosionTelegraph の色違い）。Assets/Prefabs/SpecialAttackShockwave.prefab。")]
+        [SerializeField] private GameObject _specialAttackShockwavePrefab;
         [Header("展示用設定")]
-        [Tooltip("決着してからリザルト系シーンへ移るまでの秒数（クリア→ResultScene / 失敗→GameOverScene）。")]
+        [Tooltip("クリアしてから ResultScene へ移るまでの秒数（観客にリザルトを見せる間）。")]
         [SerializeField] private float _resultLimit = 3f;
+        [Tooltip("砦 HP 0 になってから GameOverScene へ移るまでの秒数。")]
+        [SerializeField] private float _gameOverLimit = 1f;
         private Fort _fort;
         private ProjectileFactory _projectileFactory;
         private EnemyField _field;
@@ -56,7 +67,7 @@ namespace KakigoriTD.Bootstrap
         private KillProgress _progress;
         private ComboTracker _combo;
         private SpecialGauge _gauge;
-        private BeamCannon _beam;
+        private SpecialAttackController _beam;
         private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
         private LidarPositionInputSource _lidarPosSource; // ロスト警告用に保持（LiDAR/マウスOR合成でも常時生成）
         private LidarAvalancheVfx _lidarVfx;
@@ -70,7 +81,7 @@ namespace KakigoriTD.Bootstrap
         private float _battleEndTime;   // 決着した瞬間の時刻（リザルト中もタイムを固定して見せる）
         private bool _battleRunning;
 
-        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat, _snowballMat, _ringMat;
+        private Material _fortMat, _enemyMat, _projMat, _snowPuffMat;
         private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
 
         private void Awake()
@@ -82,8 +93,6 @@ namespace KakigoriTD.Bootstrap
             _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _projMat = MakeUnlit(new Color(1.0f, 0.85f, 0.10f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
-            _snowballMat = MakeUnlit(new Color(0.97f, 0.98f, 1.0f)); // 雪玉（斜面を流れる雪崩の粒）
-            _ringMat = MakeUnlitAdditive(new Color(1.0f, 0.18f, 0.10f)); // 爆発リング（プレースホルダ）
             _dissolveMat = MakeDissolve(new Color(0.75f, 1.90f, 2.60f, 1f)); // 発光帯：白〜水色
             _emberMat = MakeEmber(new Color(0.55f, 0.85f, 1.00f, 1f));       // 立ち上る粒
 
@@ -103,8 +112,7 @@ namespace KakigoriTD.Bootstrap
 
             BuildField();
 
-            _beam = NewChild("BeamCannon").AddComponent<BeamCannon>();
-            _beam.Configure(_field);
+            BuildSpecialAttack();
 
             _spawnDirector = NewChild("SpawnDirector").AddComponent<SpawnDirector>();
             _spawnDirector.Configure(_field, _progress);
@@ -207,7 +215,8 @@ namespace KakigoriTD.Bootstrap
             else _audio?.PlayGameOver();
 
             // クリア→ResultScene / 失敗→GameOverScene（ADR-30）。
-            StartCoroutine(ResultSceneTransition(_resultLimit, result.IsWin ? "ResultScene" : "GameOverScene"));
+            if (result.IsWin) StartCoroutine(ResultSceneTransition(_resultLimit, "ResultScene"));
+            else StartCoroutine(ResultSceneTransition(_gameOverLimit, "GameOverScene"));
         }
 
         // 決着からリザルト系シーンへ移るまでの間（展示ではこの数秒で観客に結果を見せる）。
@@ -229,9 +238,21 @@ namespace KakigoriTD.Bootstrap
             _field = NewChild("EnemyField").AddComponent<EnemyField>();
             _field.Configure(_projectileFactory, _fort,
                 CreateEnemy, CreateBomber, CreateShield,
-                CreateSnowPuff, CreateDissolveBurst, CreateExplosionRing,
+                CreateSnowPuff, CreateDissolveBurst,
                 HeightAt, _lidarPreviewConfig);
             _field.ConfigureStage(_stageConfig);
+        }
+
+        // 必殺技「ビーム砲」の演出進行役。発動は UpdateBattleSystems のゲージ判定（ADR-30）で、
+        // ここは「砲が出る → 光線一周 → 衝撃波で全員撃破 → 砲が消える」の見た目を組み立てるだけ。
+        private void BuildSpecialAttack()
+        {
+            if (_specialAttackConfig == null)
+                _specialAttackConfig = ScriptableObject.CreateInstance<SpecialAttackConfigSO>();
+
+            _beam = NewChild("SpecialAttack").AddComponent<SpecialAttackController>();
+            _beam.Configure(_field, _fort.transform, _specialAttackConfig,
+                _beamCannonPrefab, _specialAttackShockwavePrefab);
         }
 
         // LiDAR の連続座標とマウス疑似入力を常時 OR 合成し、検知点 P を中心に放射状の雪玉ストリームを
@@ -253,7 +274,7 @@ namespace KakigoriTD.Bootstrap
             IPositionInputSource posInput = new CompositePositionInputSource(_lidarPosSource, sim);
 
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
-            _lidarVfx.Configure(posInput, _field, HeightAt, CreateSnowball, cfg);
+            _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg);
             _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
 
@@ -367,17 +388,6 @@ namespace KakigoriTD.Bootstrap
             return go.AddComponent<ShieldTrooper>();
         }
 
-        // 爆発のプレースホルダ演出（ADR-30）。正式な VFX は別担当が作るので、差し替えはここと
-        // ExplosionRing.cs の 2 箇所で閉じる。膨らむ発光球（斜面に埋まらず真上からも範囲が分かる）。
-        private ExplosionRing CreateExplosionRing()
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = "ExplosionRing";
-            DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _ringMat;
-            return go.AddComponent<ExplosionRing>();
-        }
-
         private SnowPuff CreateSnowPuff()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -398,13 +408,24 @@ namespace KakigoriTD.Bootstrap
             return burst;
         }
 
-        private Snowball CreateSnowball()
+        // 雪崩の見た目（ParticleSystem 付きプレハブ）。粒子を地形に当てるため衝突モジュールを World にする。
+        private AvalancheSnowEffect CreateAvalancheEffect()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = "Snowball"; go.transform.localScale = Vector3.one * 0.22f;
+            var go = GameObject.Instantiate(_snowEffectPrefab);
+            go.name = "AvalancheSnowEffect";
+
+            // 子に ParticleSystem がある構成も拾う。
+            var ps = go.GetComponent<ParticleSystem>();
+            if (ps == null) ps = go.GetComponentInChildren<ParticleSystem>();
+
+            if (ps != null)
+            {
+                var col = ps.collision;
+                col.enabled = true;
+                col.type = ParticleSystemCollisionType.World;
+            }
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().sharedMaterial = _snowballMat;
-            return go.AddComponent<Snowball>();
+            return go.AddComponent<AvalancheSnowEffect>();
         }
 
         private Projectile CreateProjectile()

@@ -42,6 +42,13 @@ namespace KakigoriTD.Gameplay
         private Renderer _renderer;
         private MaterialPropertyBlock _mpb;
 
+        // 攻撃モーション用（Animator は種別によって無い/Attack トリガーを持たない場合もあるため null 許容）。
+        private const string AttackTrigger = "Attack";
+        private const string WalkBool = "Walk";
+        private Animator _animator;
+        private bool _hasAttackTrigger;
+        private bool _hasWalkBool;
+
         /// <summary>生存しているか（撃破されると false）。</summary>
         public bool IsAlive => _alive;
 
@@ -52,6 +59,20 @@ namespace KakigoriTD.Gameplay
         {
             _renderer = GetComponent<Renderer>();
             _mpb = new MaterialPropertyBlock();
+
+            _animator = GetComponent<Animator>();
+            _hasAttackTrigger = false;
+            _hasWalkBool = false;
+            if (_animator != null)
+            {
+                foreach (var p in _animator.parameters)
+                {
+                    if (p.type == AnimatorControllerParameterType.Trigger && p.name == AttackTrigger)
+                        _hasAttackTrigger = true;
+                    else if (p.type == AnimatorControllerParameterType.Bool && p.name == WalkBool)
+                        _hasWalkBool = true;
+                }
+            }
         }
 
         /// <summary>
@@ -68,6 +89,7 @@ namespace KakigoriTD.Gameplay
             ShotsFired = 0;
             _alive = true;
             _targetPos = transform.position;
+            SetAnimationPlaying(true); // プール再利用時に前回 StopAnimation 済みでも歩行再生を復帰させる
             if (_renderer != null)
             {
                 _mpb.SetColor("_BaseColor", type != null ? type.Tint : Color.red);
@@ -107,16 +129,47 @@ namespace KakigoriTD.Gameplay
             }
         }
 
+        /// <summary>
+        /// Animator の再生/停止を切り替える。攻撃を持たない派生（旧 AllyNPC）が
+        /// 目的地に到着した後、歩行アニメーションをその場で回し続けないようにするために使う。
+        /// </summary>
+        protected void SetAnimationPlaying(bool playing)
+        {
+            if (_animator != null) _animator.enabled = playing;
+        }
+
         protected void MoveTowardTarget()
         {
             if (_advanceSpeed > 0f)
                 transform.position = Vector3.MoveTowards(transform.position, _targetPos, _advanceSpeed * Time.deltaTime);
+
+            // 実際に動いている間だけ Walk=true。停止したら false にして、攻撃モーションの
+            // 再生中に歩行へ自動で戻って割り込む（ExitTime だけに頼ると起きる）ことを防ぐ（ADR-23）。
+            if (_hasWalkBool)
+                _animator.SetBool(WalkBool, !IsInPosition);
         }
 
+        // 停止して砦を狙える状態になったら呼ばれる。攻撃モーションを再生し、
+        // その前振り（EnemyTypeSO.AttackWindup）が終わってから実際に弾を出す（ADR-23の「止まってから攻撃」に準拠）。
         private void Fire()
         {
             if (_factory == null || _type == null || _type.Projectile == null || _target == null) return;
 
+            if (_hasAttackTrigger) _animator.SetTrigger(AttackTrigger);
+
+            float windup = _type.AttackWindup;
+            if (windup > 0f) StartCoroutine(FireAfterWindup(windup));
+            else SpawnProjectile();
+        }
+
+        private System.Collections.IEnumerator FireAfterWindup(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (_alive) SpawnProjectile(); // Kill() で非アクティブ化されるとこのコルーチン自体も止まるが念のため二重に防御
+        }
+
+        private void SpawnProjectile()
+        {
             _factory.Create(_type.Projectile, transform.position, _target.transform.position, _target);
             ShotsFired++;
         }

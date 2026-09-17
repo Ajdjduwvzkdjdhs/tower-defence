@@ -1,3 +1,10 @@
 config.toml						検出範囲そのものの設定
 preview.toml						検出データの加工の設定
 Unity/TH/TH_Stage/GameManager/Lidar Preview Config	検出データの加工（こちらでも設定）と取り扱い設定
+
+--- tools/lidar-tracker1+3（T-mini x2 + S1 x4・交点法）---
+config.toml [[s1.pairs]] baseline_mm		S1 2台の間隔（交点法の基線長）。ペアごとに設定
+config.toml [output] position_file		Unity が読む出力ファイルのパス
+config.toml [circle]				T-mini/S1 共通の関心円（落氷域そのもの）
+config.toml [tmini] / [s1]			向き・検出範囲・intensity閾値（種別ごと）
+詳細は tools/lidar-tracker1+3/README.md の「config.toml（設定の置き場所）」表を参照。

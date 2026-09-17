@@ -15,6 +15,9 @@ namespace KakigoriTD.Data
         [SerializeField] private float _initialFireDelay = 0f;
         [SerializeField] private ProjectileTypeSO _projectile;
 
+        // 攻撃モーション開始から実際に弾が出るまでの前振り時間（秒）。Animator の Attack クリップと合わせて調整する。
+        [SerializeField] private float _attackWindup = 0.4f;
+
         // Phase1 では未使用（define-only）。
         // _isAlly は Phase2（味方NPC）、_isDisguised は Phase3（変装）で挙動が付く。
         [SerializeField] private bool _isAlly = false;
@@ -37,6 +40,9 @@ namespace KakigoriTD.Data
 
         /// <summary>この敵が発射する弾の種別。</summary>
         public ProjectileTypeSO Projectile => _projectile;
+
+        /// <summary>攻撃モーション開始から実際に弾が発射されるまでの前振り時間（秒）。</summary>
+        public float AttackWindup => _attackWindup;
 
         /// <summary>味方NPCかどうか（Phase2 用。Phase1 では未使用）。</summary>
         public bool IsAlly => _isAlly;

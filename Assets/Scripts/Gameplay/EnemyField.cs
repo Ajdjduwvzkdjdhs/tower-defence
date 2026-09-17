@@ -44,10 +44,10 @@ namespace KakigoriTD.Gameplay
         private ObjectPool<ShieldTrooper> _shieldPool;
         private ObjectPool<SnowPuff> _puffPool;
         private ObjectPool<DissolveBurst> _burstPool;
-        private ObjectPool<ExplosionRing> _ringPool;
 
         private float _entranceRadius = 11f;
         private float _restRadius = 8f;
+        private float _enemyTiltDeg = 30f;
         private float _entranceSpeed = 6f;
         private float _overlapRadius = 1.1f;
         private int _maxEnemies = 48;
@@ -89,9 +89,14 @@ namespace KakigoriTD.Gameplay
         public bool IsEmpty => _enemies.Count == 0;
         public bool IsFull => _enemies.Count >= _maxEnemies;
 
+        /// <summary>入場開始の半径（山中心から）。必殺ビーム砲の衝撃波の見た目の半径合わせ用（盤面全員を倒すので入場中も含める）。</summary>
+        public float EntranceRadius => _entranceRadius;
+        /// <summary>敵が歩みを止めて攻撃を始める静止半径（最前列）。演出の半径合わせ用。</summary>
+        public float RestRadius => _restRadius;
+
         public void Configure(ProjectileFactory projectileFactory, Fort fort,
             Func<Enemy> createEnemy, Func<BombTrooper> createBomber, Func<ShieldTrooper> createShield,
-            Func<SnowPuff> createPuff, Func<DissolveBurst> createBurst, Func<ExplosionRing> createRing,
+            Func<SnowPuff> createPuff, Func<DissolveBurst> createBurst,
             Func<float, float, float> heightAt, LidarPreviewConfigSO config)
         {
             _projectileFactory = projectileFactory;
@@ -103,7 +108,6 @@ namespace KakigoriTD.Gameplay
             _shieldPool = new ObjectPool<ShieldTrooper>(createShield);
             _puffPool = new ObjectPool<SnowPuff>(createPuff);
             if (createBurst != null) _burstPool = new ObjectPool<DissolveBurst>(createBurst);
-            if (createRing != null) _ringPool = new ObjectPool<ExplosionRing>(createRing);
 
             if (config != null)
             {
@@ -112,6 +116,7 @@ namespace KakigoriTD.Gameplay
                 _entranceSpeed = config.EntranceSpeed;
                 _maxEnemies = config.MaxEnemies;
                 _spawnAngleStepDeg = config.SpawnAngleStepDeg;
+                _enemyTiltDeg = config.EnemyTiltDeg;
                 _queueSpacing = config.QueueSpacing;
                 _queueMaxDepth = config.QueueMaxDepth;
                 _queueAdvanceSpeed = config.QueueAdvanceSpeed;
@@ -228,7 +233,9 @@ namespace KakigoriTD.Gameplay
         {
             int steps = StepCount;
             var dir = EnemyQueueLayout.Direction(column, steps);
-            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up);
+            // 砦（中心）を向く・cosmetic。さらに前傾させ、真上に近いゲーム用カメラからでも
+            // 敵の見分けが付くようにする（敵プレハブの種類を問わず、ここ1箇所で全敵に効く）。
+            e.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up) * Quaternion.Euler(-_enemyTiltDeg, 0f, 0f);
 
             float rest = EnemyQueueLayout.SlotRadius(slot, _restRadius, _queueSpacing);
             float entrance = Mathf.Max(_entranceRadius, rest + _queueSpacing);
@@ -381,12 +388,15 @@ namespace KakigoriTD.Gameplay
             ExplosionChain.Resolve(_chainX, _chainZ, _chainIsBomber, _chainAlive,
                 originIndex, origin.ExplosionRadius, _chainKilled, _chainDetonated);
 
-            // 爆発演出（プレースホルダ）。撃破で参照が失われる前に位置を使う。
+            // 爆発演出。爆発兵プレハブに付いた ExplosiveDeath（見た目だけ。巻き込みの判定は上の
+            // ExplosionChain で確定済みなので、演出側の撃破コールバックは使わない）。
+            // 撃破で参照が失われる前に、プール返却前のこのタイミングで再生する。
             for (int i = 0; i < _chainDetonated.Count; i++)
             {
                 var d = _enemies[_chainDetonated[i]];
                 if (d == null) continue;
-                _ringPool?.Get().Play(d.transform.position, origin.ExplosionRadius, _ringPool.Release);
+                var vfx = d.GetComponent<ExplosiveDeath>();
+                if (vfx != null) vfx.Explode(origin.ExplosionRadius);
             }
 
             // 巻き込まれた敵の実体をインデックスが有効なうちに控える。

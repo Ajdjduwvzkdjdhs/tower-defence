@@ -50,7 +50,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: bbf18f8ad67874fefa8a188e02b62428, type: 3}
       propertyPath: m_Name
-      value: "TGS_\u5175\u58EB\u9ED2 \u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3"
+      value: "Main_TGS_\u5175\u58EB\u9ED2 \u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3"
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: bbf18f8ad67874fefa8a188e02b62428, type: 3}
+      propertyPath: m_Controller
+      value: 
+      objectReference: {fileID: 9100000, guid: 96821b353f4934e5da4a4e628ed1dadb, type: 2}
+    - target: {fileID: 5866666021909216657, guid: bbf18f8ad67874fefa8a188e02b62428, type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

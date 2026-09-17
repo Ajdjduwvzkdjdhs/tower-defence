@@ -13,10 +13,16 @@ namespace KakigoriTD.Data
         [SerializeField] private float _speed = 6f;
         [SerializeField] private int _damage = 5;
 
+        // 山を越える放物線の頂点の高さ（見た目のみ。山頂より高くして貫通して見えないようにする）。
+        [SerializeField] private float _arcHeight = 4f;
+
         /// <summary>弾の飛翔速度。</summary>
         public float Speed => _speed;
 
         /// <summary>着弾時に砦へ与えるダメージ。</summary>
         public int Damage => _damage;
+
+        /// <summary>放物線軌道の頂点の高さ（発射位置からの相対値）。</summary>
+        public float ArcHeight => _arcHeight;
     }
 }
