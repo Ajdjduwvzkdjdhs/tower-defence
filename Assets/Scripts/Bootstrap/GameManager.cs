@@ -6,9 +6,6 @@ using KakigoriTD.Factory;
 using KakigoriTD.Gameplay;
 using KakigoriTD.Input;
 using KakigoriTD.UI;
-using UnityEngine.SceneManagement;
-using System.Collections;
-
 
 namespace KakigoriTD.Bootstrap
 {
@@ -23,8 +20,8 @@ namespace KakigoriTD.Bootstrap
     {
         public static GameManager Instance { get; private set; }
 
-        [Header("ウェーブ（順に Wave1/2/3 の WaveConfigSO を割り当て）")]
-        [SerializeField] private WaveConfigSO[] _waveConfigs;
+        [Header("ステージ設定（未割り当てなら既定値インスタンス）")]
+        [SerializeField] private StageConfigSO _stageConfig;
 
         [Header("LiDAR 位置入力・雪玉放出・敵スポーンの調整値（未割り当てなら既定値インスタンス）")]
         [SerializeField] private LidarPreviewConfigSO _lidarPreviewConfig;
@@ -43,37 +40,48 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private int _fortHpMax = 1000;
         [Tooltip("砦を山頂の斜面高さから上下にずらすオフセット。負の値で少し埋める。")]
         [SerializeField] private float _fortHeightOffset = 0f;
-        [SerializeField] private float _iceTotal = 50f;
-        [SerializeField] private float _waveLull = 5f;
-        [SerializeField] private float _waveIntroDuration = 1.2f;
-        [SerializeField] private int _allyHitPenalty = 50; // Phase2: 味方巻き込みペナルティ（spec §19）
-        [SerializeField] private GameObject _tgsAllyPrefab; // Prefab Variant「TGS_Ally」をInspectorでアサイン
-        [SerializeField] private GameObject _snowEffectPrefab; // 雪崩の雪玉見た目（ParticleSystem付きPrefab）
-        [Header("必殺技「ビーム砲」（未割り当てなら既定値インスタンス／プレハブ無しでもロジックのみ動作）")]
+        [SerializeField] private GameObject _enemyPrefab;
+        [Tooltip("爆発兵のモデル。Assets/Prefabs/EnemyBombTrooper.prefab。")]
+        [SerializeField] private GameObject _bomberPrefab;
+        [Tooltip("盾兵のモデル。Assets/Prefabs/EnemyShieldTrooper.prefab。")]
+        [SerializeField] private GameObject _shieldPrefab;
+        [Header("演出プレハブ")]
+        [Tooltip("雪崩の見た目（ParticleSystem 付き）。Assets/Prefabs/AvalancheSnow 系。未割り当てだと雪崩が出ない。")]
+        [SerializeField] private GameObject _snowEffectPrefab;
+        [Header("必殺技「ビーム砲」の演出（発動条件は StageConfigSO のゲージ。未割り当てなら既定値／見た目無しでロジックのみ動作）")]
         [SerializeField] private SpecialAttackConfigSO _specialAttackConfig;
+        [Tooltip("山頂に出現するビーム砲のモデル。Assets/Prefabs/BeamCannon.prefab。")]
         [SerializeField] private GameObject _beamCannonPrefab;
+        [Tooltip("衝撃波（ExplosionTelegraph の色違い）。Assets/Prefabs/SpecialAttackShockwave.prefab。")]
         [SerializeField] private GameObject _specialAttackShockwavePrefab;
         [Header("展示用設定")]
-        [SerializeField] private float _resultLimit = 3f;// WINしてからリザルト画面に移動する時間
+        [Tooltip("クリアしてから ResultScene へ移るまでの秒数（観客にリザルトを見せる間）。")]
+        [SerializeField] private float _resultLimit = 3f;
+        [Tooltip("砦 HP 0 になってから GameOverScene へ移るまでの秒数。")]
+        [SerializeField] private float _gameOverLimit = 1f;
         private Fort _fort;
-        private SpecialAttackController _specialAttack;
-        private PenaltyTally _penalty; // Phase2(Unit P8)で OnAllyCaught 購読と合わせて配線
         private ProjectileFactory _projectileFactory;
         private EnemyField _field;
-        private IceStock _ice;
+
+        // ADR-30: 単一ステージの集計（撃破数の進捗・コンボ・必殺ゲージ）。
+        private KillProgress _progress;
+        private ComboTracker _combo;
+        private SpecialGauge _gauge;
+        private SpecialAttackController _beam;
         private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
         private LidarPositionInputSource _lidarPosSource; // ロスト警告用に保持（LiDAR/マウスOR合成でも常時生成）
         private LidarAvalancheVfx _lidarVfx;
-        private WaveManager _waveManager;
+        private SpawnDirector _spawnDirector;
         private UIManager _ui;
         private GameStateMachine _machine;
         private AudioService _audio;             // BGM/SE アダプタ（Phase 6 / ADR-26）
         private int _prevFortHp;                 // Hit 音の判定用（減少 かつ >0 のときだけ鳴らす）
 
-        private int _currentWaveIndex;
-        private float _waveStartTime;
+        private float _battleStartTime;
+        private float _battleEndTime;   // 決着した瞬間の時刻（リザルト中もタイムを固定して見せる）
+        private bool _battleRunning;
 
-        private Material _fortMat, _snowPuffMat;
+        private Material _fortMat, _enemyMat, _snowPuffMat;
         private Material _dissolveMat, _emberMat; // 撃破時の蒸発演出（ADR-20 の cosmetic 系）
 
         private void Awake()
@@ -82,6 +90,7 @@ namespace KakigoriTD.Bootstrap
             Instance = this;
 
             _fortMat = MakeUnlit(new Color(0.92f, 0.95f, 1.0f));
+            _enemyMat = MakeUnlit(new Color(0.90f, 0.15f, 0.15f));
             _snowPuffMat = MakeUnlitAdditive(Color.white);
             _dissolveMat = MakeDissolve(new Color(0.75f, 1.90f, 2.60f, 1f)); // 発光帯：白〜水色
             _emberMat = MakeEmber(new Color(0.55f, 0.85f, 1.00f, 1f));       // 立ち上る粒
@@ -89,21 +98,26 @@ namespace KakigoriTD.Bootstrap
             // 山は Terrain（シーン配置・ADR-21）。手続き Quad は廃止。
             BuildFort();
             _projectileFactory = new ProjectileFactory(CreateProjectile, prewarm: 8);
-            _penalty = new PenaltyTally();
 
-            _ice = new IceStock(_iceTotal);
+            // ステージ設定は未割り当てでも既定値インスタンスで動かす（現場で asset を作って調整）。
+            if (_stageConfig == null) _stageConfig = ScriptableObject.CreateInstance<StageConfigSO>();
 
-            // 決定キー（Title/Result の Enter）専用。谷選択・削りは位置入力＋LidarAvalancheVfx が担う。
+            _progress = new KillProgress(_stageConfig.TargetKillCount);
+            _combo = new ComboTracker(_stageConfig.ComboWindowSec);
+            _gauge = new SpecialGauge(_stageConfig.GaugeMax, _stageConfig.GaugePerKill, _stageConfig.GaugeComboBonus);
+
+            // 決定キー（Title/Result の Enter）専用。削りは位置入力＋LidarAvalancheVfx が担う。
             _input = NewChild("InputSource").AddComponent<KeyboardInputSource>();
 
             BuildField();
+
             BuildSpecialAttack();
 
-            _waveManager = NewChild("WaveManager").AddComponent<WaveManager>();
-            _waveManager.Configure(_field);
+            _spawnDirector = NewChild("SpawnDirector").AddComponent<SpawnDirector>();
+            _spawnDirector.Configure(_field, _progress);
 
             _ui = NewChild("UIManager").AddComponent<UIManager>();
-            _ui.Configure(_fort, _ice);
+            _ui.Configure(_fort);
 
             // オーディオは購読対象（Fort/Factory/EnemyField）が揃った後に配線（ADR-26）。
             BuildAudio();
@@ -123,11 +137,27 @@ namespace KakigoriTD.Bootstrap
             bool IsClearKey = UnityEngine.InputSystem.Keyboard.current.leftShiftKey.wasPressedThisFrame;
             bool IsGameOverKey = UnityEngine.InputSystem.Keyboard.current.rightShiftKey.wasPressedThisFrame;
 
-            if (IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
-            else if (IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
+            if(IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+            else if(IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
 
+            UpdateBattleSystems();
             UpdateStatusUI();
             UpdateTrackerWarning();
+        }
+
+        // コンボの時間切れ判定と、ゲージ MAX での必殺ビーム自動発動（ADR-30）。
+        // 展示にはプレイヤーが押せるボタンが無いため、発動は入力ではなくゲージが担う。
+        private void UpdateBattleSystems()
+        {
+            if (!_battleRunning) return;
+
+            _combo.Tick(Time.time);
+
+            if (_gauge.IsFull && !_beam.IsPlaying)
+            {
+                _gauge.Consume();
+                _beam.Fire();
+            }
         }
 
         // LiDAR の seq が停滞＝ロスト（Python 停止/ハング）のとき、状態Y の警告を UI に出す。
@@ -141,72 +171,58 @@ namespace KakigoriTD.Bootstrap
 
         // ---- IGameContext ----------------------------------------------------
 
-        public int WaveCount => _waveConfigs != null ? _waveConfigs.Length : 0;
-        public float GetWaveDuration(int waveIndex) =>
-            (_waveConfigs != null && waveIndex >= 0 && waveIndex < _waveConfigs.Length) ? _waveConfigs[waveIndex].Duration : 0f;
-        public float WaveLullDuration => _waveLull;
-        public float WaveIntroDuration => _waveIntroDuration;
+        public int TargetKillCount => _progress.Target;
+        public int KillCount => _progress.Count;
+        public int MaxCombo => _combo.MaxCount;
+        public float ElapsedSec => _battleRunning ? Time.time - _battleStartTime : _battleEndTime - _battleStartTime;
         public bool IsFortDestroyed => _fort.IsDestroyed;
-        public int FortHp => _fort.CurrentHp;
-        public int PenaltyTotal => _penalty?.Total ?? 0; // Phase2(Unit P8)で _penalty を生成・配線
         public bool IsStartRequested => _input.ConfirmPressed;
         public bool IsRetryRequested => _input.ConfirmPressed;
 
-        public void BeginWave(int waveIndex)
+        /// <summary>戦闘開始（初回 / リトライ）。砦HP・進捗・コンボ・ゲージ・残敵をリセットする。</summary>
+        public void BeginBattle()
         {
-            // wave 0 開始 = 新規プレイ（初回 / リトライ）。砦HP・氷・ペナルティ・残敵をリセットする。
-            if (waveIndex == 0)
-            {
-                _fort.Initialize(_fortHpMax);
-                _ice.Refill();
-                _penalty.Reset();
-                _field.ClearAll();
-                _ui.ClearResult();
-            }
-            _currentWaveIndex = waveIndex;
-            _waveStartTime = Time.time;
-            _waveManager.StartWave(_waveConfigs[waveIndex]);
+            _fort.Initialize(_fortHpMax);
+            _progress.Reset();
+            _combo.Reset();
+            _gauge.Reset();
+            _field.ClearAll();
+            _field.ConfigureStage(_stageConfig);
+            _ui.ClearResult();
+
+            _battleStartTime = Time.time;
+            _battleEndTime = _battleStartTime;
+            _battleRunning = true;
+            _spawnDirector.StartBattle(_stageConfig);
         }
 
         public void ClearRemainingEnemies()
         {
-            _waveManager.StopWave();
+            _battleEndTime = Time.time;
+            _battleRunning = false;
+            _spawnDirector.Stop();
             _field.ClearAll();
         }
 
-        public void ShowResult(bool isWin, int score)
+        public void ShowResult(StageResult result)
         {
-            _ui.ShowResult(isWin, score, _penalty?.Total ?? 0);
+            _ui.ShowResult(result);
+            GameResultHolder.Last = result; // 次のシーン（Result / GameOver）へ受け渡す
+
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
-            if (isWin)
-            {
-                _audio?.PlayClear();
-                // WINの際には3秒後にシーン遷移
-                StartCoroutine(ResultSceneTransition(_resultLimit));
-            }
-            else
-            {
-                _audio?.PlayGameOver();
-                StartCoroutine(FadeAndLoadScene());
-            }
-            ;
+            if (result.IsWin) _audio?.PlayClear();
+            else _audio?.PlayGameOver();
+
+            // クリア→ResultScene / 失敗→GameOverScene（ADR-30）。
+            if (result.IsWin) StartCoroutine(ResultSceneTransition(_resultLimit, "ResultScene"));
+            else StartCoroutine(ResultSceneTransition(_gameOverLimit, "GameOverScene"));
         }
 
-        private IEnumerator FadeAndLoadScene()
-        {
-
-            yield return new WaitForSeconds(1.0f);
-            // シーン切り替え
-            SceneManager.LoadScene("GameOverScene");
-            yield break;
-        }
-        // リザルトシーンに転送する用です。展示に向けて急遽作成。
-        private System.Collections.IEnumerator ResultSceneTransition(float delaySeconds)
+        // 決着からリザルト系シーンへ移るまでの間（展示ではこの数秒で観客に結果を見せる）。
+        private System.Collections.IEnumerator ResultSceneTransition(float delaySeconds, string sceneName)
         {
             yield return new WaitForSeconds(delaySeconds);
-
-            // シーン遷移処理
-            UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+            UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
         }
 
         // ---- build helpers ---------------------------------------------------
@@ -220,19 +236,21 @@ namespace KakigoriTD.Bootstrap
 
             _field = NewChild("EnemyField").AddComponent<EnemyField>();
             _field.Configure(_projectileFactory, _fort,
-                CreateEnemy, CreateAlly, CreateDisguised, CreateSnowPuff, CreateDissolveBurst,
+                CreateEnemy, CreateBomber, CreateShield,
+                CreateSnowPuff, CreateDissolveBurst,
                 HeightAt, _lidarPreviewConfig);
-            _field.OnAllyCaught += OnAllyCaughtHandler;
+            _field.ConfigureStage(_stageConfig);
         }
 
-        // 必殺技「ビーム砲」。敵を一定数倒すとチャージ完了→自動発動（SpecialAttackController に一任）。
+        // 必殺技「ビーム砲」の演出進行役。発動は UpdateBattleSystems のゲージ判定（ADR-30）で、
+        // ここは「砲が出る → 光線一周 → 衝撃波で全員撃破 → 砲が消える」の見た目を組み立てるだけ。
         private void BuildSpecialAttack()
         {
             if (_specialAttackConfig == null)
                 _specialAttackConfig = ScriptableObject.CreateInstance<SpecialAttackConfigSO>();
 
-            _specialAttack = NewChild("SpecialAttack").AddComponent<SpecialAttackController>();
-            _specialAttack.Configure(_field, _fort.transform, _specialAttackConfig,
+            _beam = NewChild("SpecialAttack").AddComponent<SpecialAttackController>();
+            _beam.Configure(_field, _fort.transform, _specialAttackConfig,
                 _beamCannonPrefab, _specialAttackShockwavePrefab);
         }
 
@@ -255,8 +273,7 @@ namespace KakigoriTD.Bootstrap
             IPositionInputSource posInput = new CompositePositionInputSource(_lidarPosSource, sim);
 
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
-            _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg,
-                cfg.ConsumeIce ? _ice : null);
+            _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg);
             _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
         }
 
@@ -294,12 +311,6 @@ namespace KakigoriTD.Bootstrap
             _fort.Initialize(_fortHpMax);
         }
 
-        private void OnAllyCaughtHandler()
-        {
-            _penalty.Add(_allyHitPenalty);
-            _audio?.PlayAllyCaught(); // 3d-t に該当音なし＝既定 null で無音（ADR-26）
-        }
-
         // サウンド配線（Phase 6 / ADR-26）。薄い AudioService を子生成し、BGM 開始＋additive イベント購読。
         // 追加は cosmetic な購読のみで既存ロジックの分岐・数値・順序は不変。_audioConfig 未割り当てでも無音で安全。
         private void BuildAudio()
@@ -311,14 +322,29 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = _fort.CurrentHp;
 
             _projectileFactory.OnCreated += OnProjectileCreatedForAudio;     // EnemyAttack（毎発）
-            _field.OnEnemyKilled += OnEnemyKilledForAudio;                   // Monster（撃破1体ごと）
+            _field.OnEnemyKilled += OnEnemyKilled;                           // 撃破の集計＋Monster 音
             _fort.OnHpChanged += OnFortHpChangedForAudio;                    // Hit（減少 かつ >0）
             // 雪崩ループ音（OnAvalancheChanged）は BuildLidarPath で _lidarVfx に配線する。
         }
 
         private void OnProjectileCreatedForAudio() => _audio.PlayEnemyAttack();
-        private void OnEnemyKilledForAudio() => _audio.PlayEnemyKilled();
         private void OnAvalancheChangedForAudio(bool on) => _audio.SetAvalanche(on);
+
+        /// <summary>
+        /// 敵を 1 体撃破したときの集計（ADR-30）。出どころで扱いを分ける:
+        ///  ・雪玉／爆発 … 撃破数・コンボ・ゲージすべてに算入（連鎖 20 体ならコンボも +20）
+        ///  ・ビーム … 撃破数のみ算入。ゲージには入れず（自己充填ループの防止）、コンボは中立
+        /// </summary>
+        private void OnEnemyKilled(KillSource source)
+        {
+            _audio?.PlayEnemyKilled();
+            _progress.Add();
+
+            if (source == KillSource.Beam) return;
+
+            _combo.AddKill(Time.time);
+            _gauge.AddKill(_combo.Count);
+        }
 
         // 砦被弾＝HP が「減少 かつ 新HP>0」のときのみ Hit（Initialize の満タン通知・0到達=GameOver を除外）。
         private void OnFortHpChangedForAudio(int cur, int max)
@@ -327,32 +353,38 @@ namespace KakigoriTD.Bootstrap
             _prevFortHp = cur;
         }
 
-        // prefab は EnemyTypeSO.Prefab（SOごと）で渡される。SO 未設定（null）の弾き出しは
-        // EnemyField.SpawnEnemy が先行して行うため、ここでは無条件で Instantiate する。
-        private Enemy CreateEnemy(EnemyTypeSO type)
+        // private Enemy CreateEnemy()
+        // {
+        //     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        //     go.name = "Enemy"; go.transform.localScale = Vector3.one * 0.5f;
+        //     DestroyCollider(go);
+        //     go.GetComponent<MeshRenderer>().sharedMaterial = _enemyMat;
+        //     return go.AddComponent<Enemy>();
+        // }
+        private Enemy CreateEnemy()
         {
-            var go = GameObject.Instantiate(type.Prefab);
+            var go = GameObject.Instantiate(_enemyPrefab);
             go.name = "Enemy";
             DestroyCollider(go);
             return go.AddComponent<Enemy>();
         }
 
-        private AllyNPC CreateAlly()
+        // 爆発兵（ADR-30）。専用モデル EnemyBombTrooper.prefab。未割り当てなら通常敵の見た目で代替する。
+        private BombTrooper CreateBomber()
         {
-            var go = GameObject.Instantiate(_tgsAllyPrefab);
-            go.name = "Ally";
+            var go = GameObject.Instantiate(_bomberPrefab != null ? _bomberPrefab : _enemyPrefab);
+            go.name = "BombTrooper";
             DestroyCollider(go);
-            return go.AddComponent<AllyNPC>();
+            return go.AddComponent<BombTrooper>();
         }
 
-        // 変装敵: 味方(TGS_Ally)と同じ prefab で見た目を揃えて擬態する。tell マーカーは
-        // DisguisedEnemy.OnInitialized で追加する（同色でも判別できるように）。
-        private DisguisedEnemy CreateDisguised()
+        // 盾兵（ADR-30）。専用モデル EnemyShieldTrooper.prefab。未割り当てなら通常敵の見た目で代替する。
+        private ShieldTrooper CreateShield()
         {
-            var go = GameObject.Instantiate(_tgsAllyPrefab);
-            go.name = "DisguisedEnemy";
+            var go = GameObject.Instantiate(_shieldPrefab != null ? _shieldPrefab : _enemyPrefab);
+            go.name = "ShieldTrooper";
             DestroyCollider(go);
-            return go.AddComponent<DisguisedEnemy>();
+            return go.AddComponent<ShieldTrooper>();
         }
 
         private SnowPuff CreateSnowPuff()
@@ -375,24 +407,22 @@ namespace KakigoriTD.Bootstrap
             return burst;
         }
 
+        // 雪崩の見た目（ParticleSystem 付きプレハブ）。粒子を地形に当てるため衝突モジュールを World にする。
         private AvalancheSnowEffect CreateAvalancheEffect()
         {
             var go = GameObject.Instantiate(_snowEffectPrefab);
             go.name = "AvalancheSnowEffect";
 
-            // 2) ParticleSystemコンポーネントを取得
-            //    子にPSがある場合も拾えるようにGetComponentInChildrenを使う
+            // 子に ParticleSystem がある構成も拾う。
             var ps = go.GetComponent<ParticleSystem>();
-            if (ps == null)
-            {
-                // 子オブジェクトにParticleSystemを探す
-                ps = go.GetComponentInChildren<ParticleSystem>();
-            }
+            if (ps == null) ps = go.GetComponentInChildren<ParticleSystem>();
 
-            // 3) 衝突モジュールを有効化し、ワールドモードに設定
-            var col = ps.collision;
-            col.enabled = true;                                 // 衝突モジュールを有効化
-            col.type = ParticleSystemCollisionType.World;       // 衝突タイプをWorldに
+            if (ps != null)
+            {
+                var col = ps.collision;
+                col.enabled = true;
+                col.type = ParticleSystemCollisionType.World;
+            }
             DestroyCollider(go);
             return go.AddComponent<AvalancheSnowEffect>();
         }
@@ -402,50 +432,33 @@ namespace KakigoriTD.Bootstrap
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Projectile"; go.transform.localScale = Vector3.one * 0.35f;
             DestroyCollider(go);
-            go.GetComponent<MeshRenderer>().enabled = false; // 見た目を非表示（ロジックのみ）
+            // 敵に攻撃モーション（ADR-23）が付いたので弾は見せない（ロジックのみ）。被弾は砦 HP バーと Hit 音で伝える。
+            go.GetComponent<MeshRenderer>().enabled = false;
             return go.AddComponent<Projectile>();
         }
 
         private void UpdateStatusUI()
         {
-            if (_specialAttack != null)
-                _ui.SetSpecialGauge(_specialAttack.KillsSinceCharge, _specialAttack.Threshold, _specialAttack.IsCharged);
-
             var cur = _machine.Current;
             if (cur is TitleState)
             {
                 _ui.ClearResult();
                 _ui.ClearBanner();
                 _ui.SetStatus("かき氷タワーディフェンス — [Enter] で開始");
+                _ui.SetBattleStats(0, _progress.Target, 0, 0f, 0f);
             }
-            else if (cur is WaveIntroState intro)
-            {
-                _ui.SetBanner($"Wave {intro.WaveIndex + 1}  ―  {GetWaveDisplayName(intro.WaveIndex)}");
-                _ui.SetStatus("");
-            }
-            else if (cur is WavePlayingState)
+            else if (cur is BattleState)
             {
                 _ui.ClearBanner();
-                float remaining = Mathf.Max(0f, GetWaveDuration(_currentWaveIndex) - (Time.time - _waveStartTime));
-                _ui.SetStatus($"Wave {_currentWaveIndex + 1}/{WaveCount}   残り {remaining:F0}s   — W/A/S/D 谷選択 / Space 削り");
-            }
-            else if (cur is WaveLullState lull)
-            {
-                _ui.SetBanner($"Wave {lull.WaveIndex + 1}  クリア");
-                _ui.SetStatus("");
+                _ui.SetStatus($"経過 {StageResult.FormatTime(ElapsedSec)}");
+                _ui.SetBattleStats(_progress.Count, _progress.Target, _combo.Count,
+                    _gauge.Normalized, ElapsedSec);
             }
             else if (cur is ResultState)
             {
                 _ui.ClearBanner();
                 _ui.SetStatus("");
             }
-        }
-
-        private string GetWaveDisplayName(int i)
-        {
-            if (_waveConfigs == null || i < 0 || i >= _waveConfigs.Length) return "";
-            var name = _waveConfigs[i].DisplayName;
-            return string.IsNullOrEmpty(name) ? "" : name;
         }
 
         private GameObject NewChild(string name)
@@ -546,11 +559,7 @@ namespace KakigoriTD.Bootstrap
             if (Instance == this) Instance = null;
 
             // 購読解除（ADR-3）。EnemyField / Factory / Fort / LidarVfx。
-            if (_field != null)
-            {
-                _field.OnAllyCaught -= OnAllyCaughtHandler;
-                _field.OnEnemyKilled -= OnEnemyKilledForAudio;
-            }
+            if (_field != null) _field.OnEnemyKilled -= OnEnemyKilled;
             if (_projectileFactory != null) _projectileFactory.OnCreated -= OnProjectileCreatedForAudio;
             if (_lidarVfx != null) _lidarVfx.OnAvalancheChanged -= OnAvalancheChangedForAudio;
             if (_fort != null) _fort.OnHpChanged -= OnFortHpChangedForAudio;

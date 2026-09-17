@@ -415,6 +415,54 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
+## Phase 8 — ゲーム性刷新（単一ステージの「目標撃破数レース」）　【🟡 実装済み／Editor で EditMode 192 本緑・Play 検証は連鎖・ビーム・雪崩・敗北遷移まで（ADR-31）】
+
+3Wave 制のジレンマ型から、**大勢の敵を倒す爽快感**を主役にしたゲーム性へ差し替える（ADR-30）。
+設計判断の根拠は `docs/architecture.md` ADR-30 を正とする。
+
+### ゴール
+
+- Wave の区切りを廃し、単一ステージで「目標撃破数（既定100体）を倒しきる」レースにする
+- 爆発兵の**無制限連鎖**で盤面が一気に吹き飛ぶ瞬間を作る
+- 盾兵が「爆発を使った方が早い」ことを学習させる
+- コンボと必殺ビーム砲（ゲージMAXで自動発動）で、上手いほど気持ちよくなる往復を作る
+
+### 変更の内訳
+
+| 領域 | 内容 |
+|------|------|
+| 進行 | `WaveIntro`/`WavePlaying`/`WaveLull` → `BattleState` 1 本。`WaveConfigSO`×3 → `StageConfigSO` 1 本 |
+| 終了条件 | クリア＝`TargetKillCount` 体撃破 ／ 敗北＝砦HP 0（同フレームなら敗北優先） |
+| スコア | `Scoring` → `StageResult`。クリア＝クリアタイム ／ 失敗＝到達撃破数。砦HP は生存リソースに純化 |
+| 新しい敵 | `BombTrooper`（爆発・誘爆連鎖）／ `ShieldTrooper`（雪玉N発・爆発なら一撃） |
+| 新しい集計 | `KillProgress` / `ComboTracker` / `SpecialGauge` / `KillSource` / `ExplosionChain`（すべて Core・UnityEngine 非依存） |
+| 必殺技 | `SpecialAttackController`（旧 `BeamCannon`）。ゲージMAXで自動発動 → 砲出現→光線一周→衝撃波の瞬間に全方位一掃（ADR-31）。撃破数には算入、ゲージには非算入、コンボは中立 |
+| 難易度 | 撃破数の進捗に対する爆発兵率・盾兵率のカーブのみ。湧きレートは固定 |
+| 削除 | `EnemyMatrix` / `IceStock` / `PenaltyTally` / `Scoring` / `AllyNPC` / `DisguisedEnemy` / `WaveConfigSO` と対応テスト |
+| シーン | 結果を `GameResultHolder` で受け渡し、クリア→`ResultScene` / 失敗→`GameOverScene` |
+
+### 受け入れ基準
+
+- [x] Core 純ロジックに EditMode テストがある（`ComboTracker` / `SpecialGauge` / `KillProgress` / `ExplosionChain` / `StageResult` / `SpawnSelector` / `States`）
+- [x] Core / Runtime / Tests の 3 アセンブリが型エラーなくコンパイルされる
+- [ ] Unity Editor で EditMode 全件が緑（`unity command run_tests --mode editor`）
+- [ ] `StageConfig.asset` / `BombTrooper.asset` / `ShieldTrooper.asset` を作成し `TH_Stage.prefab` に割り当て済み
+- [ ] `GameOverScene.unity` に `GameOverScene.cs` が載っている
+- [ ] Play 検証: 爆発兵を倒すと赤い円が広がり周囲が消える／連鎖が伝播する
+- [x] Play 検証: 盾兵は雪玉 N 発（既定20）で倒れ、爆発に巻き込むと一撃で倒れる
+- [ ] Play 検証: コンボが連鎖で跳ね上がり、2秒放置で 0 に戻る
+- [ ] Play 検証: ゲージMAXで自動的にビームが出て盤面が一掃され、**その撃破ではゲージが再充填されない**
+- [ ] Play 検証: `TargetKillCount` 到達 → `ResultScene`（クリアタイム表示）／砦HP 0 → `GameOverScene`（到達撃破数表示）
+- [ ] ゲージ係数の現物合わせ（1ゲーム中に約2回MAX）
+
+### 未整備
+
+- [x] 爆発・ビームの正式 VFX（2026-09-17 `main` の `ExplosionTelegraph` / `BeamCannon.prefab`＋`BeamSweepVfx`＋衝撃波 / `AvalancheSnowEffect` を接続。ADR-31）
+- [ ] 盾兵の残り耐久表示（現状は per-instance MPB で暗くするだけ。ヒビ・欠け等への差し替え）
+- [ ] クリアタイムのランキング保存（現状は 1 プレイ分を表示するのみ）
+
+---
+
 ## 既知の TBD（フェーズ進行中に確定）
 
 - 味方/敵/変装の**形**のデザイン → 3Dモデル化で概ね確定（Phase 7）。変装の tell（見た目差）の具体は未確定

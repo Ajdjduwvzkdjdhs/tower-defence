@@ -53,8 +53,12 @@ namespace KakigoriTD.Gameplay
         private Phase _phase;
         private float _t;
 
-        private Camera _cam;
-        private Vector3 _camBasePos;
+        // カメラシェイクは複数の爆発（誘爆の連鎖・衝撃波との重なり）が同時に走るため、
+        // 基準位置を static で共有し、最後の 1 つが終わったときだけ戻す。個別に基準を控えると
+        // 後から始まった方が「揺れた途中の位置」を基準にしてしまい、戻り先がズレていく。
+        private static Camera s_cam;
+        private static Vector3 s_camBasePos;
+        private static int s_shakers;
         private bool _shaking;
 
         private System.Action<Vector3, float> _onExplode;
@@ -90,6 +94,25 @@ namespace KakigoriTD.Gameplay
             _phase = Phase.Explode;
             _t = 0f;
             StartExplode();
+        }
+
+        /// <summary>
+        /// <see cref="PlayImmediate(System.Action{Vector3, float})"/> の半径指定版。プレハブに焼き込んだ
+        /// <see cref="_radius"/> ではなく、ロジック側が決めた半径（StageConfigSO / 敵の配置半径）で描く。
+        /// 「見えている範囲＝効く範囲」を保つための口で、呼び出し元がリフレクションで書き換えなくて済むようにする。
+        /// </summary>
+        public void PlayImmediate(float radius, System.Action<Vector3, float> onExplode)
+        {
+            SetRadius(radius);
+            PlayImmediate(onExplode);
+        }
+
+        // 半径を差し替える。Awake で半径から決めた円柱スケールと閃光の到達距離も追従させる。
+        private void SetRadius(float radius)
+        {
+            _radius = Mathf.Max(0.01f, radius);
+            if (_warningDisc != null) _warningDisc.localScale = new Vector3(_radius, _cylinderHeight, _radius);
+            if (_flashLight != null) _flashLight.range = Mathf.Max(1f, _radius * 4f);
         }
 
         private void Update()
@@ -146,34 +169,51 @@ namespace KakigoriTD.Gameplay
             _burst.Play();
             _onExplode?.Invoke(transform.position, _radius);
 
-            _cam = Camera.main;
-            if (_cam != null)
+            BeginShake();
+        }
+
+        private void BeginShake()
+        {
+            if (_shaking) return;
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (s_shakers == 0 || s_cam != cam)
             {
-                _camBasePos = _cam.transform.localPosition;
-                _shaking = true;
+                s_cam = cam;
+                s_camBasePos = cam.transform.localPosition;
+                s_shakers = 0;
             }
+            s_shakers++;
+            _shaking = true;
+        }
+
+        private void EndShake()
+        {
+            if (!_shaking) return;
+            _shaking = false;
+            s_shakers = Mathf.Max(0, s_shakers - 1);
+            if (s_shakers == 0 && s_cam != null) s_cam.transform.localPosition = s_camBasePos;
         }
 
         private void UpdateCameraShake()
         {
-            if (!_shaking || _cam == null) return;
+            if (!_shaking || s_cam == null) return;
 
             float k = _cameraShakeDuration > 0f ? Mathf.Clamp01(_t / _cameraShakeDuration) : 1f;
             if (k >= 1f)
             {
-                _cam.transform.localPosition = _camBasePos;
-                _shaking = false;
+                EndShake();
                 return;
             }
 
             float magnitude = _cameraShakeMagnitude * (1f - k);
-            _cam.transform.localPosition = _camBasePos + Random.insideUnitSphere * magnitude;
+            s_cam.transform.localPosition = s_camBasePos + Random.insideUnitSphere * magnitude;
         }
 
         private void OnDestroy()
         {
             // 破棄タイミングに関わらずカメラのシェイクによるズレを必ず戻す。
-            if (_shaking && _cam != null) _cam.transform.localPosition = _camBasePos;
+            EndShake();
         }
 
         private Transform BuildCylinder(string name, Color color, float yOffset)

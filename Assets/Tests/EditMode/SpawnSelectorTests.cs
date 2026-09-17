@@ -3,105 +3,60 @@ using KakigoriTD.Core;
 
 namespace KakigoriTD.Tests.EditMode
 {
+    /// <summary>
+    /// 湧き種別の抽選（ADR-30: 通常 / 爆発兵 / 盾兵）。
+    /// 確率帯は連続した区間として扱う（爆発兵 → 盾兵 → 通常）。
+    /// </summary>
     public class SpawnSelectorTests
     {
-        // ---- 変装 -------------------------------------------------------
-
         [Test]
-        public void Select_RollBelowDisguiseChance_ReturnsDisguised()
+        public void Select_RollBelowBomberChance_ReturnsBomber()
         {
-            var result = SpawnSelector.Select(allyChance: 0f, disguiseChance: 0.2f,
-                hasAlly: false, hasDisguise: true, roll: 0.1f);
-            Assert.That(result, Is.EqualTo(SpawnKind.Disguised));
+            var result = SpawnSelector.Select(bomberChance: 0.2f, shieldChance: 0.2f, roll: 0.1f);
+            Assert.That(result, Is.EqualTo(SpawnKind.Bomber));
         }
 
         [Test]
-        public void Select_HasDisguiseFalse_NeverReturnsDisguised()
+        public void Select_RollInShieldBand_ReturnsShield()
         {
-            // disguise 種別が設定されていなければ roll が 0 でも Enemy か Ally
-            var result = SpawnSelector.Select(allyChance: 0f, disguiseChance: 0.9f,
-                hasAlly: false, hasDisguise: false, roll: 0.0f);
-            Assert.That(result, Is.Not.EqualTo(SpawnKind.Disguised));
+            // 爆発兵 [0, 0.2) / 盾兵 [0.2, 0.4) / 通常 [0.4, 1)
+            var result = SpawnSelector.Select(bomberChance: 0.2f, shieldChance: 0.2f, roll: 0.3f);
+            Assert.That(result, Is.EqualTo(SpawnKind.Shield));
         }
 
         [Test]
-        public void Select_DisguiseChanceZero_NeverReturnsDisguised()
+        public void Select_RollAboveBothBands_ReturnsNormal()
         {
-            var result = SpawnSelector.Select(allyChance: 0f, disguiseChance: 0f,
-                hasAlly: false, hasDisguise: true, roll: 0.0f);
-            Assert.That(result, Is.Not.EqualTo(SpawnKind.Disguised));
-        }
-
-        // ---- 味方 -------------------------------------------------------
-
-        [Test]
-        public void Select_RollBelowAllyChance_ReturnsAlly()
-        {
-            // disguise 抽選を外れた roll=0.15、allyChance=0.3 → Ally
-            var result = SpawnSelector.Select(allyChance: 0.3f, disguiseChance: 0.05f,
-                hasAlly: true, hasDisguise: true, roll: 0.15f);
-            Assert.That(result, Is.EqualTo(SpawnKind.Ally));
+            var result = SpawnSelector.Select(bomberChance: 0.2f, shieldChance: 0.2f, roll: 0.95f);
+            Assert.That(result, Is.EqualTo(SpawnKind.Normal));
         }
 
         [Test]
-        public void Select_HasAllyFalse_NeverReturnsAlly()
+        public void Select_BomberChanceZero_NeverReturnsBomber()
         {
-            var result = SpawnSelector.Select(allyChance: 0.9f, disguiseChance: 0f,
-                hasAlly: false, hasDisguise: false, roll: 0.0f);
-            Assert.That(result, Is.Not.EqualTo(SpawnKind.Ally));
+            var result = SpawnSelector.Select(bomberChance: 0f, shieldChance: 0.5f, roll: 0f);
+            Assert.That(result, Is.Not.EqualTo(SpawnKind.Bomber));
         }
 
         [Test]
-        public void Select_AllyChanceZero_NeverReturnsAlly()
+        public void Select_BothChancesZero_AlwaysNormal()
         {
-            var result = SpawnSelector.Select(allyChance: 0f, disguiseChance: 0f,
-                hasAlly: true, hasDisguise: false, roll: 0.0f);
-            Assert.That(result, Is.Not.EqualTo(SpawnKind.Ally));
-        }
-
-        // ---- 敵（フォールスルー）-----------------------------------------
-
-        [Test]
-        public void Select_RollAboveAllChances_ReturnsEnemy()
-        {
-            var result = SpawnSelector.Select(allyChance: 0.2f, disguiseChance: 0.2f,
-                hasAlly: true, hasDisguise: true, roll: 0.9f);
-            Assert.That(result, Is.EqualTo(SpawnKind.Enemy));
+            Assert.That(SpawnSelector.Select(0f, 0f, 0f), Is.EqualTo(SpawnKind.Normal));
+            Assert.That(SpawnSelector.Select(0f, 0f, 0.999f), Is.EqualTo(SpawnKind.Normal));
         }
 
         [Test]
-        public void Select_AllChancesZero_AlwaysReturnsEnemy()
+        public void Select_BandBoundaries_AreHalfOpen()
         {
-            // Wave1/2 回帰: chance=0 同士では常に Enemy
-            for (int i = 0; i <= 10; i++)
-            {
-                float roll = i * 0.1f;
-                var result = SpawnSelector.Select(allyChance: 0f, disguiseChance: 0f,
-                    hasAlly: false, hasDisguise: false, roll: roll);
-                Assert.That(result, Is.EqualTo(SpawnKind.Enemy),
-                    $"roll={roll} should return Enemy");
-            }
-        }
-
-        // ---- 優先順位 ----------------------------------------------------
-
-        [Test]
-        public void Select_RollHitsDisguise_DisguiseTakesPriorityOverAlly()
-        {
-            // roll=0.05 は disguiseChance=0.2 と allyChance=0.2 の両方に入る
-            // → 変装が優先されるべき
-            var result = SpawnSelector.Select(allyChance: 0.2f, disguiseChance: 0.2f,
-                hasAlly: true, hasDisguise: true, roll: 0.05f);
-            Assert.That(result, Is.EqualTo(SpawnKind.Disguised));
+            // 境界値: roll == bomberChance は盾兵側、roll == bomber+shield は通常側。
+            Assert.That(SpawnSelector.Select(0.2f, 0.2f, 0.2f), Is.EqualTo(SpawnKind.Shield));
+            Assert.That(SpawnSelector.Select(0.2f, 0.2f, 0.4f), Is.EqualTo(SpawnKind.Normal));
         }
 
         [Test]
-        public void Select_HasDisguiseFalseRollHitsAllyChance_ReturnsAlly()
+        public void Select_FullBomberChance_AlwaysBomber()
         {
-            // hasDisguise=false で変装スキップ → allyChance 帯なら Ally
-            var result = SpawnSelector.Select(allyChance: 0.3f, disguiseChance: 0.5f,
-                hasAlly: true, hasDisguise: false, roll: 0.1f);
-            Assert.That(result, Is.EqualTo(SpawnKind.Ally));
+            Assert.That(SpawnSelector.Select(1f, 0f, 0.999f), Is.EqualTo(SpawnKind.Bomber));
         }
     }
 }

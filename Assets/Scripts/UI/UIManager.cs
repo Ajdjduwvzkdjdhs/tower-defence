@@ -5,9 +5,9 @@ using KakigoriTD.Gameplay;
 namespace KakigoriTD.UI
 {
     /// <summary>
-    /// プロトタイプ UI（U1）。氷バー・砦HPバー・Wave タイマー（ステータス文）・アクティブ谷ハイライト・
-    /// リザルトを表示する。砦HP は <see cref="Fort.OnHpChanged"/> を購読（ADR-3、<c>OnDestroy</c> で解除）。
-    /// 氷・照準谷は連続値のため毎フレーム参照する。
+    /// プロトタイプ UI（U1）。砦HPバー・撃破数・コンボ・必殺ゲージ・経過タイム・リザルトを表示する
+    /// （ADR-30 で氷バーと Wave タイマーを廃止）。砦HP は <see cref="Fort.OnHpChanged"/> を購読
+    /// （ADR-3、<c>OnDestroy</c> で解除）。撃破数・コンボ・ゲージは連続値のため GameManager が毎フレーム渡す。
     ///
     /// 描画は IMGUI（OnGUI）— Phase1 はプレースホルダ図形のみで、uGUI 化は後続の見栄え調整に委ねる
     /// （**ADR-13**）。配線は <c>GameManager</c>（Composition Root）が <see cref="Configure"/> で行う。
@@ -15,25 +15,22 @@ namespace KakigoriTD.UI
     public class UIManager : MonoBehaviour
     {
         private Fort _fort;
-        private IceStock _ice;
 
         private int _hp, _maxHp;
+
+        // 戦闘中の可視化（GameManager が毎フレーム SetBattleStats で更新）。
+        private int _kills, _targetKills, _combo;
+        private float _gauge01, _elapsedSec;
         private string _status = "";
         private string _banner = "";
         private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
-        private bool _resultWin;
-        private int _resultScore;
-        private int _resultPenalty;
+        private StageResult _result;
 
-        private int _specialKills, _specialThreshold;
-        private bool _specialCharged;
-
-        /// <summary>砦・氷を注入し、砦HP イベントを購読する。</summary>
-        public void Configure(Fort fort, IceStock ice)
+        /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
+        public void Configure(Fort fort)
         {
             _fort = fort;
-            _ice = ice;
             _hp = fort.CurrentHp;
             _maxHp = fort.MaxHp;
             fort.OnHpChanged += OnHpChanged;
@@ -50,7 +47,19 @@ namespace KakigoriTD.UI
             if (_fort != null) _fort.OnHpChanged -= OnHpChanged; // 購読解除（ADR-3）
         }
 
-        /// <summary>上部ステータス（Title / Wave n 残り秒 / Lull など）。GameManager が毎フレーム設定。</summary>
+        /// <summary>
+        /// 戦闘中の集計を更新する（ADR-30）。GameManager が毎フレーム呼ぶ。
+        /// </summary>
+        public void SetBattleStats(int kills, int targetKills, int combo, float gauge01, float elapsedSec)
+        {
+            _kills = kills;
+            _targetKills = targetKills;
+            _combo = combo;
+            _gauge01 = gauge01;
+            _elapsedSec = elapsedSec;
+        }
+
+        /// <summary>上部ステータス（Title / 経過タイムなど）。GameManager が毎フレーム設定。</summary>
         public void SetStatus(string status) => _status = status;
 
         /// <summary>画面中央の遷移バナーを設定する（WaveIntro / WaveLull で使用）。</summary>
@@ -62,25 +71,15 @@ namespace KakigoriTD.UI
         /// <summary>位置検知ロスト警告（状態Y）。空文字で非表示。GameManager が毎フレーム設定（Phase 5）。</summary>
         public void SetTrackerWarning(string text) => _trackerWarning = text;
 
-        /// <summary>リザルトを表示する。penalty は減点合計（0 なら非表示）。</summary>
-        public void ShowResult(bool isWin, int score, int penalty = 0)
+        /// <summary>リザルトを表示する（クリア＝タイム / 失敗＝到達撃破数・ADR-30）。</summary>
+        public void ShowResult(StageResult result)
         {
             _resultShown = true;
-            _resultWin = isWin;
-            _resultScore = score;
-            _resultPenalty = penalty;
+            _result = result;
         }
 
         /// <summary>リザルト表示を消す（再挑戦時）。</summary>
         public void ClearResult() => _resultShown = false;
-
-        /// <summary>必殺技「ビーム砲」の撃破ゲージ（右下）。GameManager が毎フレーム設定。</summary>
-        public void SetSpecialGauge(int kills, int threshold, bool charged)
-        {
-            _specialKills = kills;
-            _specialThreshold = threshold;
-            _specialCharged = charged;
-        }
 
         private void OnGUI()
         {
@@ -95,34 +94,33 @@ namespace KakigoriTD.UI
                 GUI.contentColor = Color.white;
             }
 
-            // 氷バー
-            float ice01 = _ice != null ? _ice.Normalized : 0f;
-            Bar(new Rect(16, 40, 320, 22), ice01, new Color(0.45f, 0.8f, 1f));
-            GUI.Label(new Rect(344, 40, 260, 22), $"氷 {(_ice != null ? _ice.Current : 0f):F1}/{(_ice != null ? _ice.Total : 0f):F0}");
-
-            // 砦HPバー
+            // 砦HPバー（生存リソース。スコアには含まない）
             float hp01 = _maxHp > 0 ? (float)_hp / _maxHp : 0f;
-            Bar(new Rect(16, 68, 320, 22), hp01, new Color(0.4f, 0.95f, 0.5f));
-            GUI.Label(new Rect(344, 68, 260, 22), $"砦HP {_hp}/{_maxHp}");
+            Bar(new Rect(16, 40, 320, 22), hp01, new Color(0.4f, 0.95f, 0.5f));
+            GUI.Label(new Rect(344, 40, 260, 22), $"砦HP {_hp}/{_maxHp}");
 
-            // 必殺技「ビーム砲」ゲージ（右下）。閾値0（未設定）なら非表示。
-            if (_specialThreshold > 0)
+            // 必殺ゲージ（MAX で自動発動するので「満ちたら何か起きる」ことだけ伝える）
+            bool gaugeFull = _gauge01 >= 1f;
+            Bar(new Rect(16, 68, 320, 22), _gauge01,
+                gaugeFull ? new Color(1f, 0.95f, 0.35f) : new Color(0.75f, 0.55f, 1f));
+            GUI.Label(new Rect(344, 68, 260, 22), gaugeFull ? "必殺 発動!" : "必殺ゲージ");
+
+            // 撃破数（クリア条件）
+            GUI.contentColor = new Color(1f, 0.95f, 0.75f);
+            var killStyle = new GUIStyle(GUI.skin.label) { fontSize = 26 };
+            GUI.Label(new Rect(16, 96, 400, 36), $"撃破 {_kills} / {_targetKills}", killStyle);
+            GUI.contentColor = Color.white;
+
+            // コンボ（2 以上のときだけ大きく出す）
+            if (_combo >= 2)
             {
-                const float w = 260f, h = 48f, margin = 16f;
-                var box = new Rect(Screen.width - w - margin, Screen.height - h - margin, w, h);
-                GUI.color = new Color(0f, 0f, 0f, 0.5f);
-                GUI.DrawTexture(box, Texture2D.whiteTexture);
-                GUI.color = Color.white;
-
-                float gauge01 = _specialCharged ? 1f : (_specialThreshold > 0 ? (float)_specialKills / _specialThreshold : 0f);
-                var barRect = new Rect(box.x + 10, box.y + 10, box.width - 20, 16);
-                Bar(barRect, gauge01, _specialCharged ? new Color(0.75f, 0.35f, 1f) : new Color(0.55f, 0.25f, 0.8f));
-
-                var labelRect = new Rect(box.x + 10, box.y + 27, box.width - 20, 18);
-                GUI.contentColor = _specialCharged ? new Color(0.85f, 0.55f, 1f) : Color.white;
-                GUI.Label(labelRect, _specialCharged
-                    ? "必殺技 発動中！"
-                    : $"必殺技ゲージ  {_specialKills}/{_specialThreshold}");
+                var comboStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 34,
+                    alignment = TextAnchor.UpperRight,
+                };
+                GUI.contentColor = new Color(1f, 0.75f, 0.25f);
+                GUI.Label(new Rect(Screen.width - 320, 40, 300, 48), $"{_combo} COMBO", comboStyle);
                 GUI.contentColor = Color.white;
             }
 
@@ -155,19 +153,13 @@ namespace KakigoriTD.UI
                 GUI.color = Color.white;
                 var prev = GUI.skin.label.alignment;
                 GUI.skin.label.alignment = TextAnchor.MiddleCenter;
-                GUI.contentColor = _resultWin ? new Color(1f, 0.9f, 0.3f) : new Color(1f, 0.5f, 0.5f);
-                GUI.Label(new Rect(box.x, box.y + 18, box.width, 40), _resultWin ? "YOU WIN!" : "FORT DESTROYED");
+                GUI.contentColor = _result.IsWin ? new Color(1f, 0.9f, 0.3f) : new Color(1f, 0.5f, 0.5f);
+                GUI.Label(new Rect(box.x, box.y + 18, box.width, 40), _result.IsWin ? "CLEAR!" : "FORT DESTROYED");
                 GUI.contentColor = Color.white;
-                if (_resultPenalty > 0)
-                {
-                    int fortHp = _resultScore + _resultPenalty;
-                    GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), $"砦HP {fortHp}  −  ペナルティ {_resultPenalty}  =  スコア {_resultScore}");
-                }
-                else
-                {
-                    GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), $"スコア（残り砦HP）: {_resultScore}");
-                }
-                GUI.Label(new Rect(box.x, box.y + 92, box.width, 28), "[Enter] で再挑戦");
+                GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), _result.Headline);
+                GUI.Label(new Rect(box.x, box.y + 86, box.width, 24),
+                    $"撃破 {_result.KillCount} / {_result.TargetKillCount}   最大コンボ {_result.MaxCombo}");
+                GUI.Label(new Rect(box.x, box.y + 112, box.width, 28), "[Enter] で再挑戦");
                 GUI.skin.label.alignment = prev;
             }
         }

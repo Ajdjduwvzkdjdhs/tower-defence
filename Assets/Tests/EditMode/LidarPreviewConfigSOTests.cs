@@ -20,10 +20,11 @@ namespace KakigoriTD.Tests.EditMode
         public void TearDown() => Object.DestroyImmediate(_cfg);
 
         [Test]
-        public void Cooldown_Center_Is06_Edge_Is0_Mid_Is03()
+        public void Cooldown_Center_Is025_Edge_Is0_Mid_Is0125()
         {
-            Assert.That(_cfg.CooldownSecFor(0f), Is.EqualTo(0.6f).Within(1e-4f));
-            Assert.That(_cfg.CooldownSecFor(150f), Is.EqualTo(0.3f).Within(1e-4f));
+            // ADR-30: 100体撃破レースのテンポに合わせて中心 0.6 → 0.25 に短縮。
+            Assert.That(_cfg.CooldownSecFor(0f), Is.EqualTo(0.25f).Within(1e-4f));
+            Assert.That(_cfg.CooldownSecFor(150f), Is.EqualTo(0.125f).Within(1e-4f));
             Assert.That(_cfg.CooldownSecFor(300f), Is.EqualTo(0f).Within(1e-4f));
         }
 
@@ -48,12 +49,6 @@ namespace KakigoriTD.Tests.EditMode
             Assert.That(_cfg.NormalizedDistance(-10f), Is.EqualTo(0f).Within(1e-4f));
             Assert.That(_cfg.NormalizedDistance(150f), Is.EqualTo(0.5f).Within(1e-4f));
             Assert.That(_cfg.NormalizedDistance(999f), Is.EqualTo(1f).Within(1e-4f));
-        }
-
-        [Test]
-        public void ConsumeIce_DefaultsFalse_IceIsInfinite()
-        {
-            Assert.That(_cfg.ConsumeIce, Is.False);
         }
     }
 }

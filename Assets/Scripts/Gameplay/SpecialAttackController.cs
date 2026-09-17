@@ -1,27 +1,21 @@
-using System.Reflection;
+using System;
 using UnityEngine;
-using KakigoriTD.Core;
 using KakigoriTD.Data;
 
 namespace KakigoriTD.Gameplay
 {
     /// <summary>
-    /// 必殺技「ビーム砲」の統括。敵を <see cref="SpecialAttackConfigSO.KillThreshold"/> 体倒すとチャージ完了となり、
-    /// 山頂のビーム砲モデルが出現して自動発動する。紫の光線( <see cref="BeamSweepVfx"/> )が敵の静止リング
-    /// （<see cref="EnemyField.RestRadius"/>）を一周し、少し遅れて衝撃波(<see cref="ExplosionTelegraph"/> の
-    /// 色違いプレハブを再利用)が走って範囲内の敵を <see cref="EnemyField.KillAllWithin"/> でまとめて撃破する。
-    /// 発動後はカウントをリセットし、再び<see cref="SpecialAttackConfigSO.KillThreshold"/>体倒すと再発動する
-    /// （1ゲーム中に複数回使える）。撃破カウントは <see cref="KillTally"/>（純ロジック・ADR-8）に委譲する。
+    /// 必殺技「ビーム砲」の演出進行役（ADR-30）。発動条件は GameManager 側の <c>SpecialGauge</c>（ゲージ MAX で
+    /// 自動発動）が決め、本クラスは <see cref="Fire"/> で呼ばれてから一連の演出を進める:
+    /// 山頂にビーム砲モデルが出現 → 紫の光線(<see cref="BeamSweepVfx"/>)が敵の並ぶ輪を一周 → 少し遅れて
+    /// 衝撃波(<see cref="ExplosionTelegraph"/> の色違いプレハブ)が走り、**その瞬間に盤面の敵を全員**
+    /// <see cref="EnemyField.KillAllForBeam"/> で撃破 → 衝撃波が消えたら砲も消える。
+    /// 展示にはプレイヤーが押せるボタンが無いため照準入力を持たず、全方位に均一に効かせる。
+    /// 演出中（<see cref="IsPlaying"/>）は GameManager が次の発動を待たせる。
     /// </summary>
     public class SpecialAttackController : MonoBehaviour
     {
         private enum Phase { Waiting, Charged, Beaming, WaitingShockwave, Firing }
-
-        // ExplosionTelegraph._radius を実行時に上書きするためのリフレクション。プレハブ側の値は
-        // フラッシュ光の range 計算（Awake 時のみ参照）に使われた後なので、ここで上書きしても
-        // 閃光が過大にならない。ExplosionTelegraph.cs 自体（他ブランチ由来）は変更しない。
-        private static readonly FieldInfo RadiusField =
-            typeof(ExplosionTelegraph).GetField("_radius", BindingFlags.NonPublic | BindingFlags.Instance);
 
         private EnemyField _field;
         private Transform _fortTransform;
@@ -34,18 +28,14 @@ namespace KakigoriTD.Gameplay
         private BeamSweepVfx _activeBeam;
         private GameObject _shockwaveInstance;
 
-        private readonly KillTally _tally = new KillTally();
         private Phase _phase = Phase.Waiting;
         private float _phaseT;
 
-        /// <summary>前回発動からの撃破数（HUD用）。</summary>
-        public int KillsSinceCharge => _tally.Total;
+        /// <summary>衝撃波で撃破した瞬間に発火（引数＝一掃した体数）。音・ログ用。</summary>
+        public event Action<int> OnFired;
 
-        /// <summary>チャージに必要な撃破数（HUD用）。</summary>
-        public int Threshold => _config != null ? _config.KillThreshold : 0;
-
-        /// <summary>チャージ完了〜発動シーケンス中かどうか（HUD用）。</summary>
-        public bool IsCharged => _phase != Phase.Waiting;
+        /// <summary>発動〜演出終了までの間 true（GameManager が次の発動を待たせる／UI が他の表示を抑える）。</summary>
+        public bool IsPlaying => _phase != Phase.Waiting;
 
         /// <summary>
         /// GameManager（Composition Root）から一度だけ呼ぶ。field/fortTransform/config は必須。
@@ -58,8 +48,6 @@ namespace KakigoriTD.Gameplay
             _fortTransform = fortTransform;
             _config = config;
             _shockwavePrefab = shockwavePrefab;
-
-            _field.OnEnemyKilled += OnEnemyKilled;
 
             if (cannonModelPrefab != null)
             {
@@ -85,14 +73,13 @@ namespace KakigoriTD.Gameplay
             return root;
         }
 
-        // 発動シーケンス中（Waiting 以外）の撃破は数えない。衝撃波自身が巻き込む敵の同時撃破が
-        // 即座に次チャージへ持ち越ってしまう（無限連鎖）のを防ぐガード。
-        private void OnEnemyKilled()
+        /// <summary>
+        /// ビーム砲を発動する（ゲージ MAX で GameManager が呼ぶ）。演出中の再入は無視する。
+        /// 撃破は光線一周＋遅延の後、衝撃波の瞬間に起きる（発動と同時ではない）。
+        /// </summary>
+        public void Fire()
         {
             if (_phase != Phase.Waiting) return;
-
-            _tally.Add(1);
-            if (_tally.Total < Threshold) return;
 
             _phase = Phase.Charged;
             if (_cannonInstance != null) _cannonInstance.SetActive(true);
@@ -122,7 +109,7 @@ namespace KakigoriTD.Gameplay
         {
             _phase = Phase.Beaming;
 
-            float radius = _field.RestRadius + _config.RingRadiusPadding;
+            float radius = RingRadius;
             Vector3 sourcePos = _muzzleTransform != null ? _muzzleTransform.position : _fortTransform.position;
             _activeBeam = new GameObject("BeamSweepVfx").AddComponent<BeamSweepVfx>();
             _activeBeam.Play(_fortTransform.position, sourcePos, radius, _config.BeamBandWidth,
@@ -159,48 +146,45 @@ namespace KakigoriTD.Gameplay
             _phaseT = 0f;
         }
 
+        // 光線・衝撃波の半径。盤面の敵を全員（入場中も含めて）倒すので、見た目も入場口まで届かせる
+        // （「見えている範囲＝効く範囲」）。プレハブに焼き込んだ固定値は使わない。
+        private float RingRadius => _field.EntranceRadius + _config.RingRadiusPadding;
+
         private void FireShockwave()
         {
             _phase = Phase.Firing;
             _shockwaveInstance = null;
 
-            float radius = _field.RestRadius + _config.RingRadiusPadding;
+            float radius = RingRadius;
             Vector3 center = _fortTransform.position;
 
             if (_shockwavePrefab != null)
             {
                 _shockwaveInstance = Instantiate(_shockwavePrefab, center, Quaternion.identity);
                 var telegraph = _shockwaveInstance.GetComponent<ExplosionTelegraph>();
-                if (telegraph != null)
-                {
-                    // 見た目の半径を、実際に敵が撃破される半径(敵の静止半径ベース)まで届くよう
-                    // 動的に上書きする。プレハブに焼き込んだ固定値だと EnemyField.RestRadius を
-                    // 調整したときにズレてしまうため。
-                    RadiusField?.SetValue(telegraph, radius);
-                    telegraph.PlayImmediate((_, __) => _field.KillAllWithin(center, radius));
-                }
-                else _field.KillAllWithin(center, radius);
+                if (telegraph != null) telegraph.PlayImmediate(radius, (_, __) => KillAll());
+                else KillAll();
             }
             else
             {
-                _field.KillAllWithin(center, radius);
+                KillAll();
             }
 
             // 砲台を消すタイミングは Update() の Phase.Firing 側で、衝撃波オブジェクトが自壊した
             // (=衝撃波の演出が消えた)瞬間に合わせる（FinishFiring）。プレハブ未設定時は次フレームで即完了する。
         }
 
+        private void KillAll()
+        {
+            int killed = _field != null ? _field.KillAllForBeam() : 0;
+            OnFired?.Invoke(killed);
+        }
+
         // 衝撃波の演出が消えたのと同じタイミングで、砲台も非表示に戻す。
         private void FinishFiring()
         {
             if (_cannonInstance != null) _cannonInstance.SetActive(false);
-            _tally.Reset();
             _phase = Phase.Waiting;
-        }
-
-        private void OnDestroy()
-        {
-            if (_field != null) _field.OnEnemyKilled -= OnEnemyKilled; // 購読解除（ADR-3）
         }
     }
 }

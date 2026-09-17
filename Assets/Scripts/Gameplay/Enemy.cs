@@ -32,6 +32,12 @@ namespace KakigoriTD.Gameplay
         /// <summary>目標位置（スロット）に到達して静止しているか。移動中は false（＝発射しない）。</summary>
         protected bool IsInPosition => (transform.position - _targetPos).sqrMagnitude <= ArriveEpsilonSqr;
 
+        /// <summary>
+        /// 現在の目標位置（＝占有しているスロット）。移動中の <c>transform.position</c> ではなく
+        /// こちらが「どの段に並んでいるか」の正。<see cref="EnemyField"/> のスロット割り当て・繰り上がりが参照する。
+        /// </summary>
+        public Vector3 TargetPosition => _targetPos;
+
         // per-instance tint: sharedMaterial を汚さずプール再利用で色を切り替える（ADR-16）。
         private Renderer _renderer;
         private MaterialPropertyBlock _mpb;
@@ -101,7 +107,7 @@ namespace KakigoriTD.Gameplay
         }
 
         /// <summary>
-        /// Init 完了後に呼ばれる仮想フック。派生クラス（例: DisguisedEnemy の tell マーカー生成）で使う。
+        /// Init 完了後に呼ばれる仮想フック。派生クラス（例: ShieldTrooper の耐久初期化）で使う。
         /// </summary>
         protected virtual void OnInitialized() { }
 
@@ -124,7 +130,7 @@ namespace KakigoriTD.Gameplay
         }
 
         /// <summary>
-        /// Animator の再生/停止を切り替える。攻撃を持たない派生（<see cref="AllyNPC"/>）が
+        /// Animator の再生/停止を切り替える。攻撃を持たない派生（旧 AllyNPC）が
         /// 目的地に到着した後、歩行アニメーションをその場で回し続けないようにするために使う。
         /// </summary>
         protected void SetAnimationPlaying(bool playing)
@@ -170,7 +176,7 @@ namespace KakigoriTD.Gameplay
 
         /// <summary>
         /// 撃破する。以後の発射を止める（飛来中の弾は各 <see cref="Projectile"/> が着弾まで処理する）。
-        /// 実際のプール返却・非表示は所有者（ChannelController）が行う。
+        /// 実際のプール返却・非表示は所有者（EnemyField）が行う。
         /// </summary>
         public void Kill()
         {

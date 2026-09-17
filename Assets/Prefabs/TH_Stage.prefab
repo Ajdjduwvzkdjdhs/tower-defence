@@ -44,26 +44,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0e613aace93a1419f87346a747f791db, type: 3}
   m_Name: 
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Bootstrap.GameManager
-  _waveConfigs:
-  - {fileID: 11400000, guid: 506be38a9f90e4df1b165fad46787bdb, type: 2}
-  - {fileID: 11400000, guid: 378cd1aa64eab4e3a858717372c841b5, type: 2}
-  - {fileID: 11400000, guid: f4210129fe3204def8669f59c64612a3, type: 2}
-  _lidarPreviewConfig: {fileID: 0}
+  _stageConfig: {fileID: 11400000, guid: 70b4e5bf25b0449189287c6ff2a3009a, type: 2}
+  _lidarPreviewConfig: {fileID: 11400000, guid: 38f103d2b7e054c77ad9fc19367b4967, type: 2}
   _terrain: {fileID: 4358695569998069333}
   _groundSurface: {fileID: 3739809722233026105}
   _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
   _fortHpMax: 1000
   _fortHeightOffset: 0
-  _iceTotal: 50
-  _waveLull: 5
-  _waveIntroDuration: 1.2
-  _allyHitPenalty: 50
-  _tgsAllyPrefab: {fileID: 0}
   _enemyPrefab: {fileID: 0}
-  _specialAttackConfig: {fileID: 0}
+  _bomberPrefab: {fileID: 6684815093208432099, guid: 56902edd330634f53b0518ad785a3e57, type: 3}
+  _shieldPrefab: {fileID: 6816341993188778353, guid: 67d6cd3d3b92743319b696c3a6de31f0, type: 3}
+  _snowEffectPrefab: {fileID: 2396241823905385122, guid: 651ce7e4902e64733a1d1693ff091bea, type: 3}
+  _specialAttackConfig: {fileID: 11400000, guid: 18f463c016d59433f95970b4bf05d2f1, type: 2}
   _beamCannonPrefab: {fileID: 4294224916716114018, guid: f77f82c4d7487451da5891c044dd9e19, type: 3}
   _specialAttackShockwavePrefab: {fileID: 4060460244147941742, guid: 7c073a6fc018b48a4a22a09ff57d4d0d, type: 3}
   _resultLimit: 3
+  _gameOverLimit: 1
 --- !u!1 &184031253997498005
 GameObject:
   m_ObjectHideFlags: 0

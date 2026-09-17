@@ -18,20 +18,15 @@ namespace KakigoriTD.Gameplay
     ///  - **撃破クールダウン** <see cref="LidarPreviewConfigSO.CooldownSecFor"/>（中心 0.6s → 外周 0.0s）
     /// 中心付近＝クールダウン長め / 外周＝連射可。
     ///
-    /// 氷消費は <see cref="LidarPreviewConfigSO.ConsumeIce"/>（既定 false＝無限）で無効。true のとき
-    /// <see cref="IceStock"/> でゲートする分岐だけ残す（保険）。
+    /// 氷は無限（ADR-30 で <c>IceStock</c> ごと廃止。システム側のリソース管理を使わない方針）。
     /// </summary>
     public class LidarAvalancheVfx : MonoBehaviour
     {
-        [Tooltip("consumeIce=true のときの氷消費レート[/s]（既定は無限なので未使用）。")]
-        [SerializeField] private float _iceDrainPerSec = 1.0f;
-
         private IPositionInputSource _input;
         private EnemyField _field;
         private Func<float, float, float> _heightAt;
         private ObjectPool<AvalancheSnowEffect> _pool;
         private LidarPreviewConfigSO _config;
-        private IceStock _ice;
 
         private float _spawnAccum;
         private float _lastDMm;
@@ -45,13 +40,12 @@ namespace KakigoriTD.Gameplay
 
         public void Configure(IPositionInputSource input, EnemyField field,
             Func<float, float, float> heightAt, Func<AvalancheSnowEffect> createEffect,
-            LidarPreviewConfigSO config, IceStock ice = null)
+            LidarPreviewConfigSO config)
         {
             _input = input;
             _field = field;
             _heightAt = heightAt;
             _config = config;
-            _ice = ice;
             _pool = new ObjectPool<AvalancheSnowEffect>(createEffect, prewarm: 8);
             _spawnAccum = 0f;
             _wasEmitting = false;
@@ -64,13 +58,8 @@ namespace KakigoriTD.Gameplay
             if (_input != null && _field != null && _config != null && _pool != null
                 && _input.HasPoint && _input.IsShaving && !_input.IsLost)
             {
-                bool iceOk = !_config.ConsumeIce || _ice == null
-                             || (!_ice.IsEmpty && _ice.TryDrain(_iceDrainPerSec * Time.deltaTime));
-                if (iceOk)
-                {
-                    emitting = true;
-                    Emit();
-                }
+                emitting = true;
+                Emit();
             }
 
             if (!emitting) _spawnAccum = 0f; // 溜まった分が次に噴き出さないよう 0 に戻す

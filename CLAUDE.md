@@ -1,6 +1,8 @@
 # かき氷タワーディフェンス (Kakigori TD)
 
-雪山の神となり、頂上からかき氷を削って雪崩を起こし、麓4方向から砦を遠隔攻撃する敵を殲滅レースで退ける、**体験型タワーディフェンス**。
+雪山の神となり、頂上からかき氷を削って雪崩を起こし、麓から砦を遠隔攻撃する敵を殲滅レースで退ける、**体験型タワーディフェンス**。
+現在は **単一ステージの「目標撃破数レース」**（既定100体撃破でクリア／砦HP 0 でゲームオーバー）で、
+爆発兵の連鎖・盾兵・コンボ・必殺ビーム砲が主要ギミック（ADR-30）。
 
 このリポジトリは **展示用インスタレーションの本番ビルド**。ゲームロジックは Phase 1〜6（+ Extra 1）まで実装済み、
 以降 **Phase 7（展示ビルド化：3Dアート・マルチシーン・LiDAR入力）進行中**。
@@ -26,7 +28,7 @@
 - エンジン: Unity **6000.3.16f1**（Unity 6.3 / URP 17.3）— バージョンは確定済み
 - 主要パッケージ: URP 17.3 / Cinemachine 3.1 / Input System 1.19（**新** Input System のみ）/ Test Framework 1.6
 - 言語: C#
-- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、15ファイル・151本）
+- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、22ファイル・192本）
 
 ## 実行とテスト
 
@@ -34,10 +36,12 @@
 
 1. `Assets/Scenes/TitleScene.unity` — タイトル。`Enter` で `TH` へ（`Assets/Scripts/Scenes/TitleScene.cs`、フェード付き）
 2. `Assets/Scenes/TH.unity` — **ゲーム本体**。`Assets/Prefabs/TH_Stage.prefab` を配置しており、そこに
-   `GameManager`（唯一の Composition Root / Singleton）・Terrain（雪山）・城・敵/味方プレハブ・各種 SO 参照が入っている
-3. `Assets/Scenes/ResultScene.unity` — リザルト。`Enter` で `TitleScene` へ（`Assets/Scripts/Scenes/ResultScene.cs`）
+   `GameManager`（唯一の Composition Root / Singleton）・Terrain（雪山）・城・敵プレハブ・各種 SO 参照が入っている
+3. `Assets/Scenes/ResultScene.unity` — クリア時のリザルト。クリアタイムを表示し `Enter` で `TitleScene` へ
+4. `Assets/Scenes/GameOverScene.unity` — 敗北時。到達撃破数を表示し `Enter` で `TitleScene` へ
 
-`GameManager` は勝敗確定後 `_resultLimit` 秒待って `SceneManager.LoadScene("ResultScene")` へ遷移する。
+`GameManager` は決着後 `_resultLimit` 秒待って、クリアなら `ResultScene`・失敗なら `GameOverScene` へ遷移する
+（結果は `UI/GameResultHolder` の static 経由で渡す）。
 
 **Build 対象外の開発用シーン**（再生して個別検証に使う）:
 - `Assets/Scenes/SampleScene.unity` — Phase 5/6 期の旧セットアップ（GameManager をシーンに直置き）。TH_Stage プレハブ化前の名残
@@ -46,7 +50,7 @@
 
 ### テスト方針
 
-- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在151本）。
+- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在192本）。
 - Unity 固有の挙動（シーン遷移・Play Mode の動き・UI 表示・演出）は **起動中の Editor を `unity` CLI で駆動して**スクリーンショット/ログで確認する（下記）。
   「動いた気がする」で終わらせず、客観的な証拠を残してから次へ進む。
 
@@ -133,22 +137,30 @@
 ```
 Assets/Scripts/
   Core/       純C#ロジック（UnityEngine 非依存 = KakigoriTD.Core.asmdef, noEngineReferences）
-              GameStateMachine + State群, EnemyMatrix<T>, IceStock, Scoring, PenaltyTally,
+              GameStateMachine + State群（Title / Battle / Result）, KillProgress, ComboTracker,
+              SpecialGauge, ExplosionChain, KillSource, StageResult,
               AvalancheClock, SpawnClock/SpawnSelector, IGameContext … EditMode テスト対象
-  Data/       ScriptableObject 定義（WaveConfigSO, EnemyTypeSO, ProjectileTypeSO, SerialConfigSO,
-              VisionConfigSO, AudioConfigSO）
+  Data/       ScriptableObject 定義（StageConfigSO, EnemyTypeSO, ProjectileTypeSO, SerialConfigSO,
+              VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO, SpecialAttackConfigSO）
   Input/      IInputSource と各実装（上記「入力アーキテクチャ」参照）
   Factory/    ObjectPool<T>, ProjectileFactory
-  Gameplay/   MonoBehaviour：ChannelController, Enemy / AllyNPC / DisguisedEnemy, Projectile,
-              AvalancheController, AvalancheVfx, Fort, WaveManager, SnowPuff/Snowball/DissolveBurst 等
+  Gameplay/   MonoBehaviour：EnemyField（360度の敵管理・隊列・撃破・爆発連鎖）, Enemy /
+              BombTrooper / ShieldTrooper, Projectile, LidarAvalancheVfx + AvalancheSnowEffect（雪崩）,
+              SpecialAttackController + BeamSweepVfx（ビーム砲の演出進行。発動は Core の SpecialGauge）,
+              ExplosiveDeath + ExplosionTelegraph（爆発演出。判定は Core の ExplosionChain）, Fort,
+              SpawnDirector, SnowPuff/DissolveBurst 等
   Audio/      AudioService, AudioConfigSO（Phase 6・表現層のみ・Core 無改修）
-  UI/         UIManager（IMGUI ベースの HUD / バナー / 警告）
+  UI/         UIManager（IMGUI ベースの HUD / バナー / 警告）, GameResultHolder（シーン間の結果受け渡し）
   Bootstrap/  GameManager（唯一の Singleton / Composition Root）
-  Scenes/     TitleScene / ResultScene（KakigoriTD.Scenes）— `Enter` でシーン遷移する小さな MonoBehaviour
+  Scenes/     TitleScene / ResultScene / GameOverScene（KakigoriTD.Scenes）— `Enter` でシーン遷移する小さな MonoBehaviour
 Assets/Tests/EditMode/     純ロジックの単体テスト（KakigoriTD.Tests.EditMode.asmdef）
-Assets/ScriptableObjects/  Wave1-3 / BasicEnemy / AssaultEnemy / AllyNPC / DisguisedEnemy /
-                           BasicProjectile / AudioConfig / VisionConfig / *SerialConfig の実体
+Assets/ScriptableObjects/  StageConfig / SpecialAttackConfig / BasicEnemy / AssaultEnemy / BombTrooper /
+                           ShieldTrooper / BasicProjectile / AudioConfig / VisionConfig / LidarPreviewConfig /
+                           *SerialConfig の実体
 Assets/Prefabs/TH_Stage.prefab   ゲーム本体の一式（GameManager 等）。TH.unity が配置
+Assets/Prefabs/EnemyBombTrooper.prefab / EnemyShieldTrooper.prefab   爆発兵・盾兵のモデル（爆発兵は ExplosiveDeath 付き）
+Assets/Prefabs/BeamCannon.prefab / SpecialAttackShockwave.prefab / ExplosionTelegraph.prefab   ビーム砲・衝撃波・爆発の演出
+Assets/snow_effect.prefab        雪崩のパーティクル
 docs/                      仕様・ADR・フェーズ計画
 tools/                     位置検知トラッカー（Python/C++・Unity 対象外）
 ```
@@ -179,5 +191,6 @@ tools/                     位置検知トラッカー（Python/C++・Unity 対�
 
 ## 現在の状況
 
-Phase 1〜6 + Extra 1 完了。**Phase 7（展示ビルド化：3Dアート・マルチシーン・LiDAR入力・現場調整）進行中**。
+Phase 1〜6 + Extra 1 完了。**Phase 7（展示ビルド化）進行中**、および
+**Phase 8（ゲーム性刷新：単一ステージの目標撃破数レース・ADR-30）実装済み。`main` の演出（爆発・ビーム砲・雪崩）を ADR-31 で接続し、Editor で EditMode 192 本緑・Play 検証済み**。
 新しい作業を始めるときは、`git branch -a` の作業ブランチ名と `docs/phases.md` Phase 7 の「未整備」チェックリストを突き合わせて、いま何が動いているかを確認すること。

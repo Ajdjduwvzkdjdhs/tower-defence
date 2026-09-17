@@ -18,10 +18,6 @@ namespace KakigoriTD.Data
         // 攻撃モーション開始から実際に弾が出るまでの前振り時間（秒）。Animator の Attack クリップと合わせて調整する。
         [SerializeField] private float _attackWindup = 0.4f;
 
-        // 見た目モデル prefab（種別ごとに別モデル。例: 突撃隊は黒アニメーション）。
-        // 未設定なら呼び出し側（GameManager）の既定 prefab にフォールバックする。
-        [SerializeField] private GameObject _prefab;
-
         // Phase1 では未使用（define-only）。
         // _isAlly は Phase2（味方NPC）、_isDisguised は Phase3（変装）で挙動が付く。
         [SerializeField] private bool _isAlly = false;
@@ -47,9 +43,6 @@ namespace KakigoriTD.Data
 
         /// <summary>攻撃モーション開始から実際に弾が発射されるまでの前振り時間（秒）。</summary>
         public float AttackWindup => _attackWindup;
-
-        /// <summary>この種別の見た目モデル prefab。未設定なら呼び出し側の既定 prefab にフォールバック。</summary>
-        public GameObject Prefab => _prefab;
 
         /// <summary>味方NPCかどうか（Phase2 用。Phase1 では未使用）。</summary>
         public bool IsAlly => _isAlly;
