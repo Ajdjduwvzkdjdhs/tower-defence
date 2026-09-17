@@ -33,7 +33,7 @@ namespace KakigoriTD.UI
         private float _countdownSetAt = -999f;
         private const float CountdownPopInSec = 0.15f; // 出現直後にひと回り大きく→縮むポップイン演出の時間
         private const float CountdownStepSec = 1.0f;   // CountdownState.StepSec と同じ長さ（1ステップ=1秒）
-        private static Texture2D _sonarRingTex; // ソナー風リングの実行時生成テクスチャ（キャッシュ・使い回し）
+        private static Texture2D _sonarSweepTex; // ソナー掃引の実行時生成テクスチャ（キャッシュ・使い回し）
 
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
         public void Configure(Fort fort)
@@ -232,58 +232,77 @@ namespace KakigoriTD.UI
             GUI.Label(rect, _countdownText, style);
         }
 
+        private const float SonarTrailDeg = 130f; // 掃引の尾の長さ（度）。先端が最も明るく、ここまでかけて減衰する。
+
         /// <summary>
-        /// 数字カウントダウン（"3"/"2"/"1"）専用の演出。潜水艦ソナー/ストップウォッチのように、
-        /// 中心から外周へ伸びる針が1ステップ（1秒）かけて時計回りに1周する。「スタート！」では出さない。
+        /// 数字カウントダウン（"3"/"2"/"1"）専用の演出。潜水艦ソナーのように、先端が明るく尾を引いて
+        /// 減衰する扇形の濃淡が1ステップ（1秒）かけて時計回りに1周する。「スタート！」では出さない。
         /// </summary>
         private void DrawSonarSweep(Rect numberRect)
         {
             float cx = Screen.width * 0.5f;
             float cy = numberRect.y + numberRect.height * 0.5f;
-            float radius = numberRect.height * 0.55f;
+            float diameter = numberRect.height * 1.15f;
+
+            float sweepT = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownStepSec);
 
             var prevColor = GUI.color;
             var prevMatrix = GUI.matrix;
 
-            GUI.color = new Color(0.5f, 1f, 0.65f, 0.55f);
-            GUI.DrawTexture(new Rect(cx - radius, cy - radius, radius * 2f, radius * 2f), SonarRingTexture());
-
-            float sweepT = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownStepSec);
-            var pivot = new Vector2(cx, cy);
-            var needleRect = new Rect(cx - 2f, cy - radius, 4f, radius);
-
             GUI.color = new Color(0.5f, 1f, 0.65f, 0.9f);
-            GUIUtility.RotateAroundPivot(sweepT * 360f, pivot);
-            GUI.DrawTexture(needleRect, Texture2D.whiteTexture);
+            GUIUtility.RotateAroundPivot(sweepT * 360f, new Vector2(cx, cy));
+            GUI.DrawTexture(new Rect(cx - diameter * 0.5f, cy - diameter * 0.5f, diameter, diameter), SonarSweepTexture());
 
             GUI.matrix = prevMatrix;
             GUI.color = prevColor;
         }
 
-        /// <summary>薄いリング状のテクスチャを一度だけ生成して使い回す（毎フレーム生成しない）。</summary>
-        private static Texture2D SonarRingTexture()
+        /// <summary>
+        /// 「先端が明るく尾を引いて減衰する扇形」の濃淡テクスチャを一度だけ生成して使い回す
+        /// （毎フレーム生成しない）。境界は smoothstep で滑らかにし、拡大表示してもジャギーが出ないようにする。
+        /// </summary>
+        private static Texture2D SonarSweepTexture()
         {
-            if (_sonarRingTex != null) return _sonarRingTex;
+            if (_sonarSweepTex != null) return _sonarSweepTex;
 
-            const int size = 128;
-            const float outer = size * 0.5f - 2f;
-            const float inner = outer - 5f;
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            const int size = 256;
+            const float half = size * 0.5f;
+            const float outerR = half - 2f;
+            float trailRad = SonarTrailDeg * Mathf.Deg2Rad;
+
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
             var pixels = new Color32[size * size];
             for (int y = 0; y < size; y++)
             {
                 for (int x = 0; x < size; x++)
                 {
-                    float dx = x - size * 0.5f + 0.5f;
-                    float dy = y - size * 0.5f + 0.5f;
-                    float d = Mathf.Sqrt(dx * dx + dy * dy);
-                    byte a = (byte)((d >= inner && d <= outer) ? 255 : 0);
+                    float dx = x - half + 0.5f;
+                    float dy = y - half + 0.5f;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    // 真上(12時)を0度、時計回りに増える角度。
+                    float angle = Mathf.Atan2(dx, -dy);
+                    if (angle < 0f) angle += 2f * Mathf.PI;
+
+                    // 尾は指数0.8でゆるやかに減衰させ、くっきりした扇形ではなく「じわっと」した濃淡にする。
+                    float angleFade = angle <= trailRad ? Mathf.Pow(1f - angle / trailRad, 0.8f) : 0f;
+                    // 掃引が当たっていない部分もソナー画面らしくうっすら常時見せる（ベース濃度）。
+                    const float baseWash = 0.12f;
+                    float shade = Mathf.Max(baseWash, angleFade);
+                    // 外周を2pxかけて滑らかにフェードさせ、拡大表示時のジャギーを防ぐ。
+                    float edgeFade = Mathf.Clamp01((outerR - dist) / 2f);
+
+                    byte a = (byte)Mathf.RoundToInt(shade * edgeFade * 255f);
                     pixels[y * size + x] = new Color32(255, 255, 255, a);
                 }
             }
             tex.SetPixels32(pixels);
             tex.Apply();
-            _sonarRingTex = tex;
+            _sonarSweepTex = tex;
             return tex;
         }
 
