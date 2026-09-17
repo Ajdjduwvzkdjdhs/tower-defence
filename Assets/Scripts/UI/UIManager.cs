@@ -23,7 +23,7 @@ namespace KakigoriTD.UI
         [SerializeField] private float _comboPopupRisePx = 50f;
         [Tooltip("コンボポップアップの基準フォントサイズ（通常撃破・撃破位置に表示）。")]
         [SerializeField] private int _comboPopupFontSize = 44;
-        [Tooltip("節目（10コンボ毎）ポップアップのフォントサイズ（画面中央に表示）。")]
+        [Tooltip("節目ポップアップのフォントサイズ（画面中央に表示）。")]
         [SerializeField] private int _comboMilestoneFontSize = 90;
         [Tooltip("出現直後に拡大→収束させるポップ演出の秒数。")]
         [SerializeField] private float _comboPopupPopDurationSec = 0.12f;
@@ -42,17 +42,23 @@ namespace KakigoriTD.UI
         private StageResult _result;
 
         // コンボポップアップ（敵の撃破位置に一瞬表示。GameManager.OnEnemyKilled が都度追加）。
-        // 10コンボ毎の節目だけは撃破位置ではなく画面中央に大きく表示する（IsMilestone）。
+        // _comboMilestoneInterval コンボごとの節目だけは撃破位置ではなく画面中央に大きく表示する（IsMilestone）。
         private struct ComboPopup { public Vector3 WorldPos; public int Combo; public float StartTime; public bool IsMilestone; }
         private readonly List<ComboPopup> _comboPopups = new List<ComboPopup>();
 
+        // UIManager は GameManager が実行時に AddComponent で生成する（ADR-5）ため、
+        // このコンポーネント自体に [SerializeField] を置いても Play せずに調整できない。
+        // Play せずに現場調整できるよう、値は GameManager 側の SerializeField から Configure で受け取る。
+        private int _comboMilestoneInterval = 10;
+
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
-        public void Configure(Fort fort)
+        public void Configure(Fort fort, int comboMilestoneInterval)
         {
             _fort = fort;
             _hp = fort.CurrentHp;
             _maxHp = fort.MaxHp;
             fort.OnHpChanged += OnHpChanged;
+            _comboMilestoneInterval = Mathf.Max(1, comboMilestoneInterval);
         }
 
         private void OnHpChanged(int current, int max)
@@ -79,7 +85,7 @@ namespace KakigoriTD.UI
 
         /// <summary>
         /// 敵を撃破した位置にコンボ数を一瞬表示する。GameManager.OnEnemyKilled がコンボ 2 以上のときだけ呼ぶ。
-        /// 10コンボ毎の節目（10, 20, 30…）は撃破位置ではなく画面中央に大きく表示する。
+        /// <see cref="_comboMilestoneInterval"/> コンボごとの節目は撃破位置ではなく画面中央に大きく表示する。
         /// </summary>
         public void ShowComboPopup(Vector3 worldPos, int combo)
         {
@@ -88,7 +94,7 @@ namespace KakigoriTD.UI
                 WorldPos = worldPos,
                 Combo = combo,
                 StartTime = Time.time,
-                IsMilestone = combo % 10 == 0,
+                IsMilestone = combo % _comboMilestoneInterval == 0,
             });
         }
 
@@ -223,8 +229,8 @@ namespace KakigoriTD.UI
                 ? Mathf.Lerp(1.6f, 1f, age / _comboPopupPopDurationSec)
                 : 1f;
 
-            // 10コンボごとに階層が上がり、フォントも色も豪華になっていく（節目の中央大表示とは別に、通常表示側でも変化させる）。
-            int tier = Mathf.Min(popup.Combo / 10, ComboPopupMaxTier);
+            // _comboMilestoneInterval コンボごとに階層が上がり、フォントも色も豪華になっていく（節目の中央大表示とは別に、通常表示側でも変化させる）。
+            int tier = Mathf.Min(popup.Combo / _comboMilestoneInterval, ComboPopupMaxTier);
             int tieredFontSize = _comboPopupFontSize + tier * 6;
 
             var style = new GUIStyle(GUI.skin.label)

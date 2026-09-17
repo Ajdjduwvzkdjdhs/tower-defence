@@ -59,6 +59,9 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private float _resultLimit = 3f;
         [Tooltip("砦 HP 0 になってから GameOverScene へ移るまでの秒数。")]
         [SerializeField] private float _gameOverLimit = 1f;
+        [Tooltip("何コンボごとに「節目」（画面中央の虹色表示＋通常ポップアップの色/サイズ変化）とするか。"
+               + "現場での撃破ペースが読めないため、Play せずここで調整できるようにしてある。")]
+        [SerializeField] private int _comboMilestoneInterval = 10;
         private Fort _fort;
         private ProjectileFactory _projectileFactory;
         private EnemyField _field;
@@ -117,7 +120,7 @@ namespace KakigoriTD.Bootstrap
             _spawnDirector.Configure(_field, _progress);
 
             _ui = NewChild("UIManager").AddComponent<UIManager>();
-            _ui.Configure(_fort);
+            _ui.Configure(_fort, _comboMilestoneInterval);
 
             // オーディオは購読対象（Fort/Factory/EnemyField）が揃った後に配線（ADR-26）。
             BuildAudio();
