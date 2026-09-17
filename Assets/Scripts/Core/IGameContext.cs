@@ -39,5 +39,7 @@ namespace KakigoriTD.Core
 
         /// <summary>リザルトを表示する。</summary>
         void ShowResult(StageResult result);
+        void ShowCountdownStep(string text, bool isFinal);
+        void ClearCountdown();
     }
 }

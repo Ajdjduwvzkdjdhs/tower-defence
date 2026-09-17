@@ -137,8 +137,8 @@ namespace KakigoriTD.Bootstrap
             bool IsClearKey = UnityEngine.InputSystem.Keyboard.current.leftShiftKey.wasPressedThisFrame;
             bool IsGameOverKey = UnityEngine.InputSystem.Keyboard.current.rightShiftKey.wasPressedThisFrame;
 
-            if(IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
-            else if(IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
+            if (IsClearKey) UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+            else if (IsGameOverKey) UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
 
             UpdateBattleSystems();
             UpdateStatusUI();
@@ -178,6 +178,17 @@ namespace KakigoriTD.Bootstrap
         public bool IsFortDestroyed => _fort.IsDestroyed;
         public bool IsStartRequested => _input.ConfirmPressed;
         public bool IsRetryRequested => _input.ConfirmPressed;
+        /// <summary>カウントダウンの1ステップ（"3"/"2"/"1"/"スタート！"）を表示し、対応するSEを鳴らす。
+        /// 3.2.1 は共通SE、スタートのみ専用SE（isFinal で判別）。</summary>
+        public void ShowCountdownStep(string text, bool isFinal)
+        {
+            _ui.SetCountdown(text, isFinal);
+            if (isFinal) _audio?.PlayCountdownGo();
+            else _audio?.PlayCountdownBeep();
+        }
+
+        /// <summary>カウントダウン表示を消す（CountdownState.Exit で呼ばれる）。</summary>
+        public void ClearCountdown() => _ui.ClearCountdown();
 
         /// <summary>戦闘開始（初回 / リトライ）。砦HP・進捗・コンボ・ゲージ・残敵をリセットする。</summary>
         public void BeginBattle()
@@ -446,6 +457,11 @@ namespace KakigoriTD.Bootstrap
                 _ui.ClearBanner();
                 _ui.SetStatus("かき氷タワーディフェンス — [Enter] で開始");
                 _ui.SetBattleStats(0, _progress.Target, 0, 0f, 0f);
+            }
+            else if (cur is CountdownState)
+            {
+                // バナー相当の表示は ShowCountdownStep（IGameContext経由）で都度セット済みなのでここでは触らない。
+                _ui.SetStatus("");
             }
             else if (cur is BattleState)
             {

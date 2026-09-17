@@ -1,7 +1,7 @@
 namespace KakigoriTD.Core
 {
     /// <summary>
-    /// タイトル状態。開始入力で戦闘へ遷移する（ADR-30 で Wave 導入を廃止）。純ロジック（ADR-8）。
+    /// タイトル状態。開始入力でカウントダウンへ遷移する（ADR-30 で Wave 導入を廃止）。純ロジック（ADR-8）。
     /// </summary>
     public class TitleState : IGameState
     {
@@ -19,7 +19,7 @@ namespace KakigoriTD.Core
         public void Tick(float deltaTime)
         {
             if (_ctx.IsStartRequested)
-                _machine.Change(new BattleState(_machine, _ctx));
+                _machine.Change(new CountdownState(_machine, _ctx));
         }
 
         public void Exit() { }

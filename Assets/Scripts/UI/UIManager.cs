@@ -26,6 +26,12 @@ namespace KakigoriTD.UI
         private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
         private StageResult _result;
+        // 開始前カウントダウン（"3"/"2"/"1"/"スタート！"）。プロジェクター投影を想定し、
+        // 画面全体を暗転させたうえで超大型・黒縁取り文字を出す（CountdownState が都度 SetCountdown で更新）。
+        private string _countdownText = "";
+        private bool _countdownIsFinal;
+        private float _countdownSetAt = -999f;
+        private const float CountdownPopInSec = 0.15f; // 出現直後にひと回り大きく→縮むポップイン演出の時間
 
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
         public void Configure(Fort fort)
@@ -47,6 +53,21 @@ namespace KakigoriTD.UI
             if (_fort != null) _fort.OnHpChanged -= OnHpChanged; // 購読解除（ADR-3）
         }
 
+
+        /// <summary>
+        /// カウントダウンの1ステップを表示する（"3"/"2"/"1"/"スタート！"）。呼ばれるたびにポップイン
+        /// アニメーションを頭から再生する。<paramref name="isFinal"/> は「スタート！」のみ true
+        /// （色・サイズを変えて強調する）。
+        /// </summary>
+        public void SetCountdown(string text, bool isFinal)
+        {
+            _countdownText = text;
+            _countdownIsFinal = isFinal;
+            _countdownSetAt = Time.time;
+        }
+
+        /// <summary>カウントダウン表示を消す（Battle開始時）。</summary>
+        public void ClearCountdown() => _countdownText = "";
         /// <summary>
         /// 戦闘中の集計を更新する（ADR-30）。GameManager が毎フレーム呼ぶ。
         /// </summary>
@@ -162,9 +183,48 @@ namespace KakigoriTD.UI
                 GUI.Label(new Rect(box.x, box.y + 112, box.width, 28), "[Enter] で再挑戦");
                 GUI.skin.label.alignment = prev;
             }
+            DrawCountdown();
         }
 
-        // 背景（薄暗い）＋ 充填（color）の横バー。
+        private void DrawCountdown()
+        {
+            if (string.IsNullOrEmpty(_countdownText)) return;
+
+            // 画面全体を軽く暗転。数字/文字そのものではなく「今が特別な瞬間」であることを伝える。
+            GUI.color = new Color(0f, 0f, 0f, 0.35f);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            float t = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownPopInSec);
+            float pop = 1f + 0.4f * (1f - t); // 出現時1.4倍 → 0.15秒で1.0倍まで縮む
+
+            int baseSize = _countdownIsFinal ? 190 : 240; // 「スタート！」は文字数が多い分ベースを少し小さく
+            int fontSize = Mathf.RoundToInt(baseSize * pop);
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fontSize,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
+
+            float h = fontSize * 1.6f;
+            var rect = new Rect(0f, Screen.height * 0.5f - h * 0.5f, Screen.width, h);
+
+            Color fill = _countdownIsFinal ? new Color(1f, 0.85f, 0.15f) : Color.white;
+
+            // 縁取り（黒）: 4方向にオフセットして描画するIMGUI定番の疑似アウトライン。
+            style.normal.textColor = Color.black;
+            const float o = 4f;
+            GUI.Label(new Rect(rect.x - o, rect.y, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x + o, rect.y, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x, rect.y - o, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x, rect.y + o, rect.width, rect.height), _countdownText, style);
+
+            // 塗り（本体）。
+            style.normal.textColor = fill;
+            GUI.Label(rect, _countdownText, style);
+        }
         private static void Bar(Rect rect, float fill01, Color color)
         {
             if (fill01 < 0f) fill01 = 0f; else if (fill01 > 1f) fill01 = 1f;
