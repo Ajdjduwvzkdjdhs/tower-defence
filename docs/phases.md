@@ -415,7 +415,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ---
 
-## Phase 8 — ゲーム性刷新（単一ステージの「目標撃破数レース」）　【🟡 実装済み／Unity 検証は未実施】
+## Phase 8 — ゲーム性刷新（単一ステージの「目標撃破数レース」）　【🟡 実装済み／Editor で EditMode 192 本緑・Play 検証は連鎖・ビーム・雪崩・敗北遷移まで（ADR-31）】
 
 3Wave 制のジレンマ型から、**大勢の敵を倒す爽快感**を主役にしたゲーム性へ差し替える（ADR-30）。
 設計判断の根拠は `docs/architecture.md` ADR-30 を正とする。
@@ -436,7 +436,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 | スコア | `Scoring` → `StageResult`。クリア＝クリアタイム ／ 失敗＝到達撃破数。砦HP は生存リソースに純化 |
 | 新しい敵 | `BombTrooper`（爆発・誘爆連鎖）／ `ShieldTrooper`（雪玉N発・爆発なら一撃） |
 | 新しい集計 | `KillProgress` / `ComboTracker` / `SpecialGauge` / `KillSource` / `ExplosionChain`（すべて Core・UnityEngine 非依存） |
-| 必殺技 | `BeamCannon`。ゲージMAXで自動発動 → 全方位一掃。撃破数には算入、ゲージには非算入、コンボは中立 |
+| 必殺技 | `SpecialAttackController`（旧 `BeamCannon`）。ゲージMAXで自動発動 → 砲出現→光線一周→衝撃波の瞬間に全方位一掃（ADR-31）。撃破数には算入、ゲージには非算入、コンボは中立 |
 | 難易度 | 撃破数の進捗に対する爆発兵率・盾兵率のカーブのみ。湧きレートは固定 |
 | 削除 | `EnemyMatrix` / `IceStock` / `PenaltyTally` / `Scoring` / `AllyNPC` / `DisguisedEnemy` / `WaveConfigSO` と対応テスト |
 | シーン | 結果を `GameResultHolder` で受け渡し、クリア→`ResultScene` / 失敗→`GameOverScene` |
@@ -457,7 +457,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 
 ### 未整備
 
-- [ ] 爆発・ビームの正式 VFX（現状はプレースホルダ。差し替え箇所は `ExplosionRing.cs` ＋ `GameManager.CreateExplosionRing()` の 2 箇所）
+- [x] 爆発・ビームの正式 VFX（2026-09-17 `main` の `ExplosionTelegraph` / `BeamCannon.prefab`＋`BeamSweepVfx`＋衝撃波 / `AvalancheSnowEffect` を接続。ADR-31）
 - [ ] 盾兵の残り耐久表示（現状は per-instance MPB で暗くするだけ。ヒビ・欠け等への差し替え）
 - [ ] クリアタイムのランキング保存（現状は 1 プレイ分を表示するのみ）
 
