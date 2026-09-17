@@ -1,0 +1,1275 @@
+Last login: Wed Sep 16 12:07:56 on ttys000
+
+x24018@x24018nonotobukkukonpyuta ~ % cd /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker3
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker3 % uv run python valley_tracker.py
+[serial] auto-detect: /dev/tty.usbserial-0001, /dev/tty.usbserial-4, /dev/tty.usbserial-5
+[LiDAR1] /dev/tty.usbserial-0001 を開けません: LiDAR (/dev/tty.usbserial-0001) が応答しません。ポート・ボーレート（S1 は 256000）・給電を確認してください。
+         → この台を飛ばして続行します
+Scan Started  (/dev/tty.usbserial-4, standard)
+Scan Started  (/dev/tty.usbserial-5, standard)
+2/3 台で続行します（不参加: LiDAR1）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker3/out/position.txt
+scan: standard mode, 10.0 Hz, max 409 pts/rev
+circle: center (0, 400) mm, r 300 (+tol 10); intensity < 50, shaving hold 0.5s; representative = nearest_lidar
+Scan Stopped  (/dev/tty.usbserial-4)
+Scan Stopped  (/dev/tty.usbserial-5)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker3 % cd /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run python tracker1p3.py
+[2026-09-16 12:22:36][info] SDK initializing
+[2026-09-16 12:22:36][info] SDK has been initialized
+[2026-09-16 12:22:36][info] SDK Version: 1.2.20
+[2026-09-16 12:22:36][info] Connect elapsed time 16 ms
+[2026-09-16 12:22:36][info] Lidar successfully connected [/dev/tty.usbserial-5:230400]
+[2026-09-16 12:22:37][error] Error, cannot retrieve Lidar health code -2
+[2026-09-16 12:22:38][error] Fail to get baseplate device information!
+[2026-09-16 12:22:38][info] Check status, Elapsed time 2526 ms
+[2026-09-16 12:22:38][info] Lidar init success, elapsed time [2542]ms
+[2026-09-16 12:22:44][error] Failed to start the lidar
+[TMini-A] /dev/tty.usbserial-5 を開けません: LiDAR (/dev/tty.usbserial-5) のスキャンを開始できません: Unknown error
+         → この台を飛ばして続行します
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) が応答しません。ポート・ボーレート（S1 は 256000）・給電を確認してください。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+T-mini・S1 ともに有効な入力がありません。
+  config.toml の [[tmini.units]]: 1 台設定
+  config.toml の [[s1.pairs]]   : 1 ペア設定
+  ケーブル・補助5V・ポート名を確認してください（S1 はペアの両方が開けないとそのペアごと無効です）。
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run python tracker1p3.py
+[2026-09-16 12:30:08][info] SDK initializing
+[2026-09-16 12:30:08][info] SDK has been initialized
+[2026-09-16 12:30:08][info] SDK Version: 1.2.20
+[2026-09-16 12:30:08][info] Connect elapsed time 16 ms
+[2026-09-16 12:30:08][info] Lidar successfully connected [/dev/tty.usbserial-5:230400]
+[2026-09-16 12:30:09][error] Error, cannot retrieve Lidar health code -2
+[2026-09-16 12:30:10][error] Fail to get baseplate device information!
+[2026-09-16 12:30:10][info] Check status, Elapsed time 2524 ms
+[2026-09-16 12:30:10][info] Lidar init success, elapsed time [2541]ms
+[2026-09-16 12:30:16][error] Failed to start the lidar
+[TMini-A] /dev/tty.usbserial-5 を開けません: LiDAR (/dev/tty.usbserial-5) のスキャンを開始できません: Unknown error
+         → この台を飛ばして続行します
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) が応答しません。ポート・ボーレート（S1 は 256000）・給電を確認してください。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+T-mini・S1 ともに有効な入力がありません。
+  config.toml の [[tmini.units]]: 1 台設定
+  config.toml の [[s1.pairs]]   : 1 ペア設定
+  ケーブル・補助5V・ポート名を確認してください（S1 はペアの両方が開けないとそのペアごと無効です）。
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % cd /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker % uv run valley_tracker.py
+[2026-09-16 12:39:20][info] SDK initializing
+[2026-09-16 12:39:20][info] SDK has been initialized
+[2026-09-16 12:39:20][info] SDK Version: 1.2.20
+[2026-09-16 12:39:20][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 12:39:20][error] Error initializing in check connection.
+Traceback (most recent call last):
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 898, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 842, in main
+    start_units(units, stop_event)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 719, in start_units
+    unit.start(stop_event)
+    ~~~~~~~~~~^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 551, in start
+    self._lidar.start_scan()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/lidar.py", line 139, in start_scan
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+x24018@x24018nonotobukkukonpyuta lidar-tracker % uv run valley_tracker.py
+[2026-09-16 12:39:41][info] SDK initializing
+[2026-09-16 12:39:41][info] SDK has been initialized
+[2026-09-16 12:39:41][info] SDK Version: 1.2.20
+[2026-09-16 12:39:41][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 12:39:41][error] Error initializing in check connection.
+Traceback (most recent call last):
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 898, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 842, in main
+    start_units(units, stop_event)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 719, in start_units
+    unit.start(stop_event)
+    ~~~~~~~~~~^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 551, in start
+    self._lidar.start_scan()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/lidar.py", line 139, in start_scan
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker % uv run valley_tracker.py
+[2026-09-16 12:43:38][info] SDK initializing
+[2026-09-16 12:43:38][info] SDK has been initialized
+[2026-09-16 12:43:38][info] SDK Version: 1.2.20
+[2026-09-16 12:43:38][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 12:43:38][error] Error initializing in check connection.
+Traceback (most recent call last):
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 898, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 842, in main
+    start_units(units, stop_event)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 719, in start_units
+    unit.start(stop_event)
+    ~~~~~~~~~~^^^^^^^^^^^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/valley_tracker.py", line 551, in start
+    self._lidar.start_scan()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/lidar.py", line 139, in start_scan
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker % uv run valley_tracker.py
+[2026-09-16 12:44:44][info] SDK initializing
+[2026-09-16 12:44:44][info] SDK has been initialized
+[2026-09-16 12:44:44][info] SDK Version: 1.2.20
+[2026-09-16 12:44:44][info] Connect elapsed time 15 ms
+[2026-09-16 12:44:44][info] Lidar successfully connected [/dev/tty.usbserial-0001:230400]
+[2026-09-16 12:44:45][info] Lidar running correctly! The health status good
+[2026-09-16 12:44:45][info] Current Lidar Model Code 150
+[2026-09-16 12:44:45][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 12:44:45][info] Current scan frequency: 6.00Hz
+[2026-09-16 12:44:45][info] Current scan frequency: 12.00Hz
+[2026-09-16 12:44:45][info] Check status, Elapsed time 557 ms
+[2026-09-16 12:44:45][info] Lidar init success, elapsed time [572]ms
+[2026-09-16 12:44:47][info] [YDLIDAR] Create thread 0x6FAA7000
+[2026-09-16 12:44:47][info] Successed to start the lidar, elapsed time 2886 ms
+[2026-09-16 12:44:47][info] Scan Frequency: 12.00Hz
+[2026-09-16 12:44:47][info] Fixed Size: 358
+[2026-09-16 12:44:47][info] Sample Rate: 4.00K
+[2026-09-16 12:44:47][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 12:44:47][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0001)
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/out/position.txt
+circle: center (0, 600) mm, r 300 (+tol 100); intensity < 100, shaving hold 1.5s
+camera: 未使用（config.toml の [camera] rotation_file 未設定） — 削りは shaving_hold 1.5s の盲目ホールドのみ
+[2026-09-16 12:44:52][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0001)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker % uv run valley_tracker.py
+[2026-09-16 12:44:59][info] SDK initializing
+[2026-09-16 12:44:59][info] SDK has been initialized
+[2026-09-16 12:44:59][info] SDK Version: 1.2.20
+[2026-09-16 12:44:59][info] Connect elapsed time 16 ms
+[2026-09-16 12:44:59][info] Lidar successfully connected [/dev/tty.usbserial-0001:230400]
+[2026-09-16 12:44:59][info] Lidar running correctly! The health status bad
+[2026-09-16 12:44:59][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 12:44:59][info] Current Lidar Model Code 150
+[2026-09-16 12:44:59][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 12:44:59][info] Current scan frequency: 12.00Hz
+[2026-09-16 12:44:59][info] Current scan frequency: 12.00Hz
+[2026-09-16 12:44:59][info] Check status, Elapsed time 540 ms
+[2026-09-16 12:44:59][info] Lidar init success, elapsed time [556]ms
+[2026-09-16 12:45:02][info] [YDLIDAR] Create thread 0x6B30B000
+[2026-09-16 12:45:02][info] Successed to start the lidar, elapsed time 2868 ms
+[2026-09-16 12:45:02][info] Scan Frequency: 12.00Hz
+[2026-09-16 12:45:02][info] Fixed Size: 358
+[2026-09-16 12:45:02][info] Sample Rate: 4.00K
+[2026-09-16 12:45:02][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 12:45:02][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0001)
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker/out/position.txt
+circle: center (0, 600) mm, r 300 (+tol 100); intensity < 100, shaving hold 1.5s
+camera: 未使用（config.toml の [camera] rotation_file 未設定） — 削りは shaving_hold 1.5s の盲目ホールドのみ
+[2026-09-16 12:45:06][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0001)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker % cd /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:13:16][info] SDK initializing
+[2026-09-16 13:13:16][info] SDK has been initialized
+[2026-09-16 13:13:16][info] SDK Version: 1.2.20
+[2026-09-16 13:13:16][info] Connect elapsed time 70 ms
+[2026-09-16 13:13:16][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:13:17][info] Lidar running correctly! The health status bad
+[2026-09-16 13:13:17][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:13:17][info] Current Lidar Model Code 150
+[2026-09-16 13:13:17][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:13:17][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:13:17][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:13:17][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:13:17][info] Lidar init success, elapsed time [611]ms
+[2026-09-16 13:13:19][info] [YDLIDAR] Create thread 0x6BB53000
+[2026-09-16 13:13:20][info] Successed to start the lidar, elapsed time 3035 ms
+[2026-09-16 13:13:20][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:13:20][info] Fixed Size: 430
+[2026-09-16 13:13:20][info] Sample Rate: 4.00K
+[2026-09-16 13:13:20][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:13:20][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:13:20][info] SDK initializing
+[2026-09-16 13:13:20][info] SDK has been initialized
+[2026-09-16 13:13:20][info] SDK Version: 1.2.20
+[TMini-A] avg -> ( -262.2,    30.4) mm  (1 pts)
+[TMini-A] avg -> ( -257.2,    30.3) mm  (2 pts)
+[2026-09-16 13:13:20][info] Connect elapsed time 42 ms
+[2026-09-16 13:13:20][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> ( -257.2,    30.3) mm  (1 pts)
+＜中略＞
+[TMini-A] avg -> ( -164.2,   -23.9) mm  (2 pts)
+[2026-09-16 13:13:20][info] Lidar running correctly! The health status bad
+[2026-09-16 13:13:20][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:13:20][info] Current Lidar Model Code 150
+[2026-09-16 13:13:20][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:13:20][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:13:20][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:13:20][info] Check status, Elapsed time 539 ms
+[2026-09-16 13:13:20][info] Lidar init success, elapsed time [581]ms
+[TMini-A] avg -> ( -221.7,    -2.6) mm  (4 pts)
+＜中略＞
+[TMini-A] avg -> ( -172.5,   -24.4) mm  (2 pts)
+[2026-09-16 13:13:23][info] [YDLIDAR] Create thread 0x6CBEB000
+[TMini-A] avg -> ( -244.8,    28.7) mm  (2 pts)
+＜中略＞
+[TMini-A] avg -> ( -174.2,   -28.3) mm  (2 pts)
+[2026-09-16 13:13:23][info] Successed to start the lidar, elapsed time 3034 ms
+[2026-09-16 13:13:23][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:13:23][info] Fixed Size: 430
+[2026-09-16 13:13:23][info] Sample Rate: 4.00K
+[2026-09-16 13:13:23][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:13:23][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-A] avg -> ( -262.3,    29.8) mm  (1 pts)
+[TMini-B] avg -> (   24.5,   118.2) mm  (67 pts)
+＜中略＞
+[TMini-A] avg -> ( -179.2,   -27.2) mm  (2 pts)
+[TMini-B] avg -> (   20.6,   119.0) mm  (70 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-A] avg -> ( -243.5,    27.5) mm  (1 pts)
+[TMini-B] avg -> (   30.3,   121.4) mm  (70 pts)
+＜中略＞
+[TMini-A] avg -> ( -176.1,   -26.3) mm  (2 pts)
+[TMini-B] avg -> (   21.9,   121.2) mm  (74 pts)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[TMini-A] avg -> ( -266.2,    31.2) mm  (2 pts)
+[TMini-B] avg -> (   18.9,   119.2) mm  (75 pts)
+[TMini-B] avg -> (   30.1,   121.9) mm  (74 pts)
+[TMini-A] avg -> ( -197.2,    -0.0) mm  (3 pts)
+[TMini-B] avg -> (   20.0,   115.4) mm  (74 pts)
+[TMini-A] avg -> ( -159.6,   -20.8) mm  (2 pts)
+[TMini-A] avg -> ( -268.1,    31.7) mm  (2 pts)
+[TMini-B] avg -> (   14.2,   108.5) mm  (67 pts)
+[S1-A.b] avg -> (  -54.1,   569.4) mm  (70 pts)
+[TMini-A] avg -> ( -253.7,    30.0) mm  (2 pts)
+[TMini-B] avg -> (   15.5,   113.2) mm  (76 pts)
+[S1-A.b] avg -> (  -27.0,   570.7) mm  (70 pts)
+[S1-A.a] avg -> ( -294.2,   568.3) mm  (2 pts)
+[S1-A.b] avg -> (   38.6,   312.7) mm  (101 pts)
+[S1-A.a] avg -> ( -169.0,   328.4) mm  (7 pts)
+＜中略＞
+[2026-09-16 13:13:59][error] [YDLIDAR]: -1 Operation timed out
+
+[S1-A.a] avg -> (   -7.3,   127.7) mm  (133 pts)
+[S1-A.b] avg -> (  146.9,   502.8) mm  (75 pts)
+[2026-09-16 13:13:59][error] [YDLIDAR]: -1 Operation timed out
+
+[2026-09-16 13:13:59][error] Timeout count: 2
+[2026-09-16 13:13:59][error] Timeout count: 2
+[S1-A.a] avg -> (  -14.4,   126.5) mm  (135 pts)
+[S1-A.b] avg -> (  166.6,   503.8) mm  (70 pts)
+[S1-A.a] avg -> (  -22.6,   134.2) mm  (131 pts)
+[S1-A.b] avg -> (  181.4,   485.5) mm  (66 pts)
+[S1-A.a] avg -> (  -28.5,   130.5) mm  (127 pts)
+[S1-A.b] avg -> (  207.2,   485.3) mm  (54 pts)
+[S1-A.a] avg -> (  -28.8,   130.0) mm  (118 pts)
+[S1-A.b] avg -> (  198.0,   510.2) mm  (59 pts)
+[TMini-A] avg -> (  -42.0,    43.8) mm  (48 pts)
+[S1-A.a] avg -> (  -53.9,   151.6) mm  (102 pts)
+[S1-A.b] avg -> (  203.1,   513.1) mm  (57 pts)
+[TMini-A] avg -> (  -37.7,    56.9) mm  (71 pts)
+[TMini-B] avg -> (    0.2,     9.4) mm  (239 pts)
+＜中略＞
+[2026-09-16 13:15:22][info] Lidar has stopped!
+[2026-09-16 13:15:22][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> (  -45.0,    94.9) mm  (50 pts)
+[S1-A.a] avg -> (  138.6,   497.0) mm  (50 pts)
+[S1-A.b] avg -> (  217.6,   423.7) mm  (61 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:15:23][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:15:49][info] SDK initializing
+[2026-09-16 13:15:49][info] SDK has been initialized
+[2026-09-16 13:15:49][info] SDK Version: 1.2.20
+[2026-09-16 13:15:49][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:15:49][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:15:49][info] SDK initializing
+[2026-09-16 13:15:49][info] SDK has been initialized
+[2026-09-16 13:15:49][info] SDK Version: 1.2.20
+[2026-09-16 13:15:49][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 13:15:49][error] Error initializing in check connection.
+[TMini-B] /dev/tty.usbserial-0002 を開けません: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+T-mini・S1 ともに有効な入力がありません。
+  config.toml の [[tmini.units]]: 2 台設定
+  config.toml の [[s1.pairs]]   : 1 ペア設定
+  ケーブル・補助5V・ポート名を確認してください（S1 はペアの両方が開けないとそのペアごと無効です）。
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:16:07][info] SDK initializing
+[2026-09-16 13:16:07][info] SDK has been initialized
+[2026-09-16 13:16:07][info] SDK Version: 1.2.20
+[2026-09-16 13:16:07][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:16:07][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:16:07][info] SDK initializing
+[2026-09-16 13:16:07][info] SDK has been initialized
+[2026-09-16 13:16:07][info] SDK Version: 1.2.20
+[2026-09-16 13:16:07][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 13:16:07][error] Error initializing in check connection.
+[TMini-B] /dev/tty.usbserial-0002 を開けません: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+T-mini・S1 ともに有効な入力がありません。
+  config.toml の [[tmini.units]]: 2 台設定
+  config.toml の [[s1.pairs]]   : 1 ペア設定
+  ケーブル・補助5V・ポート名を確認してください（S1 はペアの両方が開けないとそのペアごと無効です）。
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:21:59][info] SDK initializing
+[2026-09-16 13:21:59][info] SDK has been initialized
+[2026-09-16 13:21:59][info] SDK Version: 1.2.20
+[2026-09-16 13:21:59][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:21:59][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:21:59][info] SDK initializing
+[2026-09-16 13:21:59][info] SDK has been initialized
+[2026-09-16 13:21:59][info] SDK Version: 1.2.20
+[2026-09-16 13:21:59][info] Connect elapsed time 46 ms
+[2026-09-16 13:21:59][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[2026-09-16 13:22:00][info] Lidar running correctly! The health status good
+[2026-09-16 13:22:00][info] Current Lidar Model Code 150
+[2026-09-16 13:22:00][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:22:00][info] Current scan frequency: 6.00Hz
+[2026-09-16 13:22:00][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:22:00][info] Check status, Elapsed time 553 ms
+[2026-09-16 13:22:00][info] Lidar init success, elapsed time [599]ms
+[2026-09-16 13:22:03][info] [YDLIDAR] Create thread 0x6DD3B000
+[2026-09-16 13:22:03][info] Successed to start the lidar, elapsed time 3589 ms
+[2026-09-16 13:22:03][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:22:03][info] Fixed Size: 430
+[2026-09-16 13:22:03][info] Sample Rate: 4.00K
+[2026-09-16 13:22:03][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:22:03][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> ( -111.5,   129.6) mm  (46 pts)
+[TMini-B] avg -> ( -101.9,   135.9) mm  (43 pts)
+[TMini-B] avg -> ( -116.8,   129.1) mm  (48 pts)
+[TMini-B] avg -> ( -102.1,   121.1) mm  (43 pts)
+[TMini-B] avg -> ( -103.3,   132.7) mm  (44 pts)
+[TMini-B] avg -> ( -112.8,   135.9) mm  (46 pts)
+[TMini-B] avg -> (  -99.0,   130.5) mm  (43 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-B] avg -> (  -95.2,   128.2) mm  (42 pts)
+[S1-A] /dev/tty.usbserial-4（S1-A.b）を開けません: LiDAR (/dev/tty.usbserial-4) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+Scan Stopped  (/dev/tty.usbserial-0001)
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 1/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> ( -103.4,   137.0) mm  (42 pts)
+＜中略＞
+[TMini-B] avg -> (  -74.7,   127.4) mm  (48 pts)
+[2026-09-16 13:22:53][info] Lidar has stopped!
+[2026-09-16 13:22:53][error] [YDLIDAR]: 0 No error
+
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:22:55][info] SDK initializing
+[2026-09-16 13:22:55][info] SDK has been initialized
+[2026-09-16 13:22:55][info] SDK Version: 1.2.20
+[2026-09-16 13:22:55][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:22:55][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:22:55][info] SDK initializing
+[2026-09-16 13:22:55][info] SDK has been initialized
+[2026-09-16 13:22:55][info] SDK Version: 1.2.20
+[2026-09-16 13:22:55][info] Connect elapsed time 44 ms
+[2026-09-16 13:22:55][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[2026-09-16 13:22:56][info] Lidar running correctly! The health status bad
+[2026-09-16 13:22:56][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:22:56][info] Current Lidar Model Code 150
+[2026-09-16 13:22:56][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:22:56][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:22:56][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:22:56][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:22:56][info] Lidar init success, elapsed time [585]ms
+[2026-09-16 13:22:59][info] [YDLIDAR] Create thread 0x6DDC3000
+[2026-09-16 13:22:59][info] Successed to start the lidar, elapsed time 3580 ms
+[2026-09-16 13:22:59][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:22:59][info] Fixed Size: 430
+[2026-09-16 13:22:59][info] Sample Rate: 4.00K
+[2026-09-16 13:22:59][info] Successed to check the lidar, elapsed time 2 ms
+[2026-09-16 13:22:59][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -89.3,   128.3) mm  (50 pts)
+＜中略＞
+[TMini-B] avg -> (  -83.7,   125.9) mm  (51 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-B] avg -> (  -78.0,   123.6) mm  (50 pts)
+[S1-A] /dev/tty.usbserial-4（S1-A.b）を開けません: LiDAR (/dev/tty.usbserial-4) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+Scan Stopped  (/dev/tty.usbserial-0001)
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 1/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> (  -81.7,   133.0) mm  (52 pts)
+＜中略＞
+[2026-09-16 13:23:28][info] Lidar has stopped!
+[2026-09-16 13:23:28][error] [YDLIDAR]: 0 No error
+
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:23:39][info] SDK initializing
+[2026-09-16 13:23:39][info] SDK has been initialized
+[2026-09-16 13:23:39][info] SDK Version: 1.2.20
+[2026-09-16 13:23:39][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:23:39][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:23:39][info] SDK initializing
+[2026-09-16 13:23:39][info] SDK has been initialized
+[2026-09-16 13:23:39][info] SDK Version: 1.2.20
+[2026-09-16 13:23:39][info] Connect elapsed time 48 ms
+[2026-09-16 13:23:39][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[2026-09-16 13:23:40][info] Lidar running correctly! The health status good
+[2026-09-16 13:23:40][info] Current Lidar Model Code 150
+[2026-09-16 13:23:40][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:23:40][info] Current scan frequency: 6.00Hz
+[2026-09-16 13:23:40][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:23:40][info] Check status, Elapsed time 552 ms
+[2026-09-16 13:23:40][info] Lidar init success, elapsed time [600]ms
+[2026-09-16 13:23:43][info] [YDLIDAR] Create thread 0x6BBCB000
+[2026-09-16 13:23:43][info] Successed to start the lidar, elapsed time 3583 ms
+[2026-09-16 13:23:43][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:23:43][info] Fixed Size: 430
+[2026-09-16 13:23:43][info] Sample Rate: 4.00K
+[2026-09-16 13:23:43][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:23:43][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> ( -101.0,   180.0) mm  (46 pts)
+＜中略＞
+[TMini-B] avg -> (  -89.3,   163.8) mm  (45 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-B] avg -> (  -87.4,   161.9) mm  (48 pts)
+＜中略＞
+[TMini-B] avg -> (  -94.8,   180.7) mm  (48 pts)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 1/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> (  -96.6,   178.0) mm  (47 pts)
+＜中略＞
+[TMini-B] avg -> ( -122.2,   192.1) mm  (38 pts)
+[S1-A.a] avg -> (   55.3,   374.2) mm  (74 pts)
+[TMini-B] avg -> (  -97.6,   161.6) mm  (42 pts)
+[S1-A.a] avg -> (   37.6,   368.8) mm  (71 pts)
+＜中略＞
+[TMini-B] avg -> ( -102.9,   161.2) mm  (63 pts)
+[S1-A.b] avg -> (  131.7,   459.9) mm  (50 pts)
+[S1-A.a] avg -> (  -90.5,   220.9) mm  (102 pts)
+[2026-09-16 13:24:23][info] Lidar has stopped!
+[TMini-B] avg -> ( -100.8,   163.4) mm  (62 pts)
+[S1-A.b] avg -> (  133.3,   456.4) mm  (50 pts)
+[S1-A.a] avg -> (  -85.4,   221.7) mm  (100 pts)
+Scan Stopped  (/dev/tty.usbserial-0002)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:24:38][info] SDK initializing
+[2026-09-16 13:24:38][info] SDK has been initialized
+[2026-09-16 13:24:38][info] SDK Version: 1.2.20
+[2026-09-16 13:24:38][info] Connect elapsed time 44 ms
+[2026-09-16 13:24:38][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:24:38][info] Lidar running correctly! The health status good
+[2026-09-16 13:24:38][info] Current Lidar Model Code 150
+[2026-09-16 13:24:38][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:24:38][info] Current scan frequency: 6.00Hz
+[2026-09-16 13:24:38][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:24:38][info] Check status, Elapsed time 553 ms
+[2026-09-16 13:24:38][info] Lidar init success, elapsed time [597]ms
+[2026-09-16 13:24:41][info] [YDLIDAR] Create thread 0x6D9EF000
+[2026-09-16 13:24:42][info] Successed to start the lidar, elapsed time 3587 ms
+[2026-09-16 13:24:42][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:24:42][info] Fixed Size: 430
+[2026-09-16 13:24:42][info] Sample Rate: 4.00K
+[2026-09-16 13:24:42][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:24:42][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:24:42][info] SDK initializing
+[2026-09-16 13:24:42][info] SDK has been initialized
+[2026-09-16 13:24:42][info] SDK Version: 1.2.20
+[TMini-A] avg -> (  -69.6,   129.1) mm  (76 pts)
+[2026-09-16 13:24:42][info] Connect elapsed time 38 ms
+[2026-09-16 13:24:42][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> (  -65.4,   120.3) mm  (78 pts)
+＜中略＞
+[TMini-A] avg -> (  -63.7,   131.7) mm  (73 pts)
+[2026-09-16 13:24:43][info] Lidar running correctly! The health status bad
+[2026-09-16 13:24:43][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:24:43][info] Current Lidar Model Code 150
+[2026-09-16 13:24:43][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:24:43][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:24:43][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:24:43][info] Check status, Elapsed time 539 ms
+[2026-09-16 13:24:43][info] Lidar init success, elapsed time [578]ms
+[TMini-A] avg -> (  -67.2,   129.0) mm  (75 pts)
+＜中略＞
+[TMini-A] avg -> (  -73.3,   131.6) mm  (82 pts)
+[2026-09-16 13:24:45][info] [YDLIDAR] Create thread 0x6EA87000
+[TMini-A] avg -> (  -78.3,   129.8) mm  (87 pts)
+＜中略＞
+[TMini-A] avg -> (  -73.8,   123.9) mm  (87 pts)
+[2026-09-16 13:24:45][info] Successed to start the lidar, elapsed time 2897 ms
+[2026-09-16 13:24:45][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:24:45][info] Fixed Size: 430
+[2026-09-16 13:24:45][info] Sample Rate: 4.00K
+[2026-09-16 13:24:45][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:24:45][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -17.4,    41.6) mm  (115 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-A] avg -> (  -72.5,   124.2) mm  (84 pts)
+[TMini-B] avg -> (  -18.2,    40.4) mm  (119 pts)
+＜中略＞
+[TMini-B] avg -> ( -106.6,   112.7) mm  (54 pts)
+[TMini-A] avg -> ( -180.2,    81.2) mm  (16 pts)
+[2026-09-16 13:26:00][info] Lidar has stopped!
+[2026-09-16 13:26:00][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> (  -96.0,   107.8) mm  (53 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:26:01][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:26:37][info] SDK initializing
+[2026-09-16 13:26:37][info] SDK has been initialized
+[2026-09-16 13:26:37][info] SDK Version: 1.2.20
+[2026-09-16 13:26:37][info] Connect elapsed time 48 ms
+[2026-09-16 13:26:37][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:26:38][info] Lidar running correctly! The health status good
+[2026-09-16 13:26:38][info] Current Lidar Model Code 150
+[2026-09-16 13:26:38][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:26:38][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:38][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:38][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:26:38][info] Lidar init success, elapsed time [589]ms
+[2026-09-16 13:26:40][info] [YDLIDAR] Create thread 0x6B40B000
+[2026-09-16 13:26:41][info] Successed to start the lidar, elapsed time 2874 ms
+[2026-09-16 13:26:41][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:26:41][info] Fixed Size: 430
+[2026-09-16 13:26:41][info] Sample Rate: 4.00K
+[2026-09-16 13:26:41][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:26:41][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:26:41][info] SDK initializing
+[2026-09-16 13:26:41][info] SDK has been initialized
+[2026-09-16 13:26:41][info] SDK Version: 1.2.20
+[TMini-A] avg -> (  -56.7,    67.6) mm  (106 pts)
+[2026-09-16 13:26:41][info] Connect elapsed time 36 ms
+[2026-09-16 13:26:41][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> (  -31.4,    36.0) mm  (101 pts)
+＜中略＞
+[TMini-A] avg -> (  -69.8,    80.3) mm  (89 pts)
+[2026-09-16 13:26:41][info] Lidar running correctly! The health status bad
+[2026-09-16 13:26:41][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:26:41][info] Current Lidar Model Code 150
+[2026-09-16 13:26:41][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:26:41][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:41][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:41][info] Check status, Elapsed time 539 ms
+[2026-09-16 13:26:41][info] Lidar init success, elapsed time [575]ms
+[TMini-A] avg -> (  -90.0,    92.1) mm  (89 pts)
+＜中略＞
+[TMini-A] avg -> ( -183.9,    93.6) mm  (12 pts)
+[2026-09-16 13:26:44][info] [YDLIDAR] Create thread 0x6C4A3000
+[TMini-A] avg -> ( -181.3,    94.9) mm  (10 pts)
+＜中略＞
+[TMini-A] avg -> ( -181.0,   120.5) mm  (9 pts)
+[2026-09-16 13:26:44][info] Successed to start the lidar, elapsed time 3015 ms
+[2026-09-16 13:26:44][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:26:44][info] Fixed Size: 430
+[2026-09-16 13:26:44][info] Sample Rate: 4.00K
+[2026-09-16 13:26:44][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:26:44][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> ( -122.3,   154.0) mm  (55 pts)
+[TMini-A] avg -> ( -178.8,    99.6) mm  (11 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> ( -119.6,   151.2) mm  (56 pts)
+[TMini-A] avg -> ( -212.4,   137.4) mm  (10 pts)
+＜中略＞
+[TMini-A] avg -> ( -167.8,   240.2) mm  (39 pts)
+[TMini-B] avg -> ( -119.7,   146.9) mm  (57 pts)
+[2026-09-16 13:26:52][info] Lidar has stopped!
+[2026-09-16 13:26:52][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> ( -121.3,   142.8) mm  (56 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:26:53][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:26:55][info] SDK initializing
+[2026-09-16 13:26:55][info] SDK has been initialized
+[2026-09-16 13:26:55][info] SDK Version: 1.2.20
+[2026-09-16 13:26:55][info] Connect elapsed time 44 ms
+[2026-09-16 13:26:55][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:26:56][info] Lidar running correctly! The health status bad
+[2026-09-16 13:26:56][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:26:56][info] Current Lidar Model Code 150
+[2026-09-16 13:26:56][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:26:56][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:56][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:56][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:26:56][info] Lidar init success, elapsed time [585]ms
+[2026-09-16 13:26:58][info] [YDLIDAR] Create thread 0x6F4CF000
+[2026-09-16 13:26:59][info] Successed to start the lidar, elapsed time 2868 ms
+[2026-09-16 13:26:59][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:26:59][info] Fixed Size: 430
+[2026-09-16 13:26:59][info] Sample Rate: 4.00K
+[2026-09-16 13:26:59][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:26:59][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:26:59][info] SDK initializing
+[2026-09-16 13:26:59][info] SDK has been initialized
+[2026-09-16 13:26:59][info] SDK Version: 1.2.20
+[TMini-A] avg -> ( -287.6,   241.8) mm  (25 pts)
+[2026-09-16 13:26:59][info] Connect elapsed time 36 ms
+[2026-09-16 13:26:59][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> ( -290.5,   243.6) mm  (26 pts)
+＜中略＞
+[TMini-A] avg -> ( -287.0,   250.2) mm  (25 pts)
+[2026-09-16 13:26:59][info] Lidar running correctly! The health status bad
+[2026-09-16 13:26:59][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:26:59][info] Current Lidar Model Code 150
+[2026-09-16 13:26:59][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:26:59][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:59][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:26:59][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:26:59][info] Lidar init success, elapsed time [577]ms
+[TMini-A] avg -> ( -278.1,   229.9) mm  (28 pts)
+＜中略＞
+[TMini-A] avg -> ( -280.2,   228.9) mm  (28 pts)
+[2026-09-16 13:27:02][info] [YDLIDAR] Create thread 0x70567000
+[TMini-A] avg -> ( -274.6,   226.3) mm  (28 pts)
+＜中略＞
+[TMini-A] avg -> ( -280.5,   233.3) mm  (28 pts)
+[2026-09-16 13:27:02][info] Successed to start the lidar, elapsed time 2937 ms
+[2026-09-16 13:27:02][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:27:02][info] Fixed Size: 430
+[2026-09-16 13:27:02][info] Sample Rate: 4.00K
+[2026-09-16 13:27:02][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:27:02][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> ( -143.3,   160.7) mm  (67 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-A] avg -> ( -288.4,   244.7) mm  (27 pts)
+[TMini-B] avg -> ( -150.1,   163.0) mm  (66 pts)
+＜中略＞
+[TMini-A] avg -> ( -168.0,   255.2) mm  (42 pts)
+[TMini-B] avg -> ( -115.4,   154.6) mm  (55 pts)
+[2026-09-16 13:27:19][info] Lidar has stopped!
+[2026-09-16 13:27:19][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> ( -109.6,   153.1) mm  (55 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:27:20][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:29:44][info] SDK initializing
+[2026-09-16 13:29:44][info] SDK has been initialized
+[2026-09-16 13:29:44][info] SDK Version: 1.2.20
+[2026-09-16 13:29:44][info] Connect elapsed time 46 ms
+[2026-09-16 13:29:44][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:29:44][info] Lidar running correctly! The health status bad
+[2026-09-16 13:29:44][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:29:44][info] Current Lidar Model Code 150
+[2026-09-16 13:29:44][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:29:44][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:29:44][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:29:44][info] Check status, Elapsed time 540 ms
+[2026-09-16 13:29:44][info] Lidar init success, elapsed time [586]ms
+[2026-09-16 13:29:47][info] [YDLIDAR] Create thread 0x6D4CB000
+[2026-09-16 13:29:47][info] Successed to start the lidar, elapsed time 2921 ms
+[2026-09-16 13:29:47][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:29:47][info] Fixed Size: 430
+[2026-09-16 13:29:47][info] Sample Rate: 4.00K
+[2026-09-16 13:29:47][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:29:47][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:29:47][info] SDK initializing
+[2026-09-16 13:29:47][info] SDK has been initialized
+[2026-09-16 13:29:47][info] SDK Version: 1.2.20
+[TMini-A] avg -> ( -131.0,   157.2) mm  (49 pts)
+[2026-09-16 13:29:47][info] Connect elapsed time 36 ms
+[2026-09-16 13:29:47][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> ( -176.8,   196.4) mm  (38 pts)
+＜中略＞
+[TMini-A] avg -> ( -218.3,   311.3) mm  (36 pts)
+[2026-09-16 13:29:48][info] Lidar running correctly! The health status bad
+[2026-09-16 13:29:48][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:29:48][info] Current Lidar Model Code 150
+[2026-09-16 13:29:48][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:29:48][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:29:48][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:29:48][info] Check status, Elapsed time 538 ms
+[2026-09-16 13:29:48][info] Lidar init success, elapsed time [574]ms
+[TMini-A] avg -> ( -196.6,   270.3) mm  (28 pts)
+＜中略＞
+[TMini-A] avg -> ( -220.6,   174.9) mm  (18 pts)
+[2026-09-16 13:29:50][info] [YDLIDAR] Create thread 0x6E563000
+[TMini-A] avg -> ( -216.4,   193.9) mm  (17 pts)
+＜中略＞
+[TMini-A] avg -> ( -219.5,   207.0) mm  (19 pts)
+[2026-09-16 13:29:51][info] Successed to start the lidar, elapsed time 2877 ms
+[2026-09-16 13:29:51][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:29:51][info] Fixed Size: 430
+[2026-09-16 13:29:51][info] Sample Rate: 4.00K
+[2026-09-16 13:29:51][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:29:51][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> ( -112.6,   111.0) mm  (58 pts)
+[TMini-A] avg -> ( -222.3,   199.9) mm  (15 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> ( -115.0,   114.7) mm  (57 pts)
+[TMini-A] avg -> ( -212.6,   192.7) mm  (20 pts)
+＜中略＞
+[TMini-A] avg -> (  -83.4,   167.5) mm  (37 pts)
+[TMini-B] avg -> ( -105.0,   105.4) mm  (54 pts)
+[2026-09-16 13:29:59][info] Lidar has stopped!
+[2026-09-16 13:29:59][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> ( -105.2,   107.1) mm  (57 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:30:00][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:30:10][info] SDK initializing
+[2026-09-16 13:30:10][info] SDK has been initialized
+[2026-09-16 13:30:10][info] SDK Version: 1.2.20
+[2026-09-16 13:30:10][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:30:10][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:30:10][info] SDK initializing
+[2026-09-16 13:30:10][info] SDK has been initialized
+[2026-09-16 13:30:10][info] SDK Version: 1.2.20
+[2026-09-16 13:30:10][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 13:30:10][error] Error initializing in check connection.
+[TMini-B] /dev/tty.usbserial-0002 を開けません: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+T-mini・S1 ともに有効な入力がありません。
+  config.toml の [[tmini.units]]: 2 台設定
+  config.toml の [[s1.pairs]]   : 1 ペア設定
+  ケーブル・補助5V・ポート名を確認してください（S1 はペアの両方が開けないとそのペアごと無効です）。
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % 
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:30:17][info] SDK initializing
+[2026-09-16 13:30:17][info] SDK has been initialized
+[2026-09-16 13:30:17][info] SDK Version: 1.2.20
+[2026-09-16 13:30:17][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:30:17][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:30:17][info] SDK initializing
+[2026-09-16 13:30:17][info] SDK has been initialized
+[2026-09-16 13:30:17][info] SDK Version: 1.2.20
+[2026-09-16 13:30:17][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 13:30:17][error] Error initializing in check connection.
+[TMini-B] /dev/tty.usbserial-0002 を開けません: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+         → この台を飛ばして続行します
+Scan Started  (/dev/tty.usbserial-0001, standard)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 0/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[S1-A.a] avg -> ( -133.4,   244.2) mm  (109 pts)
+[S1-A.a] avg -> ( -133.7,   245.2) mm  (96 pts)
+[S1-A.a] avg -> ( -131.2,   243.2) mm  (86 pts)
+[S1-A.a] avg -> ( -132.6,   251.5) mm  (81 pts)
+[S1-A.a] avg -> ( -136.4,   245.2) mm  (72 pts)
+[S1-A.a] avg -> ( -130.9,   238.2) mm  (66 pts)
+[S1-A.a] avg -> ( -127.3,   243.2) mm  (63 pts)
+[S1-A.b] avg -> (  148.5,   417.2) mm  (76 pts)
+[S1-A.a] avg -> ( -126.9,   246.1) mm  (64 pts)
+[S1-A.a] avg -> ( -125.0,   242.3) mm  (68 pts)
+[S1-A.b] avg -> (  152.8,   382.5) mm  (74 pts)
+＜中略＞
+[S1-A.a] avg -> (  -95.3,   216.6) mm  (60 pts)
+[S1-A.b] avg -> (  146.1,   449.8) mm  (54 pts)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:30:28][info] SDK initializing
+[2026-09-16 13:30:28][info] SDK has been initialized
+[2026-09-16 13:30:28][info] SDK Version: 1.2.20
+[2026-09-16 13:30:28][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:30:28][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:30:28][info] SDK initializing
+[2026-09-16 13:30:28][info] SDK has been initialized
+[2026-09-16 13:30:28][info] SDK Version: 1.2.20
+[2026-09-16 13:30:28][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-0002] and [baudrate:230400]
+[2026-09-16 13:30:28][error] Error initializing in check connection.
+[TMini-B] /dev/tty.usbserial-0002 を開けません: LiDAR (/dev/tty.usbserial-0002) に接続できません: Unknown error
+         → この台を飛ばして続行します
+Scan Started  (/dev/tty.usbserial-0001, standard)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 0/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[S1-A.a] avg -> ( -113.8,   225.6) mm  (95 pts)
+[S1-A.a] avg -> ( -113.5,   231.3) mm  (86 pts)
+[S1-A.a] avg -> ( -104.9,   234.7) mm  (84 pts)
+[S1-A.a] avg -> ( -107.8,   227.1) mm  (68 pts)
+[S1-A.a] avg -> ( -114.2,   214.1) mm  (64 pts)
+[S1-A.a] avg -> ( -110.6,   235.8) mm  (62 pts)
+[S1-A.a] avg -> ( -113.3,   236.1) mm  (63 pts)
+[S1-A.b] avg -> (  161.4,   417.5) mm  (67 pts)
+[S1-A.a] avg -> ( -111.6,   231.7) mm  (66 pts)
+[S1-A.a] avg -> ( -108.0,   236.6) mm  (68 pts)
+[S1-A.b] avg -> (  157.3,   409.6) mm  (64 pts)
+＜中略＞
+[S1-A.b] avg -> (  154.4,   415.7) mm  (58 pts)
+[S1-A.a] avg -> (  -85.4,   208.5) mm  (60 pts)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:30:40][info] SDK initializing
+[2026-09-16 13:30:40][info] SDK has been initialized
+[2026-09-16 13:30:40][info] SDK Version: 1.2.20
+[2026-09-16 13:30:40][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:30:40][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:30:40][info] SDK initializing
+[2026-09-16 13:30:40][info] SDK has been initialized
+[2026-09-16 13:30:40][info] SDK Version: 1.2.20
+[2026-09-16 13:30:40][info] Connect elapsed time 46 ms
+[2026-09-16 13:30:40][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[2026-09-16 13:30:41][info] Lidar running correctly! The health status good
+[2026-09-16 13:30:41][info] Current Lidar Model Code 150
+[2026-09-16 13:30:41][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:30:41][info] Current scan frequency: 6.00Hz
+[2026-09-16 13:30:41][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:30:41][info] Check status, Elapsed time 553 ms
+[2026-09-16 13:30:41][info] Lidar init success, elapsed time [599]ms
+[2026-09-16 13:30:44][info] [YDLIDAR] Create thread 0x6F597000
+[2026-09-16 13:30:45][info] Successed to start the lidar, elapsed time 3641 ms
+[2026-09-16 13:30:45][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:30:45][info] Fixed Size: 430
+[2026-09-16 13:30:45][info] Sample Rate: 4.00K
+[2026-09-16 13:30:45][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:30:45][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -99.8,   105.5) mm  (53 pts)
+＜中略＞
+[TMini-B] avg -> ( -103.7,   104.5) mm  (56 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-B] avg -> (  -97.7,    98.5) mm  (57 pts)
+＜中略＞
+[TMini-B] avg -> (  -92.5,    99.9) mm  (51 pts)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 1/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> (  -90.8,   107.2) mm  (53 pts)
+[TMini-B] avg -> (  -92.5,   105.9) mm  (49 pts)
+[TMini-B] avg -> (  -97.1,   110.6) mm  (53 pts)
+[TMini-B] avg -> (  -94.2,   105.8) mm  (52 pts)
+[TMini-B] avg -> ( -133.9,    86.0) mm  (42 pts)
+[TMini-B] avg -> ( -103.9,   100.0) mm  (55 pts)
+[TMini-B] avg -> (  -99.6,   106.8) mm  (54 pts)
+[TMini-B] avg -> (  -97.8,   101.4) mm  (51 pts)
+[TMini-B] avg -> (  -90.0,   102.8) mm  (50 pts)
+[TMini-B] avg -> ( -100.9,    97.5) mm  (56 pts)
+[TMini-B] avg -> (  -90.7,    98.3) mm  (50 pts)
+[TMini-B] avg -> (  -90.7,   109.4) mm  (51 pts)
+[S1-A.a] avg -> ( -107.7,   246.1) mm  (100 pts)
+[TMini-B] avg -> (  -97.2,   102.9) mm  (54 pts)
+[S1-A.a] avg -> ( -110.0,   237.9) mm  (93 pts)
+[TMini-B] avg -> (  -95.2,    98.5) mm  (52 pts)
+[S1-A.a] avg -> (  -99.5,   249.0) mm  (78 pts)
+[TMini-B] avg -> (  -99.2,    98.7) mm  (54 pts)
+[S1-A.a] avg -> ( -107.8,   245.7) mm  (74 pts)
+[TMini-B] avg -> (  -90.0,    97.3) mm  (50 pts)
+[S1-A.a] avg -> ( -104.9,   255.6) mm  (66 pts)
+[TMini-B] avg -> ( -119.1,    89.9) mm  (37 pts)
+[S1-A.a] avg -> ( -102.4,   250.6) mm  (61 pts)
+[TMini-B] avg -> (  -95.2,   101.0) mm  (56 pts)
+[S1-A.a] avg -> (  -98.6,   256.5) mm  (60 pts)
+[TMini-B] avg -> ( -100.1,   101.6) mm  (58 pts)
+[S1-A.a] avg -> (  -96.5,   246.1) mm  (62 pts)
+[S1-A.b] avg -> (  152.4,   400.2) mm  (73 pts)
+[TMini-B] avg -> (  -97.1,   100.0) mm  (47 pts)
+[S1-A.a] avg -> (  -91.9,   258.8) mm  (64 pts)
+[S1-A.b] avg -> (  157.4,   410.0) mm  (64 pts)
+＜中略＞
+[TMini-B] avg -> (  -97.6,    97.4) mm  (51 pts)
+[S1-A.b] avg -> (  159.5,   442.0) mm  (52 pts)
+[S1-A.a] avg -> (  -91.7,   257.6) mm  (68 pts)
+[2026-09-16 13:30:52][info] Lidar has stopped!
+[2026-09-16 13:30:52][error] [YDLIDAR]: 0 No error
+
+[S1-A.b] avg -> (  144.1,   453.7) mm  (54 pts)
+[S1-A.a] avg -> (  -83.4,   254.4) mm  (67 pts)
+Scan Stopped  (/dev/tty.usbserial-0002)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:30:54][info] SDK initializing
+[2026-09-16 13:30:54][info] SDK has been initialized
+[2026-09-16 13:30:54][info] SDK Version: 1.2.20
+[2026-09-16 13:30:54][info] Connect elapsed time 46 ms
+[2026-09-16 13:30:54][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:30:55][info] Lidar running correctly! The health status bad
+[2026-09-16 13:30:55][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:30:55][info] Current Lidar Model Code 150
+[2026-09-16 13:30:55][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:30:55][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:30:55][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:30:55][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:30:55][info] Lidar init success, elapsed time [587]ms
+[2026-09-16 13:30:58][info] [YDLIDAR] Create thread 0x6B28B000
+[2026-09-16 13:30:58][info] Successed to start the lidar, elapsed time 3055 ms
+[2026-09-16 13:30:58][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:30:58][info] Fixed Size: 430
+[2026-09-16 13:30:58][info] Sample Rate: 4.00K
+[2026-09-16 13:30:58][info] Successed to check the lidar, elapsed time 1 ms
+[2026-09-16 13:30:58][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:30:58][info] SDK initializing
+[2026-09-16 13:30:58][info] SDK has been initialized
+[2026-09-16 13:30:58][info] SDK Version: 1.2.20
+[TMini-A] avg -> ( -188.7,   176.8) mm  (27 pts)
+[TMini-A] avg -> ( -183.5,   180.0) mm  (27 pts)
+[2026-09-16 13:30:58][info] Connect elapsed time 37 ms
+[2026-09-16 13:30:58][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> ( -185.9,   173.8) mm  (21 pts)
+＜中略＞
+[TMini-A] avg -> ( -186.9,   191.7) mm  (25 pts)
+[2026-09-16 13:30:59][info] Lidar running correctly! The health status bad
+[2026-09-16 13:30:59][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:30:59][info] Current Lidar Model Code 150
+[2026-09-16 13:30:59][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:30:59][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:30:59][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:30:59][info] Check status, Elapsed time 539 ms
+[2026-09-16 13:30:59][info] Lidar init success, elapsed time [576]ms
+[TMini-A] avg -> ( -195.4,   180.7) mm  (23 pts)
+＜中略＞
+[TMini-A] avg -> ( -190.4,   176.0) mm  (25 pts)
+[2026-09-16 13:31:02][info] [YDLIDAR] Create thread 0x6C323000
+[TMini-A] avg -> ( -195.5,   174.9) mm  (24 pts)
+＜中略＞
+[TMini-A] avg -> ( -188.0,   179.1) mm  (27 pts)
+[2026-09-16 13:31:02][info] Successed to start the lidar, elapsed time 3581 ms
+[2026-09-16 13:31:02][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:31:02][info] Fixed Size: 430
+[2026-09-16 13:31:02][info] Sample Rate: 4.00K
+[2026-09-16 13:31:02][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:31:02][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -93.6,   108.0) mm  (50 pts)
+[TMini-A] avg -> ( -191.7,   195.9) mm  (25 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> ( -101.0,   108.7) mm  (53 pts)
+[TMini-A] avg -> ( -201.6,   172.0) mm  (23 pts)
+＜中略＞
+[TMini-A] avg -> ( -189.6,   187.1) mm  (27 pts)
+[TMini-B] avg -> (  -96.9,   104.2) mm  (55 pts)
+[TMini-A] avg -> ( -192.7,   174.2) mm  (28 pts)
+[2026-09-16 13:31:06][info] Lidar has stopped!
+[2026-09-16 13:31:06][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> (  -99.1,   102.7) mm  (52 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:31:07][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:31:49][info] SDK initializing
+[2026-09-16 13:31:49][info] SDK has been initialized
+[2026-09-16 13:31:49][info] SDK Version: 1.2.20
+[2026-09-16 13:31:49][error] Error, cannot bind to the specified [serial port:/dev/tty.usbserial-6] and [baudrate:230400]
+[2026-09-16 13:31:49][error] Error initializing in check connection.
+[TMini-A] /dev/tty.usbserial-6 を開けません: LiDAR (/dev/tty.usbserial-6) に接続できません: Unknown error
+         → この台を飛ばして続行します
+[2026-09-16 13:31:49][info] SDK initializing
+[2026-09-16 13:31:49][info] SDK has been initialized
+[2026-09-16 13:31:49][info] SDK Version: 1.2.20
+[2026-09-16 13:31:49][info] Connect elapsed time 48 ms
+[2026-09-16 13:31:49][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[2026-09-16 13:31:49][info] Lidar running correctly! The health status bad
+[2026-09-16 13:31:49][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:31:49][info] Current Lidar Model Code 150
+[2026-09-16 13:31:49][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:31:49][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:31:49][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:31:49][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:31:49][info] Lidar init success, elapsed time [589]ms
+[2026-09-16 13:31:52][info] [YDLIDAR] Create thread 0x6AFD7000
+[2026-09-16 13:31:52][error] Checksum error 0x6825 != 0x0332
+[2026-09-16 13:31:52][info] Successed to start the lidar, elapsed time 2837 ms
+[2026-09-16 13:31:52][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:31:52][info] Fixed Size: 430
+[2026-09-16 13:31:52][info] Sample Rate: 4.00K
+[2026-09-16 13:31:52][info] Successed to check the lidar, elapsed time 1 ms
+[2026-09-16 13:31:52][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -77.4,    80.2) mm  (46 pts)
+＜中略＞
+[TMini-B] avg -> (  -72.5,    90.0) mm  (42 pts)
+Scan Started  (/dev/tty.usbserial-0001, standard)
+[TMini-B] avg -> (  -79.5,    86.6) mm  (46 pts)
+＜中略＞
+[TMini-B] avg -> (  -68.2,    88.5) mm  (44 pts)
+Scan Started  (/dev/tty.usbserial-4, standard)
+[S1-A] 両台オープン、交点法を有効化（baseline 295mm）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 1/2 台 有効, S1: 1/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> (  -73.1,    88.2) mm  (43 pts)
+＜中略＞
+[TMini-B] avg -> (  -68.4,    90.0) mm  (43 pts)
+[2026-09-16 13:31:54][error] Timeout count: 1
+[S1-A.a] avg -> ( -105.1,   593.3) mm  (20 pts)
+[S1-A.a] avg -> (  -68.5,   635.4) mm  (8 pts)
+[2026-09-16 13:31:55][error] [YDLIDAR]: -1 Operation timed out
+
+[2026-09-16 13:31:55][error] Timeout count: 2
+[S1-A.a] avg -> (   25.3,   480.3) mm  (75 pts)
+[S1-A.a] avg -> (   23.1,   511.1) mm  (68 pts)
+[S1-A.a] avg -> (   24.6,   509.2) mm  (62 pts)
+[S1-A.a] avg -> (    7.7,   491.5) mm  (59 pts)
+[S1-A.a] avg -> (   20.6,   492.5) mm  (59 pts)
+[S1-A.b] avg -> (  304.5,   525.4) mm  (2 pts)
+[TMini-B] avg -> (  -85.6,    78.3) mm  (44 pts)
+＜中略＞
+[TMini-B] avg -> (  -77.9,    87.2) mm  (44 pts)
+[S1-A.a] avg -> (   51.2,   484.7) mm  (58 pts)
+[S1-A.b] avg -> (  185.0,   478.9) mm  (48 pts)
+[2026-09-16 13:31:59][info] Lidar has stopped!
+[2026-09-16 13:31:59][error] [YDLIDAR]: 0 No error
+
+[S1-A.a] avg -> (   41.3,   480.3) mm  (60 pts)
+[S1-A.b] avg -> (  169.1,   483.6) mm  (46 pts)
+Scan Stopped  (/dev/tty.usbserial-0002)
+Scan Stopped  (/dev/tty.usbserial-0001)
+Scan Stopped  (/dev/tty.usbserial-4)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % uv run tracker1p3.py
+[2026-09-16 13:32:02][info] SDK initializing
+[2026-09-16 13:32:02][info] SDK has been initialized
+[2026-09-16 13:32:02][info] SDK Version: 1.2.20
+[2026-09-16 13:32:02][info] Connect elapsed time 47 ms
+[2026-09-16 13:32:02][info] Lidar successfully connected [/dev/tty.usbserial-6:230400]
+[2026-09-16 13:32:02][info] Lidar running correctly! The health status good
+[2026-09-16 13:32:02][info] Current Lidar Model Code 150
+[2026-09-16 13:32:02][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023041800090218
+[2026-09-16 13:32:02][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:32:02][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:32:02][info] Check status, Elapsed time 541 ms
+[2026-09-16 13:32:02][info] Lidar init success, elapsed time [588]ms
+[2026-09-16 13:32:05][info] [YDLIDAR] Create thread 0x6D527000
+[2026-09-16 13:32:05][info] Successed to start the lidar, elapsed time 2844 ms
+[2026-09-16 13:32:05][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:32:05][info] Fixed Size: 430
+[2026-09-16 13:32:05][info] Sample Rate: 4.00K
+[2026-09-16 13:32:05][info] Successed to check the lidar, elapsed time 0 ms
+[2026-09-16 13:32:05][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-6)
+[2026-09-16 13:32:05][info] SDK initializing
+[2026-09-16 13:32:05][info] SDK has been initialized
+[2026-09-16 13:32:05][info] SDK Version: 1.2.20
+[TMini-A] avg -> ( -201.4,   101.8) mm  (13 pts)
+[2026-09-16 13:32:05][info] Connect elapsed time 36 ms
+[2026-09-16 13:32:05][info] Lidar successfully connected [/dev/tty.usbserial-0002:230400]
+[TMini-A] avg -> ( -197.1,   111.2) mm  (13 pts)
+＜中略＞
+[TMini-A] avg -> ( -207.4,    95.7) mm  (12 pts)
+[2026-09-16 13:32:06][info] Lidar running correctly! The health status bad
+[2026-09-16 13:32:06][error] Error, Lidar internal error[0x202] detected. Please reboot the device to retry.
+[2026-09-16 13:32:06][info] Current Lidar Model Code 150
+[2026-09-16 13:32:06][info] Baseplate device info
+Firmware version: 1.0
+Hardware version: 2
+Model: Tmini Pro
+Serial: 2023122000090196
+[2026-09-16 13:32:06][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:32:06][info] Current scan frequency: 10.00Hz
+[2026-09-16 13:32:06][info] Check status, Elapsed time 540 ms
+[2026-09-16 13:32:06][info] Lidar init success, elapsed time [576]ms
+[TMini-A] avg -> ( -209.4,   109.9) mm  (14 pts)
+＜中略＞
+[TMini-A] avg -> ( -194.3,   105.6) mm  (15 pts)
+[2026-09-16 13:32:08][info] [YDLIDAR] Create thread 0x6E5BF000
+[TMini-A] avg -> ( -204.7,   104.3) mm  (13 pts)
+＜中略＞
+[TMini-A] avg -> ( -209.9,   105.8) mm  (14 pts)
+[2026-09-16 13:32:09][info] Successed to start the lidar, elapsed time 2896 ms
+[2026-09-16 13:32:09][info] Scan Frequency: 10.00Hz
+[2026-09-16 13:32:09][info] Fixed Size: 430
+[2026-09-16 13:32:09][info] Sample Rate: 4.00K
+[2026-09-16 13:32:09][info] Successed to check the lidar, elapsed time 1 ms
+[2026-09-16 13:32:09][info] Lidar has started!
+Scan Started  (/dev/tty.usbserial-0002)
+[TMini-B] avg -> (  -79.1,    85.5) mm  (43 pts)
+[TMini-A] avg -> ( -192.4,   100.5) mm  (13 pts)
+[S1-A] /dev/tty.usbserial-0001（S1-A.a）を開けません: LiDAR (/dev/tty.usbserial-0001) の応答ヘッダが不正です（00000000000000）。ボーレートが合っていない可能性があります（S1 は 256000）。
+[S1-A] → ペアとして無効化して続行します（S1 は 2 台揃わないと有効入力にしません）
+position file = /Volumes/KIOXIA/Users/x24018/Works/Unity/Project/kakigori_demo/tools/lidar-tracker1+3/out/position.txt
+circle: center (0, 300) mm, r 300 (+tol 100)
+T-mini: 2/2 台 有効, S1: 0/1 ペア 有効, shaving hold 1.5s
+[TMini-B] avg -> (  -76.5,    83.9) mm  (43 pts)
+[TMini-A] avg -> ( -208.4,   127.8) mm  (14 pts)
+＜中略＞
+[TMini-A] avg -> ( -208.0,   109.5) mm  (13 pts)
+[TMini-B] avg -> (  -89.6,    79.5) mm  (46 pts)
+[2026-09-16 13:32:13][info] Lidar has stopped!
+[2026-09-16 13:32:13][error] [YDLIDAR]: 0 No error
+
+[TMini-B] avg -> (  -83.7,    83.8) mm  (44 pts)
+Scan Stopped  (/dev/tty.usbserial-6)
+[2026-09-16 13:32:14][info] Lidar has stopped!
+Scan Stopped  (/dev/tty.usbserial-0002)
+x24018@x24018nonotobukkukonpyuta lidar-tracker1+3 % 
