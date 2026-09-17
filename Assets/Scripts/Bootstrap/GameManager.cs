@@ -335,7 +335,7 @@ namespace KakigoriTD.Bootstrap
         ///  ・雪玉／爆発 … 撃破数・コンボ・ゲージすべてに算入（連鎖 20 体ならコンボも +20）
         ///  ・ビーム … 撃破数のみ算入。ゲージには入れず（自己充填ループの防止）、コンボは中立
         /// </summary>
-        private void OnEnemyKilled(KillSource source)
+        private void OnEnemyKilled(KillSource source, Vector3 position)
         {
             _audio?.PlayEnemyKilled();
             _progress.Add();
@@ -344,6 +344,9 @@ namespace KakigoriTD.Bootstrap
 
             _combo.AddKill(Time.time);
             _gauge.AddKill(_combo.Count);
+
+            // コンボ表示は撃破位置へのポップアップのみ（画面固定の常設表示は廃止）。
+            if (_combo.Count >= 2) _ui.ShowComboPopup(position, _combo.Count);
         }
 
         // 砦被弾＝HP が「減少 かつ 新HP>0」のときのみ Hit（Initialize の満タン通知・0到達=GameOver を除外）。
@@ -445,13 +448,13 @@ namespace KakigoriTD.Bootstrap
                 _ui.ClearResult();
                 _ui.ClearBanner();
                 _ui.SetStatus("かき氷タワーディフェンス — [Enter] で開始");
-                _ui.SetBattleStats(0, _progress.Target, 0, 0f, 0f);
+                _ui.SetBattleStats(0, _progress.Target, 0f, 0f);
             }
             else if (cur is BattleState)
             {
                 _ui.ClearBanner();
                 _ui.SetStatus($"経過 {StageResult.FormatTime(ElapsedSec)}");
-                _ui.SetBattleStats(_progress.Count, _progress.Target, _combo.Count,
+                _ui.SetBattleStats(_progress.Count, _progress.Target,
                     _gauge.Normalized, ElapsedSec);
             }
             else if (cur is ResultState)

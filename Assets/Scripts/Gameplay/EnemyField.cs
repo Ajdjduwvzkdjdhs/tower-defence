@@ -79,8 +79,8 @@ namespace KakigoriTD.Gameplay
 
         private float _lastKillTime = float.NegativeInfinity;
 
-        /// <summary>敵を 1 体撃破したフレームに発火（撃破数・コンボ・ゲージ・音の集計用）。</summary>
-        public event Action<KillSource> OnEnemyKilled;
+        /// <summary>敵を 1 体撃破したフレームに発火（撃破数・コンボ・ゲージ・音の集計用）。第2引数は撃破位置（コンボポップアップ表示用）。</summary>
+        public event Action<KillSource, Vector3> OnEnemyKilled;
 
         /// <summary>盾兵に雪玉が当たったが倒れなかったフレームに発火（手応えの音用・任意）。</summary>
         public event Action OnShieldHit;
@@ -334,10 +334,11 @@ namespace KakigoriTD.Gameplay
             {
                 var e = _enemies[i];
                 if (e == null) { _enemies.RemoveAt(i); continue; }
+                Vector3 pos = e.transform.position; // 撃破位置を控える（PerformKillでプール返却される前に）
                 PerformKill(e);
                 _enemies.RemoveAt(i);
                 n++;
-                OnEnemyKilled?.Invoke(KillSource.Beam);
+                OnEnemyKilled?.Invoke(KillSource.Beam, pos);
             }
             _enemies.Clear();
             return n;
@@ -355,10 +356,11 @@ namespace KakigoriTD.Gameplay
             }
 
             int column = EnemyQueueLayout.ColumnOf(e.TargetPosition, StepCount); // 返却前に控える
+            Vector3 pos = e.transform.position; // 撃破位置を控える（PerformKillでプール返却される前に）
             PerformKill(e);
             _enemies.Remove(e); // 順序保持（古い順のまま）
             RepackColumn(column); // 空いた段を後段が繰り上がって埋める
-            OnEnemyKilled?.Invoke(source);
+            OnEnemyKilled?.Invoke(source, pos);
         }
 
         /// <summary>
@@ -417,14 +419,15 @@ namespace KakigoriTD.Gameplay
             Vector3 blastCenter = origin.transform.position;
             PerformKill(origin);
             _enemies.Remove(origin);
-            OnEnemyKilled?.Invoke(originSource);
+            OnEnemyKilled?.Invoke(originSource, blastCenter);
 
             for (int i = 0; i < _victimScratch.Count; i++)
             {
                 var v = _victimScratch[i];
+                Vector3 victimPos = v.transform.position; // 撃破位置を控える（PerformKillでプール返却される前に）
                 PerformKill(v, blastCenter);
                 _enemies.Remove(v);
-                OnEnemyKilled?.Invoke(KillSource.Explosion); // 連鎖20体ならコンボも +20（ADR-30）
+                OnEnemyKilled?.Invoke(KillSource.Explosion, victimPos); // 連鎖20体ならコンボも +20（ADR-30）
             }
 
             for (int i = 0; i < _columnScratch.Count; i++) RepackColumn(_columnScratch[i]);
