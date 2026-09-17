@@ -87,5 +87,7 @@ namespace KakigoriTD.Audio
         public void PlayEnemyKilled() { if (_cfg != null) PlaySe(_cfg.NextEnemyKilled(), _cfg.EnemyKilledVolume); }
         public void PlayEnemyAttack() { if (_cfg != null) PlaySe(_cfg.EnemyAttack, _cfg.EnemyAttackVolume); }
         public void PlayAllyCaught() { if (_cfg != null) PlaySe(_cfg.AllyCaught, _cfg.AllyCaughtVolume); }
+        public void PlayCountdownBeep() { if (_cfg != null) PlaySe(_cfg.CountdownBeep, _cfg.CountdownBeepVolume); }
+        public void PlayCountdownGo() { if (_cfg != null) PlaySe(_cfg.CountdownGo, _cfg.CountdownGoVolume); }
     }
 }

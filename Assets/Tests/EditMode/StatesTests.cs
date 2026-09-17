@@ -23,15 +23,20 @@ namespace KakigoriTD.Tests.EditMode
             public int ClearCount;
             public StageResult? Result;
 
+            public int ClearCountdownCount;
+            public readonly System.Collections.Generic.List<(string Text, bool IsFinal)> CountdownSteps = new();
+
             public void BeginBattle() => BeginCount++;
             public void ClearRemainingEnemies() => ClearCount++;
             public void ShowResult(StageResult result) => Result = result;
+            public void ShowCountdownStep(string text, bool isFinal) => CountdownSteps.Add((text, isFinal));
+            public void ClearCountdown() => ClearCountdownCount++;
         }
 
         // ---- TitleState ----
 
         [Test]
-        public void Title_WhenStartRequested_ChangesToBattle()
+        public void Title_WhenStartRequested_ChangesToCountdown()
         {
             var ctx = new FakeContext { IsStartRequested = true };
             var fsm = new GameStateMachine();
@@ -39,7 +44,7 @@ namespace KakigoriTD.Tests.EditMode
 
             fsm.Tick(0.016f);
 
-            Assert.That(fsm.Current, Is.TypeOf<BattleState>());
+            Assert.That(fsm.Current, Is.TypeOf<CountdownState>());
         }
 
         [Test]
@@ -52,6 +57,65 @@ namespace KakigoriTD.Tests.EditMode
             fsm.Tick(1f);
 
             Assert.That(fsm.Current, Is.TypeOf<TitleState>());
+        }
+
+        // ---- CountdownState ----
+
+        [Test]
+        public void Countdown_OnEnter_ShowsFirstStep()
+        {
+            var ctx = new FakeContext();
+            var fsm = new GameStateMachine();
+            fsm.Change(new CountdownState(fsm, ctx));
+
+            Assert.That(ctx.CountdownSteps, Is.EqualTo(new[] { ("3", false) }));
+        }
+
+        [Test]
+        public void Countdown_StepsThroughThreeTwoOneGo_ThenBeginsBattle()
+        {
+            var ctx = new FakeContext();
+            var fsm = new GameStateMachine();
+            fsm.Change(new CountdownState(fsm, ctx));
+
+            fsm.Tick(1f); // "3" -> "2"
+            fsm.Tick(1f); // "2" -> "1"
+            fsm.Tick(1f); // "1" -> "スタート！"
+
+            Assert.That(fsm.Current, Is.TypeOf<CountdownState>());
+            Assert.That(ctx.CountdownSteps, Is.EqualTo(new[]
+            {
+                ("3", false), ("2", false), ("1", false), ("スタート！", true),
+            }));
+
+            fsm.Tick(1f); // "スタート！" -> BattleState
+
+            Assert.That(fsm.Current, Is.TypeOf<BattleState>());
+            Assert.That(ctx.BeginCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Countdown_BeforeStepBoundary_DoesNotAdvance()
+        {
+            var ctx = new FakeContext();
+            var fsm = new GameStateMachine();
+            fsm.Change(new CountdownState(fsm, ctx));
+
+            fsm.Tick(0.5f);
+
+            Assert.That(ctx.CountdownSteps, Is.EqualTo(new[] { ("3", false) }));
+        }
+
+        [Test]
+        public void Countdown_OnExit_ClearsCountdownDisplay()
+        {
+            var ctx = new FakeContext();
+            var fsm = new GameStateMachine();
+            fsm.Change(new CountdownState(fsm, ctx));
+
+            fsm.Change(new TitleState(fsm, ctx));
+
+            Assert.That(ctx.ClearCountdownCount, Is.EqualTo(1));
         }
 
         // ---- BattleState ----

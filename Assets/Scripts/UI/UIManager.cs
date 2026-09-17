@@ -32,6 +32,8 @@ namespace KakigoriTD.UI
         private bool _countdownIsFinal;
         private float _countdownSetAt = -999f;
         private const float CountdownPopInSec = 0.15f; // 出現直後にひと回り大きく→縮むポップイン演出の時間
+        private const float CountdownStepSec = 1.0f;   // CountdownState.StepSec と同じ長さ（1ステップ=1秒）
+        private static Texture2D _sonarRingTex; // ソナー風リングの実行時生成テクスチャ（キャッシュ・使い回し）
 
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
         public void Configure(Fort fort)
@@ -211,7 +213,11 @@ namespace KakigoriTD.UI
             float h = fontSize * 1.6f;
             var rect = new Rect(0f, Screen.height * 0.5f - h * 0.5f, Screen.width, h);
 
-            Color fill = _countdownIsFinal ? new Color(1f, 0.85f, 0.15f) : Color.white;
+            // 数字("3"/"2"/"1")と「スタート！」で色が違って見えると不安定な印象になるため、
+            // ステップによらず同じ色で統一する。
+            Color fill = new Color(1f, 0.85f, 0.15f);
+
+            if (!_countdownIsFinal) DrawSonarSweep(rect);
 
             // 縁取り（黒）: 4方向にオフセットして描画するIMGUI定番の疑似アウトライン。
             style.normal.textColor = Color.black;
@@ -225,6 +231,62 @@ namespace KakigoriTD.UI
             style.normal.textColor = fill;
             GUI.Label(rect, _countdownText, style);
         }
+
+        /// <summary>
+        /// 数字カウントダウン（"3"/"2"/"1"）専用の演出。潜水艦ソナー/ストップウォッチのように、
+        /// 中心から外周へ伸びる針が1ステップ（1秒）かけて時計回りに1周する。「スタート！」では出さない。
+        /// </summary>
+        private void DrawSonarSweep(Rect numberRect)
+        {
+            float cx = Screen.width * 0.5f;
+            float cy = numberRect.y + numberRect.height * 0.5f;
+            float radius = numberRect.height * 0.55f;
+
+            var prevColor = GUI.color;
+            var prevMatrix = GUI.matrix;
+
+            GUI.color = new Color(0.5f, 1f, 0.65f, 0.55f);
+            GUI.DrawTexture(new Rect(cx - radius, cy - radius, radius * 2f, radius * 2f), SonarRingTexture());
+
+            float sweepT = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownStepSec);
+            var pivot = new Vector2(cx, cy);
+            var needleRect = new Rect(cx - 2f, cy - radius, 4f, radius);
+
+            GUI.color = new Color(0.5f, 1f, 0.65f, 0.9f);
+            GUIUtility.RotateAroundPivot(sweepT * 360f, pivot);
+            GUI.DrawTexture(needleRect, Texture2D.whiteTexture);
+
+            GUI.matrix = prevMatrix;
+            GUI.color = prevColor;
+        }
+
+        /// <summary>薄いリング状のテクスチャを一度だけ生成して使い回す（毎フレーム生成しない）。</summary>
+        private static Texture2D SonarRingTexture()
+        {
+            if (_sonarRingTex != null) return _sonarRingTex;
+
+            const int size = 128;
+            const float outer = size * 0.5f - 2f;
+            const float inner = outer - 5f;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - size * 0.5f + 0.5f;
+                    float dy = y - size * 0.5f + 0.5f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    byte a = (byte)((d >= inner && d <= outer) ? 255 : 0);
+                    pixels[y * size + x] = new Color32(255, 255, 255, a);
+                }
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            _sonarRingTex = tex;
+            return tex;
+        }
+
         private static void Bar(Rect rect, float fill01, Color color)
         {
             if (fill01 < 0f) fill01 = 0f; else if (fill01 > 1f) fill01 = 1f;
