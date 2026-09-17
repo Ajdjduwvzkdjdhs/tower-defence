@@ -18,7 +18,7 @@ namespace KakigoriTD.Data
         [Tooltip("塗る色（アルファ＝最大不透明度。透明感を出すため低め推奨）。")]
         [SerializeField] private Color _paintColor = new Color(1f, 1f, 1f, 0.55f);
         [Tooltip("塗られてから消えるまでの秒数（＝「一定時間」の実体）。")]
-        [SerializeField] private float _paintFadeSec = 2f;
+        [SerializeField] private float _paintFadeSec = 1.5f;
         [Tooltip("扇形1個分の角度[deg]。360をこの値で割った数の扇形に分割する（既定15度=24分割）。")]
         [SerializeField] private float _sectorDeg = 15f;
         [Tooltip("山の裾までの目安半径[ワールド単位]。これを超えた範囲は塗らない（円形にクリップ）。"

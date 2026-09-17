@@ -54,8 +54,9 @@ Shader "Custom/SnowPaintOverlay"
                 float _MaxRadius;     // 山の裾までの目安半径。これを超えたXZ距離は塗らない（円形にクリップ）
                 float _CrestShade;    // 疑似陰影の強さ（0=フラット、1=強いコントラスト）
                 float _SectorFeather; // 扇形幅に対する境界フェザーの割合（0=フェザーなし、0.5=隣と全面ブレンド）
-                // 各扇形が最後に塗られた Time.time（.x）と雪玉が現れた起点半径（.y）。
-                // 素の float[] は cbuffer 内で要素ごとに16バイトへパディングされ、C#側の
+                // 各扇形の最終塗布時刻（.x）・雪玉が現れた起点半径（.y）・雪玉が実際に到達した
+                // 最遠半径（.z、積もる範囲の広がり。雪崩本体より先に扇形全体が塗られて見えないよう
+                // 到達分だけを塗る）。素の float[] は cbuffer 内で要素ごとに16バイトへパディングされ、C#側の
                 // Material.SetFloatArray と噛み合わずズレる（別変数と衝突する）ことがあるため、
                 // 実績のある float4[]（SetVectorArray）で受ける。
                 float4 _SectorTimes[SECTOR_MAX];
@@ -86,13 +87,14 @@ Shader "Custom/SnowPaintOverlay"
             {
                 float paintedAt = _SectorTimes[sector].x;
                 float innerRadius = _SectorTimes[sector].y;
+                float reachedRadius = min(_SectorTimes[sector].z, _MaxRadius); // 雪玉の到達分だけ塗る
                 float age = _PaintNow - paintedAt;
                 float timeFactor = (age >= 0.0 && age <= _PaintFadeSec)
                     ? saturate(1.0 - age / _PaintFadeSec)
                     : 0.0;
 
                 float edgeFeather = 0.5;
-                float outerFactor = saturate((_MaxRadius - dist) / edgeFeather);
+                float outerFactor = saturate((reachedRadius - dist) / edgeFeather);
                 float innerFactor = saturate((dist - innerRadius) / edgeFeather);
                 return timeFactor * outerFactor * innerFactor;
             }
@@ -132,7 +134,8 @@ Shader "Custom/SnowPaintOverlay"
                 // 疑似陰影：[innerRadius, _MaxRadius] 区間の中央を明るく、両端をやや暗くして
                 // 「盛り上がった雪の稜線」に見せる（ジオメトリは不変）。
                 float innerRadius = _SectorTimes[sector].y;
-                float band = max(_MaxRadius - innerRadius, 0.01);
+                float reachedRadius = min(_SectorTimes[sector].z, _MaxRadius);
+                float band = max(reachedRadius - innerRadius, 0.01);
                 float t = saturate((dist - innerRadius) / band);
                 float crest = 1.0 - abs(t - 0.5) * 2.0; // 0=両端, 1=中央
                 float shade = lerp(1.0 - _CrestShade, 1.0 + _CrestShade * 0.5, crest);

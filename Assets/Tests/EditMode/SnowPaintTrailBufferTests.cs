@@ -43,6 +43,7 @@ namespace KakigoriTD.Tests.EditMode
 
             Assert.AreEqual(5f, dest[0].x);
             Assert.AreEqual(3f, dest[0].y);
+            Assert.AreEqual(3f, dest[0].z); // 初回は起点＝到達最遠半径
             Assert.AreEqual(SnowPaintTrailBuffer.NeverPainted, dest[1].x);
         }
 
@@ -62,6 +63,24 @@ namespace KakigoriTD.Tests.EditMode
         }
 
         [Test]
+        public void MarkSector_WhileStillAlive_ReachedRadiusGrowsButNeverJumpsAhead()
+        {
+            var buffer = new SnowPaintTrailBuffer(sectorCount: 24, sectorDeg: 15f, fadeSec: 2f);
+            buffer.MarkSector(new Vector3(5f, 0f, 0f), now: 0f);   // 雪玉出現：半径5（まだ何も積もっていない）
+            var mid = new Vector4[buffer.SectorCount];
+            buffer.BuildUploadArray(mid);
+
+            buffer.MarkSector(new Vector3(7f, 0f, 0.1f), now: 0.1f); // 半径7まで滑走
+            var afterSeven = new Vector4[buffer.SectorCount];
+            buffer.BuildUploadArray(afterSeven);
+
+            // 出現直後は到達最遠半径＝出現位置（雪崩本体より先に麓まで塗られてはいけない）。
+            Assert.AreEqual(5f, mid[0].z, 0.01f);
+            // 半径7まで実際に到達した後は、そこまでしか塗られない（まだ8や9には届いていない）。
+            Assert.AreEqual(7f, afterSeven[0].z, 0.01f);
+        }
+
+        [Test]
         public void MarkSector_AfterFullyFaded_StartsNewOriginAtLatestRadius()
         {
             var buffer = new SnowPaintTrailBuffer(sectorCount: 24, sectorDeg: 15f, fadeSec: 2f);
@@ -73,6 +92,7 @@ namespace KakigoriTD.Tests.EditMode
 
             // 完全にフェードした後の新規出現なので、起点半径は新しい位置(9)にリセットされる。
             Assert.AreEqual(9f, dest[0].y, 0.01f);
+            Assert.AreEqual(9f, dest[0].z, 0.01f); // 到達最遠半径も同様にリセットされる
             Assert.AreEqual(10f, dest[0].x);
         }
 
