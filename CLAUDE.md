@@ -28,7 +28,7 @@
 - エンジン: Unity **6000.3.16f1**（Unity 6.3 / URP 17.3）— バージョンは確定済み
 - 主要パッケージ: URP 17.3 / Cinemachine 3.1 / Input System 1.19（**新** Input System のみ）/ Test Framework 1.6
 - 言語: C#
-- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、15ファイル・151本）
+- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、22ファイル・192本）
 
 ## 実行とテスト
 
@@ -50,7 +50,7 @@
 
 ### テスト方針
 
-- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在151本）。
+- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在192本）。
 - Unity 固有の挙動（シーン遷移・Play Mode の動き・UI 表示・演出）は **起動中の Editor を `unity` CLI で駆動して**スクリーンショット/ログで確認する（下記）。
   「動いた気がする」で終わらせず、客観的な証拠を残してから次へ進む。
 
@@ -141,22 +141,26 @@ Assets/Scripts/
               SpecialGauge, ExplosionChain, KillSource, StageResult,
               AvalancheClock, SpawnClock/SpawnSelector, IGameContext … EditMode テスト対象
   Data/       ScriptableObject 定義（StageConfigSO, EnemyTypeSO, ProjectileTypeSO, SerialConfigSO,
-              VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO）
+              VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO, SpecialAttackConfigSO）
   Input/      IInputSource と各実装（上記「入力アーキテクチャ」参照）
   Factory/    ObjectPool<T>, ProjectileFactory
   Gameplay/   MonoBehaviour：EnemyField（360度の敵管理・隊列・撃破・爆発連鎖）, Enemy /
-              BombTrooper / ShieldTrooper, Projectile, LidarAvalancheVfx, BeamCannon, Fort,
-              SpawnDirector, SnowPuff/Snowball/DissolveBurst/ExplosionRing 等
+              BombTrooper / ShieldTrooper, Projectile, LidarAvalancheVfx + AvalancheSnowEffect（雪崩）,
+              SpecialAttackController + BeamSweepVfx（ビーム砲の演出進行。発動は Core の SpecialGauge）,
+              ExplosiveDeath + ExplosionTelegraph（爆発演出。判定は Core の ExplosionChain）, Fort,
+              SpawnDirector, SnowPuff/DissolveBurst 等
   Audio/      AudioService, AudioConfigSO（Phase 6・表現層のみ・Core 無改修）
   UI/         UIManager（IMGUI ベースの HUD / バナー / 警告）, GameResultHolder（シーン間の結果受け渡し）
   Bootstrap/  GameManager（唯一の Singleton / Composition Root）
   Scenes/     TitleScene / ResultScene / GameOverScene（KakigoriTD.Scenes）— `Enter` でシーン遷移する小さな MonoBehaviour
 Assets/Tests/EditMode/     純ロジックの単体テスト（KakigoriTD.Tests.EditMode.asmdef）
-Assets/ScriptableObjects/  StageConfig / BasicEnemy / AssaultEnemy / BombTrooper / ShieldTrooper /
-                           BasicProjectile / AudioConfig / VisionConfig / LidarPreviewConfig /
+Assets/ScriptableObjects/  StageConfig / SpecialAttackConfig / BasicEnemy / AssaultEnemy / BombTrooper /
+                           ShieldTrooper / BasicProjectile / AudioConfig / VisionConfig / LidarPreviewConfig /
                            *SerialConfig の実体
 Assets/Prefabs/TH_Stage.prefab   ゲーム本体の一式（GameManager 等）。TH.unity が配置
-Assets/Prefabs/EnemyBombTrooper.prefab / EnemyShieldTrooper.prefab   爆発兵・盾兵のモデル
+Assets/Prefabs/EnemyBombTrooper.prefab / EnemyShieldTrooper.prefab   爆発兵・盾兵のモデル（爆発兵は ExplosiveDeath 付き）
+Assets/Prefabs/BeamCannon.prefab / SpecialAttackShockwave.prefab / ExplosionTelegraph.prefab   ビーム砲・衝撃波・爆発の演出
+Assets/snow_effect.prefab        雪崩のパーティクル
 docs/                      仕様・ADR・フェーズ計画
 tools/                     位置検知トラッカー（Python/C++・Unity 対象外）
 ```
