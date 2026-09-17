@@ -1,6 +1,6 @@
 # このファイルをコピーして config.toml を作成し、現物のポート・間隔に合わせて書き換える。
 #   cp config.example.toml config.toml
-# config.toml は Git 管理対象外（.gitignore 済み）。
+# config.toml は実機の設定をチーム共有するため Git 管理対象（コミットする）。
 #
 # 構成: T-mini Plus は 1 台ずつ独立（[[tmini.units]]）。S1 は必ずペア
 # （[[s1.pairs]]、交点法）。詳しい理屈は README.md と tracker1p3.py の冒頭コメント。

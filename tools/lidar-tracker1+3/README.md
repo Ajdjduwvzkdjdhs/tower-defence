@@ -55,7 +55,7 @@ ls /dev/tty.usb*
 
 ## config.toml（設定の置き場所）
 
-`config.example.toml` をコピーして作る（`config.toml` は gitignore 済み・実機ごと）。
+`config.example.toml` をコピーして作る。**`config.toml` は実機設定（ポート・基線長・向き）をチーム共有するため Git 管理対象**（コミットする）。
 
 | 知りたいこと | セクション・キー |
 |---|---|
@@ -211,4 +211,4 @@ T-mini 自体の起動時に出る `internal error[0x202]`（health status bad�
 | `sensors.py` | `tools/lidar-tracker`・`tools/lidar-tracker3` の `lidar.py` を読み込む継ぎ接ぎ層 |
 | `geometry.py` | 純ロジック（座標変換・平均・直線交点）。センサー・スレッドに非依存 |
 | `config.py` | `config.toml` の読み込みと検証 |
-| `config.example.toml` | テンプレート（`config.toml` は gitignore 済み） |
+| `config.example.toml` | テンプレート（`config.toml` は実機設定の共有のため Git 管理対象） |

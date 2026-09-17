@@ -5,5 +5,3 @@ __pycache__/
 # 実行時に生成される共有ファイル（Unity が読む出力）。コミットしない。
 out/
 
-# 実機ごとのポート・間隔設定。テンプレは config.example.toml をコミット。
-config.toml
