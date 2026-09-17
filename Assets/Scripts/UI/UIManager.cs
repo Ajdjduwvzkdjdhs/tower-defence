@@ -223,9 +223,13 @@ namespace KakigoriTD.UI
                 ? Mathf.Lerp(1.6f, 1f, age / _comboPopupPopDurationSec)
                 : 1f;
 
+            // 10コンボごとに階層が上がり、フォントも色も豪華になっていく（節目の中央大表示とは別に、通常表示側でも変化させる）。
+            int tier = Mathf.Min(popup.Combo / 10, ComboPopupMaxTier);
+            int tieredFontSize = _comboPopupFontSize + tier * 6;
+
             var style = new GUIStyle(GUI.skin.label)
             {
-                fontSize = Mathf.RoundToInt(_comboPopupFontSize * pop),
+                fontSize = Mathf.RoundToInt(tieredFontSize * pop),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
                 wordWrap = false,
@@ -239,7 +243,23 @@ namespace KakigoriTD.UI
             float y = Mathf.Clamp(guiY - h * 0.5f, margin, Screen.height - h - margin);
             var rect = new Rect(x, y, w, h);
 
-            DrawOutlinedLabel(rect, text, style, new Color(1f, 0.85f, 0.15f), alpha); // 黄色（通常撃破）
+            DrawOutlinedLabel(rect, text, style, ComboTierColor(tier), alpha);
+        }
+
+        private const int ComboPopupMaxTier = 5; // 50コンボ以降は虹色に固定（それ以上は上げない）
+
+        // 階層ごとの色。最終階層（50コンボ以降）は時間で色相を回して虹色にする（最高潮の演出）。
+        private static Color ComboTierColor(int tier)
+        {
+            switch (tier)
+            {
+                case 0: return new Color(1f, 0.85f, 0.15f);  // 黄色（2〜9コンボ）
+                case 1: return new Color(1f, 0.55f, 0.1f);   // オレンジ（10〜19）
+                case 2: return new Color(1f, 0.25f, 0.25f);  // 赤（20〜29）
+                case 3: return new Color(0.85f, 0.3f, 1f);   // 紫（30〜39）
+                case 4: return new Color(0.3f, 0.8f, 1f);    // 水色（40〜49）
+                default: return Color.HSVToRGB(Mathf.Repeat(Time.time * 0.6f, 1f), 0.85f, 1f); // 50コンボ以降：虹色
+            }
         }
 
         // 節目（10コンボ毎）: 撃破位置ではなく画面中央に大きく、虹色で出す。
