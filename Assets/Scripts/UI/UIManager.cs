@@ -21,8 +21,10 @@ namespace KakigoriTD.UI
         [SerializeField] private float _comboPopupLifetimeSec = 0.8f;
         [Tooltip("コンボポップアップが寿命までに上へ浮く距離（スクリーンピクセル）。")]
         [SerializeField] private float _comboPopupRisePx = 50f;
-        [Tooltip("コンボポップアップの基準フォントサイズ。")]
+        [Tooltip("コンボポップアップの基準フォントサイズ（通常撃破・撃破位置に表示）。")]
         [SerializeField] private int _comboPopupFontSize = 44;
+        [Tooltip("節目（10コンボ毎）ポップアップのフォントサイズ（画面中央に表示）。")]
+        [SerializeField] private int _comboMilestoneFontSize = 90;
         [Tooltip("出現直後に拡大→収束させるポップ演出の秒数。")]
         [SerializeField] private float _comboPopupPopDurationSec = 0.12f;
 
@@ -40,7 +42,8 @@ namespace KakigoriTD.UI
         private StageResult _result;
 
         // コンボポップアップ（敵の撃破位置に一瞬表示。GameManager.OnEnemyKilled が都度追加）。
-        private struct ComboPopup { public Vector3 WorldPos; public int Combo; public float StartTime; }
+        // 10コンボ毎の節目だけは撃破位置ではなく画面中央に大きく表示する（IsMilestone）。
+        private struct ComboPopup { public Vector3 WorldPos; public int Combo; public float StartTime; public bool IsMilestone; }
         private readonly List<ComboPopup> _comboPopups = new List<ComboPopup>();
 
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
@@ -76,10 +79,17 @@ namespace KakigoriTD.UI
 
         /// <summary>
         /// 敵を撃破した位置にコンボ数を一瞬表示する。GameManager.OnEnemyKilled がコンボ 2 以上のときだけ呼ぶ。
+        /// 10コンボ毎の節目（10, 20, 30…）は撃破位置ではなく画面中央に大きく表示する。
         /// </summary>
         public void ShowComboPopup(Vector3 worldPos, int combo)
         {
-            _comboPopups.Add(new ComboPopup { WorldPos = worldPos, Combo = combo, StartTime = Time.time });
+            _comboPopups.Add(new ComboPopup
+            {
+                WorldPos = worldPos,
+                Combo = combo,
+                StartTime = Time.time,
+                IsMilestone = combo % 10 == 0,
+            });
         }
 
         /// <summary>上部ステータス（Title / 経過タイムなど）。GameManager が毎フレーム設定。</summary>
@@ -190,10 +200,16 @@ namespace KakigoriTD.UI
             new Vector2(-2, 2),  new Vector2(0, 2),   new Vector2(2, 2),
         };
 
-        // コンボポップアップ 1 件を描画する。ワールド座標→スクリーン座標に変換し、
-        // 出現直後は拡大→収束するポップ演出、以後は上に浮かせつつフェードアウトする。
-        // 縁取り＋太字＋大きめフォントで、戦闘中でも視認できるよう強調している。
+        // コンボポップアップ 1 件を描画する。節目（10コンボ毎）は画面中央に大きく、それ以外は撃破位置に小さく表示する。
         private void DrawComboPopup(ComboPopup popup, float age)
+        {
+            if (popup.IsMilestone) DrawMilestonePopup(popup, age);
+            else DrawKillPopup(popup, age);
+        }
+
+        // 通常撃破（節目以外）: ワールド座標→スクリーン座標に変換し、撃破位置に小さく出す。
+        // 出現直後は拡大→収束するポップ演出、以後は上に浮かせつつフェードアウトする。
+        private void DrawKillPopup(ComboPopup popup, float age)
         {
             var cam = Camera.main;
             if (cam == null) return;
@@ -203,21 +219,16 @@ namespace KakigoriTD.UI
 
             float t = age / _comboPopupLifetimeSec;
             float guiY = Screen.height - screenPos.y - t * _comboPopupRisePx; // GUI 座標は上下反転＋上昇演出
-
             float pop = age < _comboPopupPopDurationSec
                 ? Mathf.Lerp(1.6f, 1f, age / _comboPopupPopDurationSec)
                 : 1f;
 
-            // 10コンボごとに階層が上がり、フォントも色も豪華になっていく。
-            int tier = Mathf.Min(popup.Combo / 10, ComboPopupMaxTier);
-            int tieredFontSize = _comboPopupFontSize + tier * 6;
-
             var style = new GUIStyle(GUI.skin.label)
             {
-                fontSize = Mathf.RoundToInt(tieredFontSize * pop),
+                fontSize = Mathf.RoundToInt(_comboPopupFontSize * pop),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
-                wordWrap = false, // 箱の幅(220px)より文字が大きくなる高階層でも「COMBO」を折り返させない
+                wordWrap = false,
                 clipping = TextClipping.Overflow, // ポップ演出でフォントが箱より大きくなる瞬間があるため、切り捨てない
             };
 
@@ -228,7 +239,38 @@ namespace KakigoriTD.UI
             float y = Mathf.Clamp(guiY - h * 0.5f, margin, Screen.height - h - margin);
             var rect = new Rect(x, y, w, h);
 
-            // 黒縁取り（視認性・強調）
+            DrawOutlinedLabel(rect, text, style, new Color(1f, 0.85f, 0.15f), alpha); // 黄色（通常撃破）
+        }
+
+        // 節目（10コンボ毎）: 撃破位置ではなく画面中央に大きく、虹色で出す。
+        private void DrawMilestonePopup(ComboPopup popup, float age)
+        {
+            float t = age / _comboPopupLifetimeSec;
+            float pop = age < _comboPopupPopDurationSec
+                ? Mathf.Lerp(1.8f, 1f, age / _comboPopupPopDurationSec)
+                : 1f;
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.RoundToInt(_comboMilestoneFontSize * pop),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = false,
+                clipping = TextClipping.Overflow,
+            };
+
+            string text = $"{popup.Combo} COMBO!!";
+            float alpha = 1f - t;
+            const float w = 800f, h = 160f;
+            var rect = new Rect(Screen.width * 0.5f - w * 0.5f, Screen.height * 0.5f - h * 0.5f, w, h);
+
+            Color c = Color.HSVToRGB(Mathf.Repeat(Time.time * 0.6f, 1f), 0.85f, 1f); // 節目はすべて虹色（時間で色相回転）
+            DrawOutlinedLabel(rect, text, style, c, alpha);
+        }
+
+        // 黒縁取り（周囲8方向に重ね描き）＋本体色でラベルを1つ描画する共通処理。
+        private static void DrawOutlinedLabel(Rect rect, string text, GUIStyle style, Color fillColor, float alpha)
+        {
             GUI.contentColor = new Color(0f, 0f, 0f, alpha * 0.85f);
             for (int i = 0; i < ComboPopupOutlineOffsets.Length; i++)
             {
@@ -238,27 +280,9 @@ namespace KakigoriTD.UI
                 GUI.Label(r, text, style);
             }
 
-            // 本体（10コンボごとに色が変わり、コンボが伸びるほど豪華になる）
-            Color c = ComboPopupColor(tier);
-            GUI.contentColor = new Color(c.r, c.g, c.b, alpha);
+            GUI.contentColor = new Color(fillColor.r, fillColor.g, fillColor.b, alpha);
             GUI.Label(rect, text, style);
             GUI.contentColor = Color.white;
-        }
-
-        private const int ComboPopupMaxTier = 5; // 50コンボ以降は虹色に固定（それ以上は上げない）
-
-        // 階層ごとの色。最終階層（50コンボ以降）は時間で色相を回して虹色にする（最高潮の演出）。
-        private static Color ComboPopupColor(int tier)
-        {
-            switch (tier)
-            {
-                case 0: return new Color(1f, 0.85f, 0.15f);  // 黄色（2〜9コンボ）
-                case 1: return new Color(1f, 0.55f, 0.1f);   // オレンジ（10〜19）
-                case 2: return new Color(1f, 0.25f, 0.25f);  // 赤（20〜29）
-                case 3: return new Color(0.85f, 0.3f, 1f);   // 紫（30〜39）
-                case 4: return new Color(0.3f, 0.8f, 1f);    // 水色（40〜49）
-                default: return Color.HSVToRGB(Mathf.Repeat(Time.time * 0.6f, 1f), 0.85f, 1f); // 50コンボ以降：虹色
-            }
         }
 
         // 背景（薄暗い）＋ 充填（color）の横バー。
