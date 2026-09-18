@@ -51,6 +51,7 @@ MonoBehaviour:
   _groundSurface: {fileID: 3739809722233026105}
   _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
   _fortHpMax: 2500
+  _showClearTimeTenths: 1
   _fortHeightOffset: 0
   _enemyPrefab: {fileID: 0}
   _bomberPrefab: {fileID: 6684815093208432099, guid: 56902edd330634f53b0518ad785a3e57, type: 3}

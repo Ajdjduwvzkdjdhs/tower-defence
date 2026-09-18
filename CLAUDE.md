@@ -177,7 +177,11 @@
 - **Fort Hp Max**（`TH_Stage.prefab` の `GameManager`・既定 2500）… 盤面人数が一定なので被弾は「プレイ時間 × 人数」に比例する。
   どれだけ遅い人を敗北にするかはここで決める（目安: 1体/s のボットで 53 秒クリア・HP 34% 残し、放置は 107 秒で敗北。放置を早く終わらせたければ下げる）
 
-クリアタイムはリザルト／ランキングで **0.1 秒単位**（`StageResult.FormatTime(sec, showTenths: true)`）に表示する。
+クリアタイムはリザルト／ランキングで **0.1 秒単位** に表示する（`GameManager` の **Show Clear Time Tenths**・既定 ON）。
+
+**ADR-36 の作業前（ADR-35 まで）の挙動に戻す**（コード変更不要・3 箇所）:
+`StageConfig.asset` の **Spawn Mode = FixedRate**（`Spawn Rate Per Second` は作業前の 2 のまま）／
+`TH_Stage.prefab` の `GameManager` で **Fort Hp Max = 1000**・**Show Clear Time Tenths = OFF**。
 
 ## コンボ・ビーム砲の調整値（`StageConfig.asset`・ADR-30/35）
 

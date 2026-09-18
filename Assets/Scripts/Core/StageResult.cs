@@ -35,9 +35,12 @@ namespace KakigoriTD.Core
         /// <summary>このプレイの最大コンボ（表示のみ・順位には使わない）。</summary>
         public int MaxCombo { get; }
 
-        /// <summary>結果の見出し文（クリア＝タイム / 失敗＝到達撃破数）。クリアタイムは 0.1 秒まで出す（ADR-36）。</summary>
-        public string Headline => IsWin
-            ? $"{FormatTime(ClearTimeSec, showTenths: true)} でクリア！"
+        /// <summary>結果の見出し文（クリア＝タイム（秒単位） / 失敗＝到達撃破数）。</summary>
+        public string Headline => HeadlineFor(showTenths: false);
+
+        /// <summary>結果の見出し文。<paramref name="showTenths"/> ならクリアタイムを 0.1 秒まで出す（ADR-36・Inspector で切替）。</summary>
+        public string HeadlineFor(bool showTenths) => IsWin
+            ? $"{FormatTime(ClearTimeSec, showTenths)} でクリア！"
             : $"{KillCount} 体で力尽きた";
 
         /// <summary>

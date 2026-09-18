@@ -25,7 +25,8 @@ namespace KakigoriTD.Data
 
         [Header("湧き（ADR-36）")]
         [Tooltip("湧き方式。Population（既定）＝盤面の敵数を目標人数に保ち、倒した分だけ補充する（腕前がクリアタイムに出る）。"
-               + "FixedRate＝一定間隔で湧く旧方式（ADR-30。クリアタイムの下限が 目標撃破数÷湧きレート に固定される）。")]
+               + "FixedRate＝ADR-36 の作業前そのまま（Spawn Rate Per Second の一定間隔で湧く。"
+               + "クリアタイムの下限が 目標撃破数÷湧きレート に固定される）。")]
         [SerializeField] private SpawnMode _spawnMode = SpawnMode.Population;
         [Tooltip("[Population] 開始時（撃破 0 体）に盤面へ維持する敵数。多いほど砦への圧が強く、雪崩 1 回の巻き込みも増える。")]
         [SerializeField] private int _fieldPopulationStart = 8;

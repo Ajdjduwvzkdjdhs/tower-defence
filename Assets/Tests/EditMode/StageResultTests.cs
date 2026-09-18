@@ -40,7 +40,8 @@ namespace KakigoriTD.Tests.EditMode
         public void Headline_Win_UsesClearTime()
         {
             var r = new StageResult(true, 102f, 100, 100, 12);
-            Assert.That(r.Headline, Is.EqualTo("1分42.0秒 でクリア！"));
+            Assert.That(r.Headline, Is.EqualTo("1分42秒 でクリア！"));
+            Assert.That(r.HeadlineFor(showTenths: true), Is.EqualTo("1分42.0秒 でクリア！"));
         }
 
         [Test]

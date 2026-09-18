@@ -41,6 +41,7 @@ namespace KakigoriTD.UI
         private bool _resultShown;
         private StageResult _result;
         private int _resultRank = ScoreRanking.Unranked; // ADR-34: 今回の順位（クリア時のみ）
+        private bool _showClearTimeTenths = true;         // ADR-36: クリアタイムを 0.1 秒単位で出すか（GameManager から）
         // 開始前カウントダウン（"3"/"2"/"1"/"スタート"）。プロジェクター投影を想定し、
         // 画面全体を暗転させたうえで超大型・黒縁取り文字を出す（CountdownState が都度 SetCountdown で更新）。
         private string _countdownText = "";
@@ -143,6 +144,9 @@ namespace KakigoriTD.UI
             _resultRank = rank;
         }
 
+        /// <summary>クリアタイムを 0.1 秒単位で出すか（GameManager の Inspector 値・ADR-36）。</summary>
+        public void SetClearTimeTenths(bool show) => _showClearTimeTenths = show;
+
         /// <summary>リザルト表示を消す（再挑戦時）。</summary>
         public void ClearResult() => _resultShown = false;
 
@@ -218,8 +222,8 @@ namespace KakigoriTD.UI
                 GUI.contentColor = Color.white;
                 // クリア時は順位を見出しに添える（「1分42秒 でクリア！ — 第3位」）。
                 string headline = _result.IsWin && _resultRank != ScoreRanking.Unranked
-                    ? $"{_result.Headline}  — 第{_resultRank}位"
-                    : _result.Headline;
+                    ? $"{_result.HeadlineFor(_showClearTimeTenths)}  — 第{_resultRank}位"
+                    : _result.HeadlineFor(_showClearTimeTenths);
                 GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), headline);
                 GUI.Label(new Rect(box.x, box.y + 86, box.width, 24),
                     $"撃破 {_result.KillCount} / {_result.TargetKillCount}   最大コンボ {_result.MaxCombo}");
