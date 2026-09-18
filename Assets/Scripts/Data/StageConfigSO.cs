@@ -50,7 +50,7 @@ namespace KakigoriTD.Data
 
         [Header("コンボ")]
         [Tooltip("この秒数以内に次を倒せばコンボ継続。爆発の連鎖撃破も 1 体ずつ加算される。")]
-        [SerializeField] private float _comboWindowSec = 1.0f;
+        [SerializeField] private float _comboWindowSec = 1.5f;
         [Tooltip("ビーム砲が敵を倒した瞬間から、進行中コンボが切れるまでの猶予秒（ADR-35）。"
                + "ビーム撃破はコンボに加算しない。Combo Window Sec より短くして、一掃後にコンボだけが長く生き残らないようにする。"
                + "この猶予内に雪崩で倒せばコンボは継続し、猶予は Combo Window Sec に戻る。")]

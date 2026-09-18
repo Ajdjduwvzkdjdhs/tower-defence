@@ -169,7 +169,7 @@
 
 `Assets/ScriptableObjects/StageConfig.asset` の Inspector で調整する（コード変更不要）:
 
-- **Combo Window Sec**（既定 1.0）… この秒数以内に次を倒せばコンボ継続
+- **Combo Window Sec**（既定 1.5）… この秒数以内に次を倒せばコンボ継続
 - **Beam Combo Grace Sec**（既定 0.5）… ビーム砲が敵を倒した瞬間から進行中コンボが切れるまでの猶予。ビーム撃破はコンボに加算しない。
   0 にすれば衝撃波の直後にほぼ即断ち切る
 - **Gauge Max**（既定 60）… 大きいほどビーム砲の発動頻度が下がる（`Gauge Per Kill`／`Gauge Combo Bonus` と合わせて逆算）
