@@ -9,11 +9,20 @@ namespace KakigoriTD.Scenes
     {
         [SerializeField] private CanvasGroup fadeCanvas;
         [SerializeField] private float fadeDuration = 1.0f;
+        [Tooltip("D キーをこの秒数押し続けるとランキングのローカル DB ファイルを消す（ADR-34・展示のリセット用）。")]
+        [SerializeField] private float rankingResetHoldSec = 5f;
 
         private bool isTransitioning = false;
+        private RankingResetHotkey rankingReset;
+
+        void Awake()
+        {
+            rankingReset = RankingResetHotkey.CreateDefault(rankingResetHoldSec);
+        }
 
         void Update()
         {
+            rankingReset.Update(Time.deltaTime);
             if (Keyboard.current != null &&
                 Keyboard.current.enterKey.wasPressedThisFrame &&
                 !isTransitioning)
@@ -21,6 +30,8 @@ namespace KakigoriTD.Scenes
                 StartCoroutine(FadeAndLoadScene());
             }
         }
+
+        private void OnGUI() => rankingReset.OnGUI();
 
         private IEnumerator FadeAndLoadScene()
         {

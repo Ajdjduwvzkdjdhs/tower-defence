@@ -465,3 +465,15 @@
 - **不採用**: ①環境変数で揃える（両プロセスの起動手順に依存し、展示当日の手順が増える）②Python 側の出力先を全ツールで 1 箇所に統一する（各ツールを単独でも動かすので、他ツールの出力を上書きし合う事故が起きる）③トラッカー選択を `GameManager` の `[SerializeField]` に置く（パスは LiDAR 設定の一部なので `LidarPreviewConfigSO` に同居させた方が現場で 1 画面に収まる）。
 - **検証**: EditMode `LidarPreviewConfigSOTests` に 3 本追加（プリセット 3 種の解決 / Custom の透過 / 既定値の後方互換）、計 214 本緑（Unity-MCP `tests-run`・全件）。
 
+
+## ADR-34: クリアタイムのランキングをローカルの DB ファイル（JSON）に保存する（`ScoreRanking` + `IScoreStore` / `JsonFileScoreStore`）— Accepted（`90-score-ranking`・2026-09-19・Issue #90）
+
+- **背景**: ADR-30 で「クリア＝クリアタイム（短いほど上位・ランキング対象）／失敗＝到達撃破数（対象外）」と決めたが、実装は 1 プレイ分を `GameResultHolder` で次シーンに渡して表示するだけで、プレイ間の記録が残らなかった（Phase 7 未整備「クリアタイムのランキング保存」）。展示では来場者同士の競争が動機になるので、端末ローカルに記録を持ち越す必要がある。
+- **決定**:
+  - **Core（純ロジック・ADR-8）**: `ScoreEntry`（クリアタイム・撃破数・最大コンボ・記録時刻 Unix 秒）と `ScoreRanking`（容量つきの昇順リスト。`Insert` が 1 始まりの順位を返し、容量に入らなければ `Unranked`=0。同タイムは先着優先。`FromEntries` で保存データから再構築、`TryRecord(StageResult)` は失敗なら記録しない）。永続化は `IScoreStore { Load; Save }` で抽象化し、Core は保存形式を知らない。
+  - **Persistence（Runtime・新フォルダ `Assets/Scripts/Persistence/`）**: `JsonFileScoreStore` が `JsonUtility` で JSON ファイルに全置換保存する。書き込みは `.tmp` → `File.Replace` の**原子的更新**（電源断で半端な JSON を残さない）。読み込みで壊れていたら `.corrupt-<UTC時刻>` に**退避して空から開始**（記録を黙って上書きしない）。DTO は `[SerializeField] private` フィールド（public フィールド禁止の鉄則を守る）。
+  - **保存先**: 環境変数 `KAKIGORI_RANKING_FILE`（フルパス）→ 無ければ `Application.persistentDataPath/<GameManager._rankingFileName>`（既定 `ranking.json`）。macOS なら `~/Library/Application Support/DefaultCompany/kakigori_demo/ranking.json`。
+  - **配線（Composition Root・ADR-5）**: `GameManager.Awake` の `BuildRanking()` でロード（Console に `[Ranking] file = … / N 件`）。`ShowResult` でクリアなら `TryRecord` → `Save` → `GameResultHolder.Ranking / LastRank` に置き、`UIManager` の試合内リザルトに「— 第N位」、`ResultScene` の下帯に「第N位」＋右上にランキング表（上位 `_rankingDisplayCount`=10 件・今回の行をハイライト）。保持件数は `GameManager._rankingCapacity`（既定 100）。保存失敗は `LogError` にとどめて表示は止めない。
+- **不採用**: ①SQLite（`Mono.Data.Sqlite` ＋各プラットフォームのネイティブ `sqlite3` を `Plugins/` に入れる必要があり、展示ビルドの依存とリスクが増える。件数は高々数百件で JSON で十分。必要になれば `IScoreStore` の実装差し替えで対応）②`PlayerPrefs`（レジストリ/plist に埋まり、現場でファイルとして取り出し・退避・リセットしにくい）③`GameResultHolder` を MonoBehaviour / Singleton 化（ADR-5 に反する。static の値置き場のまま項目を 2 つ足すだけにした）④タイトル画面へのランキング表示（今回は Result のみ。必要なら `TitleScene` が `JsonFileScoreStore` を直接読む形で追加できる）。
+- **リセット（展示運用）**: Title / Result 画面で **`D` キーを 5 秒長押し**するとランキングファイルを削除する（`IScoreStore.Clear`）。判定は Core の `HoldToConfirm`（押下中だけ積算・離せばリセット・到達で 1 回だけ発火）、表示と削除は plain class `Scenes/RankingResetHotkey`（左上に進捗バー → 「消去しました」）。`TitleScene` / `ResultScene` の既存コンポーネントが生成して `Update` / `OnGUI` を呼ぶのでシーンには部品を足していない。戦闘中の `TH` には入れない（誤発動防止。展示では `D` は谷選択キーの名残でもある）。秒数は各シーンの `Ranking Reset Hold Sec`。
+- **検証**: EditMode `ScoreRankingTests` 11 本＋`JsonFileScoreStoreTests` 7 本（往復・未作成・破損退避・パス解決・上書き・Clear）＋`HoldToConfirmTests` 5 本、計 237 本緑（Unity-MCP `tests-run`・全件）。Play 検証（2026-09-19）: `ResultScene` で `InputSystem.QueueStateEvent` により `D` 押下を注入 → 進捗バー → Console `[Ranking] D 長押しでランキングを消去`、`ranking.json` 削除、右上の表と「第N位」が消える。※Editor が背面だと `PointersAndKeyboardsRespectGameViewFocus` で Player ループに入力が届かないため、検証時のみ `AllDeviceInputAlwaysGoesToGameView` に切替（終了後に復元）。

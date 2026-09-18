@@ -464,7 +464,10 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
   - [x] Play 検証（Unity-MCP・2026-09-18）: Console に `[LidarPosition] tracker = LidarTracker1Plus3 / file = <root>/tools/lidar-tracker1+3/out/position.txt` を確認
   - [ ] 現物検証: `tracker1p3.py` 起動 → 落氷で雪崩が出ること
 - [ ] 盾兵の残り耐久表示（現状は per-instance MPB で暗くするだけ。ヒビ・欠け等への差し替え）
-- [ ] クリアタイムのランキング保存（現状は 1 プレイ分を表示するのみ）
+- [x] クリアタイムのランキング保存（2026-09-19 `90-score-ranking`・Issue #90。Core `ScoreRanking`＋`IScoreStore`、`Persistence/JsonFileScoreStore` が `persistentDataPath/ranking.json` に原子的保存。`ResultScene` に上位 10 件＋今回の順位を表示。ADR-34）
+  - [x] Play 検証（Unity-MCP・2026-09-19）: 3 件を事前投入 → `ShowResult(win 85.3s)` → Console `[Ranking] 1分25秒 → 2 位 / 全 4 件`、`ResultScene` 右上に 4 行のランキング表（2 位をハイライト）・下帯「1分25秒 第2位」、`ranking.json` に 4 件保存（`.tmp` 残なし）
+  - [x] `D` 5 秒長押しでランキング消去（Title / Result。Core `HoldToConfirm`＋`RankingResetHotkey`。Play 検証済み・2026-09-19）
+  - [ ] 現物検証: 実プレイでクリア → 次回起動時にランキングが持ち越されること
 
 ---
 
