@@ -31,6 +31,7 @@
 | LiDAR 連続座標入力 | LiDAR は谷でなく氷の座標 `seq,x,y,shaving` を送る。検知点から放射状に雪玉ストリーム→一般化位置到達で1体撃破。d 連動で cooldown(0.6→0)/角度spread(25→3)。氷消費は無効。角度は設置時 config 固定・平行移動のみキー calib。**Unity 側実装済み／Python・実機は未着手（Proposed）** | ADR-29 |
 | ゲーム性刷新 | 3Wave 制を廃し、単一ステージの「目標撃破数レース」へ。爆発兵の無制限連鎖・盾兵（雪玉N発）・コンボ・ゲージMAXで自動発動する必殺ビーム。スコアはクリア＝クリアタイム／失敗＝到達撃破数。味方NPC・変装敵・ペナルティ・氷ストックは削除 | ADR-30 |
 | 演出とロジックの合流 | `main` で独立に作られた演出（爆発テレグラフ・ビーム砲モデル＋光線＋衝撃波・パーティクル雪崩）を ADR-30 のロジックに接続。爆発演出は見た目のみ（判定は `ExplosionChain`）、ビームは光線一周→衝撃波の瞬間に全員撃破、半径は常にロジック側が渡す。旧プレースホルダ（`ExplosionRing`／白フラッシュ `BeamCannon`）と `main` 側の独自ロジック（`KillTally`／撃破数閾値／`KillAllWithin`）は削除 | ADR-31 |
+| 雪崩の当たり判定＝粒 | 雪崩の粒そのものを判定にする `ParticleContact` モード：粒が敵に触れたら吸収されて 1 ダメージ（耐久は `EnemyTypeSO.ParticleHitPoints`・種別ごと）。前列が生きている間は雪がそこで止まるので前列から倒れる。クールダウン・1 雪崩 1 撃なし。静止線より外に落としたら雪崩なし。分岐点の挙動は `Legacy` として Inspector で切替可 | ADR-32 |
 
 ---
 
@@ -436,3 +437,22 @@
 
 - **残課題**: ①ビームの衝撃波の半径（12）が Game View ではほぼ画面外。実機の投影画角で `RingRadiusPadding` を現物合わせ ②盾耐久・コンボ・クリア遷移の Play 検証（ADR-30 の残作業）③`docs/phases.md` Phase 8 の VFX 項目を「済」に更新（本 ADR で対応）。
 
+---
+
+## ADR-32: 雪崩の当たり判定を「粒そのもの」にする（ParticleContact）＋分岐点の判定を Legacy として Inspector 切替 — Accepted（`76-avalanche-hitbox`・2026-09-18）
+
+- **背景**: ADR-31 のパーティクル雪崩は、見た目（Cone 半径 2・半角 25°・粒が地形で跳ねる）と当たり判定（4 u/s で外へ歩く点の半径 1.5＝一定幅 3.0 の帯）が別の形で、静止線付近では見た目が幅 6〜7 に広がるため「雪が当たっているのに倒れない」帯が出る。粒（10 u/s）と判定点（4 u/s）の速度差で「届いてから 1 秒以上遅れて倒れる」ズレもある。
+  当初は「見た目を判定に合わせる」（扇の形を判定から導き、はみ出た粒を消す）方針で実装・Play 検証したが、幅を厳密に守ると雪が細い一筋になり、粒の 88% を消すことになった（物理の bounce が「流れ下る」推進力なので下げると届かなくなる）。判定を見た目に合わせる方向へ転換した。
+
+- **決定**:
+  - **ParticleContact モード（既定）**: 毎フレーム雪崩の粒の実位置を走査し、粒の XZ 距離が **敵の半身（`EnemyBodyWidthUnits`/2）＋粒の半径（Prefab の `startSize` 最大 × スケール ÷ 2）** 以内、かつ Y が敵の足元 ± `ContactHeightUnits` の中なら接触。接触した粒は**吸収されて消え**（寿命 0）、敵に 1 ダメージ。耐久は `EnemyTypeSO.ParticleHitPoints`（種別ごと・既定 1。盾兵は 150 から現場調整）。耐久が尽きれば `KillOne`（爆発兵は連鎖）。粒が吸収されるので前列が生きている間は後列に雪が届かず、前列ルールをコードで持たなくても前から倒れる。クールダウン・1 雪崩 1 撃の制限は持たない（大量撃破は爽快感として許容。難易度は敵の出現数で調整する）。落氷点が敵の静止半径 `RestRadius` より外（＝敵の上に直接）なら雪崩を起こさない（演出・判定・雪崩音なし。「山から雪を転がして雪崩を起こす」ゲーム概念に沿う）。白塗り演出（`OnAvalanchePassed`）は「最も遠くまで届いた粒」の位置で駆動する。
+  - **Legacy モード**: 分岐点（`main` 0d047c8）の挙動そのまま。歩く判定点・`KillRadiusUnits`・前列ルール（`EnemyKillSelection`）・d 連動クールダウン・盾兵は `StageConfigSO.ShieldHits`（雪崩 1 個 = 1）。コードもデータも無改変で残し、比較の基準にする。
+  - **切替**: `LidarPreviewConfigSO.HitMode`（Inspector）。`LidarAvalancheVfx` が毎フレーム読むので Play 中でも切り替わる。
+  - **純ロジック**: `Gameplay/AvalancheContact.FindHit`（`EnemyKillSelection` と同じ流儀・EditMode 8 本）。`EnemyField.TryAbsorbParticle` はフレームごとに敵スナップショットを 1 回作り、最内半径より内側の粒は早期棄却、同フレームの撃破後は生存フラグだけ同期し直す。吸収の手応え（パフ・SE）は 0.1 s に 1 回へ間引く。
+  - **耐久の置き場**: ParticleContact の耐久は `EnemyTypeSO`（種別の性質と同じ場所・通常敵/爆発兵も Inspector で変更可）、Legacy の盾耐久は `StageConfigSO.ShieldHits` のまま。モードで単位が違う（雪崩の個数 vs 粒の個数）ため 1 フィールドで兼ねない。
+
+- **不採用**: ①判定を見た目に広げる（当初「倒しすぎ」を懸念して却下したが、最終的に方針転換で吸収）②見た目を判定に合わせる（扇の形の導出 `AvalancheFan`・固定判定点・先頭 1 粒到達・包絡線の強制。Play 検証で雪が細い一筋になり不採用。探索コミットは破棄）③粒 N 個の到達しきい値（`ShieldHits` と単位が二重になる）④粒が敵を通過する（盾兵の存在意義が消える）。
+
+- **検証**: EditMode 207 本緑（`AvalancheContactTests` 8 本追加）。Unity-MCP で TH を Play、位置ファイルへ `seq,x,y,1` を書く模擬トラッカーで ①ParticleContact・中腹 r=5：雪崩の通り道の敵が触れた順に倒れ、52〜63 秒で 100 体クリア、FPS 175（粒 4,300 個の走査で性能問題なし）②Legacy へ実行時切替：判定点が r=9.9 まで歩き `TryKillNearest` で撃破 ③境界外 r=9：`IsEmitting=false`・撃破 0、を確認。
+
+- **残課題**: ①`EnemyBodyWidthUnits` と `ShieldTrooper.asset` の `ParticleHitPoints` を現場で実測・調整（盾兵は前の爆発兵の爆発でほぼ倒れるため、粒耐久が効く場面は稀）②境界付近で落氷点が揺れると雪崩が点滅しうる（必要なら余裕幅）③Unity 側の位置ファイル既定パス（`tools/lidar-tracker/out/position.txt`）と `tracker1p3.py` の出力先（`tools/lidar-tracker1+3/out/position.txt`）が違う。
