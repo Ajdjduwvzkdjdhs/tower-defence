@@ -28,7 +28,7 @@
 - エンジン: Unity **6000.3.16f1**（Unity 6.3 / URP 17.3）— バージョンは確定済み
 - 主要パッケージ: URP 17.3 / Cinemachine 3.1 / Input System 1.19（**新** Input System のみ）/ Test Framework 1.6
 - 言語: C#
-- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、22ファイル・192本）
+- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、237本）
 
 ## 実行とテスト
 
@@ -42,6 +42,13 @@
 
 `GameManager` は決着後 `_resultLimit` 秒待って、クリアなら `ResultScene`・失敗なら `GameOverScene` へ遷移する
 （結果は `UI/GameResultHolder` の static 経由で渡す）。
+
+**スコアランキング（ADR-34）**: クリアタイムのみ対象（失敗は記録しない）。`GameManager` が起動時に読み、クリア時に記録→保存し、
+`ResultScene` が上位 10 件＋今回の順位を表示する。保存先はローカルの JSON ファイル
+`Application.persistentDataPath/ranking.json`（macOS: `~/Library/Application Support/DefaultCompany/kakigori_demo/ranking.json`。
+環境変数 `KAKIGORI_RANKING_FILE` でフルパス上書き可）。リセットしたければこのファイルを消す。
+壊れていれば `ranking.json.corrupt-<時刻>` に退避して空から始まる。保持件数は `GameManager` の `Ranking Capacity`（既定 100）。
+**リセット**は Title / Result 画面で `D` キーを 5 秒長押し（左上に進捗バー → 「ランキングを消去しました」）。
 
 **Build 対象外の開発用シーン**（再生して個別検証に使う）:
 - `Assets/Scenes/SampleScene.unity` — Phase 5/6 期の旧セットアップ（GameManager をシーンに直置き）。TH_Stage プレハブ化前の名残
@@ -165,7 +172,8 @@ Assets/Scripts/
   Core/       純C#ロジック（UnityEngine 非依存 = KakigoriTD.Core.asmdef, noEngineReferences）
               GameStateMachine + State群（Title / Battle / Result）, KillProgress, ComboTracker,
               SpecialGauge, ExplosionChain, KillSource, StageResult,
-              AvalancheClock, SpawnClock/SpawnSelector, IGameContext … EditMode テスト対象
+              AvalancheClock, SpawnClock/SpawnSelector, IGameContext,
+              ScoreEntry/ScoreRanking/IScoreStore/HoldToConfirm（クリアタイムのランキング・ADR-34）… EditMode テスト対象
   Data/       ScriptableObject 定義（StageConfigSO, EnemyTypeSO, ProjectileTypeSO, SerialConfigSO,
               VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO, SpecialAttackConfigSO）
   Input/      IInputSource と各実装（上記「入力アーキテクチャ」参照）
@@ -176,9 +184,11 @@ Assets/Scripts/
               ExplosiveDeath + ExplosionTelegraph（爆発演出。判定は Core の ExplosionChain）, Fort,
               SpawnDirector, SnowPuff/DissolveBurst 等
   Audio/      AudioService, AudioConfigSO（Phase 6・表現層のみ・Core 無改修）
-  UI/         UIManager（IMGUI ベースの HUD / バナー / 警告）, GameResultHolder（シーン間の結果受け渡し）
+  UI/         UIManager（IMGUI ベースの HUD / バナー / 警告）, GameResultHolder（シーン間の結果・ランキング受け渡し）
+  Persistence/ JsonFileScoreStore（ランキングのローカル DB ファイル＝JSON・原子的更新・破損時は退避。ADR-34）
   Bootstrap/  GameManager（唯一の Singleton / Composition Root）
-  Scenes/     TitleScene / ResultScene / GameOverScene（KakigoriTD.Scenes）— `Enter` でシーン遷移する小さな MonoBehaviour
+  Scenes/     TitleScene / ResultScene / GameOverScene（KakigoriTD.Scenes）— `Enter` でシーン遷移する小さな MonoBehaviour,
+              RankingResetHotkey（`D` 5 秒長押しでランキング消去。Title / Result が生成する plain class）
 Assets/Tests/EditMode/     純ロジックの単体テスト（KakigoriTD.Tests.EditMode.asmdef）
 Assets/ScriptableObjects/  StageConfig / SpecialAttackConfig / BasicEnemy / AssaultEnemy / BombTrooper /
                            ShieldTrooper / BasicProjectile / AudioConfig / VisionConfig / LidarPreviewConfig /

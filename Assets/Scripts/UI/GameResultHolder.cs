@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using KakigoriTD.Core;
 
 namespace KakigoriTD.UI
@@ -16,7 +17,23 @@ namespace KakigoriTD.UI
         /// <summary>直前のプレイ結果。未プレイなら null。</summary>
         public static StageResult? Last { get; set; }
 
+        /// <summary>
+        /// 直前のプレイを記録した後のランキング（上位から順・ADR-34）。
+        /// 未プレイ・失敗時は null（失敗はランキング対象外）。
+        /// </summary>
+        public static IReadOnlyList<ScoreEntry> Ranking { get; set; }
+
+        /// <summary>
+        /// 直前のプレイの順位（1 始まり）。ランク外・失敗・未プレイは <see cref="ScoreRanking.Unranked"/>。
+        /// </summary>
+        public static int LastRank { get; set; } = ScoreRanking.Unranked;
+
         /// <summary>受け渡し済みの結果を捨てる（タイトルに戻るときなど）。</summary>
-        public static void Clear() => Last = null;
+        public static void Clear()
+        {
+            Last = null;
+            Ranking = null;
+            LastRank = ScoreRanking.Unranked;
+        }
     }
 }

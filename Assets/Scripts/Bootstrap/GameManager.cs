@@ -5,6 +5,7 @@ using KakigoriTD.Data;
 using KakigoriTD.Factory;
 using KakigoriTD.Gameplay;
 using KakigoriTD.Input;
+using KakigoriTD.Persistence;
 using KakigoriTD.UI;
 
 namespace KakigoriTD.Bootstrap
@@ -65,6 +66,11 @@ namespace KakigoriTD.Bootstrap
         [Tooltip("何コンボごとに「節目」（画面中央の虹色表示＋通常ポップアップの色/サイズ変化）とするか。"
                + "現場での撃破ペースが読めないため、Play せずここで調整できるようにしてある。")]
         [SerializeField] private int _comboMilestoneInterval = 10;
+        [Tooltip("ランキングに保持するクリア記録の最大件数（ADR-34）。溢れた記録はランク外。")]
+        [SerializeField] private int _rankingCapacity = 100;
+        [Tooltip("ランキングを保存するファイル名。persistentDataPath 直下に置く"
+               + "（環境変数 KAKIGORI_RANKING_FILE があればそのフルパスを優先）。")]
+        [SerializeField] private string _rankingFileName = JsonFileScoreStore.DefaultFileName;
         private Fort _fort;
         private ProjectileFactory _projectileFactory;
         private EnemyField _field;
@@ -74,6 +80,8 @@ namespace KakigoriTD.Bootstrap
         private ComboTracker _combo;
         private SpecialGauge _gauge;
         private SpecialAttackController _beam;
+        private IScoreStore _scoreStore;      // ADR-34: ローカル DB ファイル
+        private ScoreRanking _ranking;
         private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
         private LidarPositionInputSource _lidarPosSource; // ロスト警告用に保持（LiDAR/マウスOR合成でも常時生成）
         private LidarAvalancheVfx _lidarVfx;
@@ -112,6 +120,8 @@ namespace KakigoriTD.Bootstrap
             _progress = new KillProgress(_stageConfig.TargetKillCount);
             _combo = new ComboTracker(_stageConfig.ComboWindowSec);
             _gauge = new SpecialGauge(_stageConfig.GaugeMax, _stageConfig.GaugePerKill, _stageConfig.GaugeComboBonus);
+
+            BuildRanking();
 
             // 決定キー（Title/Result の Enter）専用。削りは位置入力＋LidarAvalancheVfx が担う。
             _input = NewChild("InputSource").AddComponent<KeyboardInputSource>();
@@ -227,8 +237,13 @@ namespace KakigoriTD.Bootstrap
 
         public void ShowResult(StageResult result)
         {
-            _ui.ShowResult(result);
+            // クリアならランキングに記録して保存（失敗は対象外・ADR-34）。
+            int rank = RecordRanking(result);
+
+            _ui.ShowResult(result, rank);
             GameResultHolder.Last = result; // 次のシーン（Result / GameOver）へ受け渡す
+            GameResultHolder.LastRank = rank;
+            GameResultHolder.Ranking = result.IsWin ? _ranking.Top(_ranking.Count) : null;
 
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
             if (result.IsWin) _audio?.PlayClear();
@@ -246,7 +261,37 @@ namespace KakigoriTD.Bootstrap
             UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
         }
 
+        // ランキングに記録して保存。1 始まりの順位（ランク外・失敗は ScoreRanking.Unranked）。
+        private int RecordRanking(StageResult result)
+        {
+            long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            int rank = _ranking.TryRecord(result, now);
+            if (!result.IsWin) return rank;
+
+            try
+            {
+                _scoreStore.Save(_ranking.Entries);
+            }
+            catch (System.Exception e)
+            {
+                // 保存に失敗しても試合結果の表示は止めない（展示中に固まらせない）。
+                Debug.LogError($"[Ranking] 保存に失敗: {e.Message}");
+            }
+            Debug.Log($"[Ranking] {StageResult.FormatTime(result.ClearTimeSec)} → "
+                    + (rank == ScoreRanking.Unranked ? "ランク外" : $"{rank} 位") + $" / 全 {_ranking.Count} 件");
+            return rank;
+        }
+
         // ---- build helpers ---------------------------------------------------
+
+        // ADR-34: 起動時にローカル DB ファイルからランキングを読む。
+        private void BuildRanking()
+        {
+            var path = JsonFileScoreStore.ResolvePath(Application.persistentDataPath, _rankingFileName);
+            _scoreStore = new JsonFileScoreStore(path);
+            _ranking = ScoreRanking.FromEntries(_scoreStore.Load(), _rankingCapacity);
+            Debug.Log($"[Ranking] file = {path} / {_ranking.Count} 件");
+        }
 
         // 360度化した単一の敵マネージャ（phase-preview-feedback.md / ADR-29 の 360度拡張）。
         private void BuildField()

@@ -40,6 +40,7 @@ namespace KakigoriTD.UI
         private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
         private StageResult _result;
+        private int _resultRank = ScoreRanking.Unranked; // ADR-34: 今回の順位（クリア時のみ）
         // 開始前カウントダウン（"3"/"2"/"1"/"スタート"）。プロジェクター投影を想定し、
         // 画面全体を暗転させたうえで超大型・黒縁取り文字を出す（CountdownState が都度 SetCountdown で更新）。
         private string _countdownText = "";
@@ -134,10 +135,12 @@ namespace KakigoriTD.UI
         public void SetTrackerWarning(string text) => _trackerWarning = text;
 
         /// <summary>リザルトを表示する（クリア＝タイム / 失敗＝到達撃破数・ADR-30）。</summary>
-        public void ShowResult(StageResult result)
+        /// <param name="rank">ランキング順位（1 始まり）。ランク外・失敗は <see cref="ScoreRanking.Unranked"/>。</param>
+        public void ShowResult(StageResult result, int rank = ScoreRanking.Unranked)
         {
             _resultShown = true;
             _result = result;
+            _resultRank = rank;
         }
 
         /// <summary>リザルト表示を消す（再挑戦時）。</summary>
@@ -213,7 +216,11 @@ namespace KakigoriTD.UI
                 GUI.contentColor = _result.IsWin ? new Color(1f, 0.9f, 0.3f) : new Color(1f, 0.5f, 0.5f);
                 GUI.Label(new Rect(box.x, box.y + 18, box.width, 40), _result.IsWin ? "CLEAR!" : "FORT DESTROYED");
                 GUI.contentColor = Color.white;
-                GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), _result.Headline);
+                // クリア時は順位を見出しに添える（「1分42秒 でクリア！ — 第3位」）。
+                string headline = _result.IsWin && _resultRank != ScoreRanking.Unranked
+                    ? $"{_result.Headline}  — 第{_resultRank}位"
+                    : _result.Headline;
+                GUI.Label(new Rect(box.x, box.y + 58, box.width, 24), headline);
                 GUI.Label(new Rect(box.x, box.y + 86, box.width, 24),
                     $"撃破 {_result.KillCount} / {_result.TargetKillCount}   最大コンボ {_result.MaxCombo}");
                 GUI.Label(new Rect(box.x, box.y + 112, box.width, 28), "[Enter] で再挑戦");
