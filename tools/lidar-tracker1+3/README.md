@@ -86,19 +86,22 @@ Unity が読むファイルは `[output] position_file`（`config.toml` から�
 2. `config.toml` の `[output] position_file`
 3. スクリプト相対 `out/position.txt`
 
-**Unity 側**は `CLAUDE.md` の「物理トラッカー ↔ Unity の接続方式」にある通り、
-`VisionInputSource` が読むパスは Unity の `VisionConfigSO`
-（`Assets/ScriptableObjects/VisionConfig.asset` の `_relativePath` / 環境変数
-`KAKIGORI_POSITION_FILE` / 隣接 `config.json`）で決まる。**現状 `VisionConfig.asset` の
-`_relativePath` は `tools/lidar-tracker/out/position.txt`**（＝ lidar-tracker3 ではなく
-lidar-tracker、T-mini 単体版の出力）を指している（2026-09-14 時点で確認）。
+**Unity 側**（展示本番の `InputMode.LidarPosition`・`LidarPositionInputSource`）が読むパスは
+`Assets/ScriptableObjects/LidarPreviewConfig.asset` の Inspector 先頭にある
+**「使用する LiDAR トラッカー」→ `Tracker`** で選ぶ（ADR-33 / Issue #83）:
 
-**このツールに乗り換えるなら**、Unity Editor 上で `VisionConfig.asset` を選び、
-`_relativePath` をこのツールの出力（既定 `tools/lidar-tracker1+3/out/position.txt`、
-または `config.toml` の `[output] position_file` で変えた先）に書き換える。
-`unity status` が Editor を返すなら `.asset` を手編集せず `unity command set_serialized_field`
-等で書き換えること（`CLAUDE.md` の「Unity Editor 連携」参照）。もしくは、環境変数
-`KAKIGORI_POSITION_FILE` を Unity とこのツールの両方に同じ値で設定して揃えてもよい。
+| `Tracker` | Unity が読むファイル |
+|---|---|
+| `LidarTracker` | `tools/lidar-tracker/out/position.txt`（T-mini 単体） |
+| `LidarTracker3` | `tools/lidar-tracker3/out/position.txt`（S1 単体） |
+| `LidarTracker1Plus3` | `tools/lidar-tracker1+3/out/position.txt`（このツール・**現在の設定**） |
+| `Custom` | `Position File Relative` に手入力したパス（`config.toml` の `[output] position_file` を変えたときはこれ） |
+
+Play 開始時に Unity の Console へ `[LidarPosition] tracker = LidarTracker1Plus3 / file = …` が出るので、
+このツールの起動ログの出力先と一致しているか突き合わせる（ファイルが無ければ警告が出る）。
+`.asset` は手編集せず Editor（または `unity command set_serialized_field` 等）で変える。
+もしくは、環境変数 `KAKIGORI_POSITION_FILE` を Unity とこのツールの両方に同じ値で設定して揃えてもよい
+（環境変数は `Tracker` より優先）。
 
 ## 実行
 

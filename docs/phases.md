@@ -460,6 +460,9 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 - [x] 爆発・ビームの正式 VFX（2026-09-17 `main` の `ExplosionTelegraph` / `BeamCannon.prefab`＋`BeamSweepVfx`＋衝撃波 / `AvalancheSnowEffect` を接続。ADR-31）
 - [x] 雪崩の当たり判定を粒そのものにする `ParticleContact` モード（2026-09-18 `76-avalanche-hitbox`。粒が敵に触れたら吸収＋1 ダメージ、耐久は `EnemyTypeSO.ParticleHitPoints`、静止線より外は雪崩なし。分岐点の判定は `Legacy` として `LidarPreviewConfigSO.HitMode` で切替。ADR-32）
   - [ ] `LidarPreviewConfig.asset` の `_enemyBodyWidthUnits` と `ShieldTrooper.asset` の `_particleHitPoints` を現場で実測・調整
+- [x] Unity が読む LiDAR 共有ファイルを Inspector のトラッカー選択で切替（2026-09-18 `83-changeLiDARtoUnity`・Issue #83。`LidarPreviewConfigSO.Tracker`＝`LidarTracker` / `LidarTracker3` / `LidarTracker1Plus3` / `Custom`。アセットは `LidarTracker1Plus3` に設定。ADR-33）
+  - [x] Play 検証（Unity-MCP・2026-09-18）: Console に `[LidarPosition] tracker = LidarTracker1Plus3 / file = <root>/tools/lidar-tracker1+3/out/position.txt` を確認
+  - [ ] 現物検証: `tracker1p3.py` 起動 → 落氷で雪崩が出ること
 - [ ] 盾兵の残り耐久表示（現状は per-instance MPB で暗くするだけ。ヒビ・欠け等への差し替え）
 - [ ] クリアタイムのランキング保存（現状は 1 プレイ分を表示するのみ）
 
