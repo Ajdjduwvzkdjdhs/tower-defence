@@ -29,6 +29,12 @@ namespace KakigoriTD.Data
         // Phase2: 味方NPC が自走退場するまでの秒数（仕様書 §19: 既定6秒）。
         [SerializeField] private float _allyLifetime = 6f;
 
+        // 雪崩の粒との接触判定（AvalancheHitMode.ParticleContact・ADR-32）で倒れるまでに吸収する粒の数。
+        // 1 = 粒 1 個で倒れる（通常敵・爆発兵）。盾兵は大きくして「雪を吸い続けてから倒れる」にする。
+        // Legacy モードでは使わない（盾兵の耐久は StageConfigSO.ShieldHits＝雪崩 1 個 = 1 ヒット）。
+        [Tooltip("雪崩の粒を何個吸収したら倒れるか（ParticleContact モード専用）。1 で粒 1 個。盾兵は数百に。")]
+        [SerializeField] private int _particleHitPoints = 1;
+
         /// <summary>移動速度。突撃隊は速い。</summary>
         public float MoveSpeed => _moveSpeed;
 
@@ -55,5 +61,7 @@ namespace KakigoriTD.Data
 
         /// <summary>味方NPC が自走退場するまでの秒数（Phase2 用）。</summary>
         public float AllyLifetime => _allyLifetime;
+        /// <summary>雪崩の粒を何個吸収したら倒れるか（ParticleContact モード専用・1 未満は 1 扱い）。</summary>
+        public int ParticleHitPoints => _particleHitPoints < 1 ? 1 : _particleHitPoints;
     }
 }
