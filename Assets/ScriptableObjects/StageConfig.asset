@@ -25,7 +25,7 @@ MonoBehaviour:
   _shieldChanceStart: 0.05
   _shieldChanceEnd: 0.2
   _shieldHits: 20
-  _comboWindowSec: 1
+  _comboWindowSec: 1.5
   _beamComboGraceSec: 0.5
   _gaugeMax: 60
   _gaugePerKill: 1
