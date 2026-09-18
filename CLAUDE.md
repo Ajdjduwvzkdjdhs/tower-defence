@@ -28,7 +28,7 @@
 - エンジン: Unity **6000.3.16f1**（Unity 6.3 / URP 17.3）— バージョンは確定済み
 - 主要パッケージ: URP 17.3 / Cinemachine 3.1 / Input System 1.19（**新** Input System のみ）/ Test Framework 1.6
 - 言語: C#
-- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、245本）
+- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、254本）
 
 ## 実行とテスト
 
@@ -57,7 +57,7 @@
 
 ### テスト方針
 
-- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在245本）。
+- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在254本）。
 - Unity 固有の挙動（シーン遷移・Play Mode の動き・UI 表示・演出）は **起動中の Editor を `unity` CLI で駆動して**スクリーンショット/ログで確認する（下記）。
   「動いた気がする」で終わらせず、客観的な証拠を残してから次へ進む。
 
@@ -165,6 +165,20 @@
 > 両モードで耐久の単位が違う（Legacy＝雪崩の個数、Particle Contact＝粒の個数）ので、値は共有しない。
 > `.asset` の YAML を直接編集しない（Editor で変更する）。詳細な設計判断は `docs/architecture.md` ADR-32。
 
+## 湧きと砦 HP の調整値（`StageConfig.asset`／`TH_Stage.prefab`・ADR-36）
+
+湧きは既定で **Population 方式**（盤面の敵数を目標人数に保ち、倒した分だけ補充）。「湧いた分しか倒せない」旧方式（FixedRate）では
+クリアタイムの下限が 目標撃破数÷湧きレート に固定され、腕前がタイムに出なかった（ボット計測 1体/s→43s・3体/s→44s → 変更後 47s・18s）。
+`Assets/ScriptableObjects/StageConfig.asset` の Inspector で調整する:
+
+- **Spawn Mode**（既定 Population）… `FixedRate` にすると ADR-30 の一定間隔湧き（`Spawn Rate Per Second`）に切り戻せる
+- **Field Population Start / End**（既定 8 / 16）… 開始時／目標到達時に盤面へ維持する敵数（進捗で線形補間）。多いほど砦への圧が強く、雪崩 1 回の巻き込みも増える
+- **Refill Rate Per Second**（既定 6）… 補充の上限レート。腕前の上限より十分速くしておく（遅いと再び湧き律速になる）
+- **Fort Hp Max**（`TH_Stage.prefab` の `GameManager`・既定 2500）… 盤面人数が一定なので被弾は「プレイ時間 × 人数」に比例する。
+  どれだけ遅い人を敗北にするかはここで決める（目安: 1体/s のボットで 53 秒クリア・HP 34% 残し、放置は 107 秒で敗北。放置を早く終わらせたければ下げる）
+
+クリアタイムはリザルト／ランキングで **0.1 秒単位**（`StageResult.FormatTime(sec, showTenths: true)`）に表示する。
+
 ## コンボ・ビーム砲の調整値（`StageConfig.asset`・ADR-30/35）
 
 `Assets/ScriptableObjects/StageConfig.asset` の Inspector で調整する（コード変更不要）:
@@ -181,10 +195,10 @@ Assets/Scripts/
   Core/       純C#ロジック（UnityEngine 非依存 = KakigoriTD.Core.asmdef, noEngineReferences）
               GameStateMachine + State群（Title / Battle / Result）, KillProgress, ComboTracker,
               SpecialGauge, ExplosionChain, KillSource, StageResult,
-              AvalancheClock, SpawnClock/SpawnSelector, IGameContext,
+              AvalancheClock, SpawnClock/PopulationSpawnClock/SpawnSelector, IGameContext,
               ScoreEntry/ScoreRanking/IScoreStore/HoldToConfirm（クリアタイムのランキング・ADR-34）… EditMode テスト対象
   Data/       ScriptableObject 定義（StageConfigSO, EnemyTypeSO, ProjectileTypeSO, SerialConfigSO,
-              VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO, SpecialAttackConfigSO）
+              VisionConfigSO, LidarPreviewConfigSO, AudioConfigSO, SpecialAttackConfigSO, SpawnMode）
   Input/      IInputSource と各実装（上記「入力アーキテクチャ」参照）
   Factory/    ObjectPool<T>, ProjectileFactory
   Gameplay/   MonoBehaviour：EnemyField（360度の敵管理・隊列・撃破・爆発連鎖）, Enemy /

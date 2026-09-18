@@ -33,6 +33,7 @@
 | 演出とロジックの合流 | `main` で独立に作られた演出（爆発テレグラフ・ビーム砲モデル＋光線＋衝撃波・パーティクル雪崩）を ADR-30 のロジックに接続。爆発演出は見た目のみ（判定は `ExplosionChain`）、ビームは光線一周→衝撃波の瞬間に全員撃破、半径は常にロジック側が渡す。旧プレースホルダ（`ExplosionRing`／白フラッシュ `BeamCannon`）と `main` 側の独自ロジック（`KillTally`／撃破数閾値／`KillAllWithin`）は削除 | ADR-31 |
 | 雪崩の当たり判定＝粒 | 雪崩の粒そのものを判定にする `ParticleContact` モード：粒が敵に触れたら吸収されて 1 ダメージ（耐久は `EnemyTypeSO.ParticleHitPoints`・種別ごと）。前列が生きている間は雪がそこで止まるので前列から倒れる。クールダウン・1 雪崩 1 撃なし。静止線より外に落としたら雪崩なし。分岐点の挙動は `Legacy` として Inspector で切替可 | ADR-32 |
 | ビーム後のコンボ猶予・ビーム頻度 | ビーム撃破はコンボ非加算のまま、進行中コンボの残り猶予を `BeamComboGraceSec`（既定 0.5s）に縮める（`ComboTracker.ShortenGrace`）。通常のコンボ猶予 `ComboWindowSec` 2→1.5s、ゲージ `GaugeMax` 40→60 でビーム頻度を約 1 回/ゲームへ。3 値とも `StageConfig.asset` の Inspector で調整 | ADR-35 |
+| 湧き＝盤面人数の維持 | 一定間隔の湧き（`SpawnClock`）では「湧いた分しか倒せない」ためクリアタイムの下限が 目標撃破数÷湧きレート に固定され、腕前がタイムに出なかった（ボット計測: 1体/s→43.0s、3体/s→43.7s）。既定を `SpawnMode.Population`（`PopulationSpawnClock`：盤面の敵数を `FieldPopulationStart/End` に保ち、倒した分だけ `RefillRatePerSecond` 上限で補充）に切替（計測: 1体/s→47.0s、3体/s→18.2s）。砦 HP 1000→2500、クリアタイム表示を 0.1 秒単位に。旧方式は `FixedRate` として Inspector で切り戻し可 | ADR-36 |
 
 ---
 
@@ -488,3 +489,23 @@
   - **配線**: `GameManager.OnEnemyKilled` で `KillSource.Beam` のとき `_combo.ShortenGrace(Time.time, _stageConfig.BeamComboGraceSec)` を呼んで return（撃破数のみ算入・ゲージ非算入は ADR-30 のまま）。ビームは 1 体ずつ通知されるが `ShortenGrace` は最小値を保つので同一フレームの多重呼び出しは無害。
 - **不採用**: ①ビーム撃破をコンボに加算し猶予だけ短くする（30 体一掃で +30 され最大コンボ＝ランキング表示が「ビームを引いた回数」で決まってしまう）②ビーム撃破で即コンボを 0 にする（衝撃波と同時に雪崩で倒した分が理不尽に途切れる。`BeamComboGraceSec`=0 にすれば Inspector だけでほぼ同じ挙動にできる）③頻度をビーム側のクールダウンで下げる（発動条件を「ゲージ MAX」1 つに保つ ADR-30 の理解コスト 0 の方針を優先。`GaugeMax` だけで調整可）。
 - **検証**: EditMode `ComboTrackerTests` 17 本（`ShortenGrace` 系 8 本追加：非加算・早期失効・非延長・多重呼び出し・猶予内撃破で窓復帰・猶予後撃破で 1 から・負値クランプ・Count 0 no-op）、全 245 本緑（Unity-MCP `tests-run`）。
+
+## ADR-36: 湧きを「一定間隔」から「盤面人数の維持」へ切り替え、クリアタイムを腕前に比例させる（`PopulationSpawnClock` + `StageConfigSO.SpawnMode`）— Accepted（`94-clear-time-skill-sensitivity`・2026-09-19）
+
+- **背景**: ADR-34 でクリアタイムのランキングを入れたが、プレイの上手さでクリアタイムがほとんど変わらなかった。原因を分解すると次の 4 つ:
+  1. **湧き律速（主因）**: `SpawnClock` は `SpawnRatePerSecond`（現場値 2 体/秒）の一定間隔で湧かせるだけで、プレイヤーは**湧いた分しか倒せない**。よってクリアタイム ≥ 目標撃破数 ÷ 湧きレート ≈ 50 秒 が下限になり、その速さで倒せる人は全員ほぼ同タイムに張り付く。腕前は「50 秒より速く」には一切反映されない。
+  2. **ゴム紐効果（ビーム・爆発連鎖）**: 遅い人ほど盤面が混み、ビーム一掃（`KillAllForBeam`＝盤面全員・撃破数に算入）と爆発の巻き込みで一度に稼げる数が増える。上手い人は盤面が空なのでビームが 1〜2 体しか倒せない（計測: 3 体/秒のボットはビーム 7 発で最大盤面 2 体）。遅れが自動で取り返される構造。
+  3. **二値化**: 湧きに追いつけない人は湧きが捨てられて遅くなるのではなく、盤面が 48 体まで埋まって砦が落ちる（敗北＝ランキング外）。結果は「≈50 秒でクリア」か「敗北」のどちらかで、中間層のタイム差が生まれない。
+  4. **表示粒度**: `ScoreRanking` は float で順位付けするのに、表示（`StageResult.FormatTime`）が秒単位の切り捨てで、48.2 秒と 48.9 秒が同じ「48秒」に見えていた。
+  Unity-MCP でボット（毎秒 k 体を前列から倒す・砦不死）を走らせた計測が裏付け: **k=1 → 43.0 秒、k=3 → 43.7 秒**（腕が 3 倍でもタイム同じ）。
+- **決定**:
+  - **Core（ADR-8）**: `PopulationSpawnClock.Tick(dt, aliveCount, desiredCount)` を追加。不足分（desired − alive）がある間だけ `refillRatePerSecond` の上限で補充し、予算は不足分を超えて貯めない（満員が続いた直後に一気に吐かない）。`SpawnClock` は残す。
+  - **Data**: `StageConfigSO` に `SpawnMode`（`Population`＝既定／`FixedRate`＝旧方式）、`FieldPopulationStart`（既定 8）／`FieldPopulationEnd`（既定 16・進捗で線形補間）、`RefillRatePerSecond`（既定 6）を追加。`SpawnRatePerSecond` は `FixedRate` 専用に格下げ。`StageConfig.asset` は Editor 経由で Population / 8 / 16 / 6 に設定。
+  - **配線**: `SpawnDirector.Update` が `SpawnMode` で `PopulationSpawnClock`（`_field.EnemyCount` と `FieldPopulationAt(progress)` を渡す）／`SpawnClock` を選ぶ。種別抽選・ペア湧きは不変。
+  - **砦 HP**: 盤面人数が腕前に依らず一定になった分、被弾は「プレイ時間 × 人数」に比例する（＝遅い人ほど削られる）。1 体/秒のボットで 47 秒・被弾 1470 だったので、`GameManager._fortHpMax` を 1000→2500（`TH_Stage.prefab`・Editor 経由）。放置（撃破 0・盤面 8 体のまま）は 107 秒で敗北。**遅い人をどこで敗北にするか・放置を何秒で終わらせるかはこの値で調整する**（2000 なら放置 ≈ 86 秒・1 体/秒は HP 14% 残しでぎりぎり）。
+  - **表示**: `StageResult.FormatTime(sec, showTenths)` を追加し、リザルト見出しとランキング行を「1分42.3秒」の 0.1 秒単位に（切り捨て。59.99→59.9 秒で分が繰り上がらない）。戦闘中 HUD は秒単位のまま。
+- **効果（同じボットで再計測）**: **k=1 → 47.0 秒、k=3 → 18.2 秒**（腕 3 倍で 2.6 倍速い）。盤面人数が一定なのでビーム 1 発の稼ぎ（≈盤面人数）も全員同条件になり、ゴム紐効果 (2) も解消。追いつけない人は「時間がかかる」→「砦が削られる」の連続的な劣化になり (3) の二値化も解ける。
+- **不採用**: ①湧きレートを単に上げる（下限が下がるだけで律速構造は同じ。盤面が全員分埋まり砦即死）②進捗で湧きレートをランプ（後半が難しくなるだけで、下限固定の構造は変わらない）③ビーム撃破を撃破数に算入しない（見せ場の意味が薄れる。人数一定で稼ぎが均一になるので不要）④砦 HP を据え置き盤面人数を減らす（雪崩 1 回の巻き込みが減って手応えが落ちる。人数と HP の比で決める方が現場調整しやすい）。
+- **調整ノブ（コード変更不要）**: `StageConfig.asset` の `Field Population Start/End`（盤面の混雑＝砦への圧・雪崩の稼ぎ）／`Refill Rate Per Second`（腕前の上限より十分速く。遅いと再び湧き律速）／`Spawn Mode`（`FixedRate` で旧挙動に切り戻し）、`TH_Stage.prefab` の `GameManager.Fort Hp Max`（どれだけ遅い人を敗北にするか）。
+- **検証**: EditMode `PopulationSpawnClockTests` 8 本＋`StageResultTests` 1 本追加、全 254 本緑（Unity-MCP `tests-run`）。Play はボット計測（上記）＋砦 HP 2500 での k=1 生存・放置敗北を確認。実プレイ（LiDAR）でのタイム分布は展示前のプレイテストで `Field Population` と `Fort Hp Max` を詰めること。
+
