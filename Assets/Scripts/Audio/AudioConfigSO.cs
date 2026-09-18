@@ -31,7 +31,7 @@ namespace KakigoriTD.Audio
 
         [Header("カウントダウン SE")]
         [SerializeField] private AudioClip _countdownBeep; // "3"/"2"/"1"
-        [SerializeField] private AudioClip _countdownGo;   // "スタート！"
+        [SerializeField] private AudioClip _countdownGo;   // "スタート"
 
         [Header("雪崩（ループ gate・専用 source）")]
         [SerializeField] private AudioClip _avalanche;

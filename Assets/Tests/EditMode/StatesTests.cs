@@ -80,15 +80,15 @@ namespace KakigoriTD.Tests.EditMode
 
             fsm.Tick(1f); // "3" -> "2"
             fsm.Tick(1f); // "2" -> "1"
-            fsm.Tick(1f); // "1" -> "スタート！"
+            fsm.Tick(1f); // "1" -> "スタート"
 
             Assert.That(fsm.Current, Is.TypeOf<CountdownState>());
             Assert.That(ctx.CountdownSteps, Is.EqualTo(new[]
             {
-                ("3", false), ("2", false), ("1", false), ("スタート！", true),
+                ("3", false), ("2", false), ("1", false), ("スタート", true),
             }));
 
-            fsm.Tick(1f); // "スタート！" -> BattleState
+            fsm.Tick(1f); // "スタート" -> BattleState
 
             Assert.That(fsm.Current, Is.TypeOf<BattleState>());
             Assert.That(ctx.BeginCount, Is.EqualTo(1));

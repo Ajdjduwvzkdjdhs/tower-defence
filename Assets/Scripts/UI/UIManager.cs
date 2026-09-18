@@ -26,7 +26,7 @@ namespace KakigoriTD.UI
         private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
         private StageResult _result;
-        // 開始前カウントダウン（"3"/"2"/"1"/"スタート！"）。プロジェクター投影を想定し、
+        // 開始前カウントダウン（"3"/"2"/"1"/"スタート"）。プロジェクター投影を想定し、
         // 画面全体を暗転させたうえで超大型・黒縁取り文字を出す（CountdownState が都度 SetCountdown で更新）。
         private string _countdownText = "";
         private bool _countdownIsFinal;
@@ -57,8 +57,8 @@ namespace KakigoriTD.UI
 
 
         /// <summary>
-        /// カウントダウンの1ステップを表示する（"3"/"2"/"1"/"スタート！"）。呼ばれるたびにポップイン
-        /// アニメーションを頭から再生する。<paramref name="isFinal"/> は「スタート！」のみ true
+        /// カウントダウンの1ステップを表示する（"3"/"2"/"1"/"スタート"）。呼ばれるたびにポップイン
+        /// アニメーションを頭から再生する。<paramref name="isFinal"/> は「スタート」のみ true
         /// （色・サイズを変えて強調する）。
         /// </summary>
         public void SetCountdown(string text, bool isFinal)
@@ -200,7 +200,8 @@ namespace KakigoriTD.UI
             float t = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownPopInSec);
             float pop = 1f + 0.4f * (1f - t); // 出現時1.4倍 → 0.15秒で1.0倍まで縮む
 
-            int baseSize = _countdownIsFinal ? 190 : 240; // 「スタート！」は文字数が多い分ベースを少し小さく
+            // 数字は元の 240 の 0.7 倍、「スタート」は SE を主役にして控えめに 0.3 倍。
+            int baseSize = _countdownIsFinal ? Mathf.RoundToInt(190 * 0.3f) : Mathf.RoundToInt(240 * 0.7f);
             int fontSize = Mathf.RoundToInt(baseSize * pop);
 
             var style = new GUIStyle(GUI.skin.label)
@@ -213,7 +214,7 @@ namespace KakigoriTD.UI
             float h = fontSize * 1.6f;
             var rect = new Rect(0f, Screen.height * 0.5f - h * 0.5f, Screen.width, h);
 
-            // 数字("3"/"2"/"1")と「スタート！」で色が違って見えると不安定な印象になるため、
+            // 数字("3"/"2"/"1")と「スタート」で色が違って見えると不安定な印象になるため、
             // ステップによらず同じ色で統一する。
             Color fill = new Color(1f, 0.85f, 0.15f);
 
@@ -236,7 +237,7 @@ namespace KakigoriTD.UI
 
         /// <summary>
         /// 数字カウントダウン（"3"/"2"/"1"）専用の演出。潜水艦ソナーのように、先端が明るく尾を引いて
-        /// 減衰する扇形の濃淡が1ステップ（1秒）かけて時計回りに1周する。「スタート！」では出さない。
+        /// 減衰する扇形の濃淡が1ステップ（1秒）かけて時計回りに1周する。「スタート」では出さない。
         /// </summary>
         private void DrawSonarSweep(Rect numberRect)
         {

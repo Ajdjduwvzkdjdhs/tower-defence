@@ -178,7 +178,7 @@ namespace KakigoriTD.Bootstrap
         public bool IsFortDestroyed => _fort.IsDestroyed;
         public bool IsStartRequested => _input.ConfirmPressed;
         public bool IsRetryRequested => _input.ConfirmPressed;
-        /// <summary>カウントダウンの1ステップ（"3"/"2"/"1"/"スタート！"）を表示し、対応するSEを鳴らす。
+        /// <summary>カウントダウンの1ステップ（"3"/"2"/"1"/"スタート"）を表示し、対応するSEを鳴らす。
         /// 3.2.1 は共通SE、スタートのみ専用SE（isFinal で判別）。</summary>
         public void ShowCountdownStep(string text, bool isFinal)
         {
