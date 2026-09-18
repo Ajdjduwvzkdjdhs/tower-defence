@@ -59,7 +59,9 @@ namespace KakigoriTD.Input
             _protocol = new LidarPositionProtocol(config.LostTimeoutSec);
             _path = ResolvePath(config);
             _fieldOffsetMm = new Vector2(PlayerPrefs.GetFloat(PrefX, 0f), PlayerPrefs.GetFloat(PrefY, 0f));
-            Debug.Log($"[LidarPosition] file = {_path} / field_offset = {_fieldOffsetMm} mm");
+            Debug.Log($"[LidarPosition] tracker = {config.Tracker} / file = {_path} / field_offset = {_fieldOffsetMm} mm");
+            if (Application.isEditor && !File.Exists(_path))
+                Debug.LogWarning($"[LidarPosition] 共有ファイルが見つかりません: {_path}（LidarPreviewConfig の Tracker と起動中のトラッカーが一致しているか確認）");
         }
 
         /// <summary>現在の field_offset を PlayerPrefs へ保存する（キャリブのキーを離したとき）。</summary>

@@ -115,8 +115,14 @@
   temp→`os.replace` の**原子的 rename** で ~20–50ms ごとに書く。
 - Unity 側 `VisionInputSource` が ~50ms 間隔でその最終行をポーリングし、`VisionInputProtocol` が
   watchdog（`seq` が停滞したらロスト判定 → `-1` フェイルセーフ）・ライブ/ラッチ・デバウンスを担う。
-- パス解決順: 環境変数 `KAKIGORI_POSITION_FILE` → 隣接 `config.json` の `positionFile` →
+- パス解決順（旧経路 `VisionInputSource`）: 環境変数 `KAKIGORI_POSITION_FILE` → 隣接 `config.json` の `positionFile` →
   Editor は `<projectRoot>/tools/position-tracker/out/position.txt` ／ ビルドは `persistentDataPath/position.txt`。
+- **展示本番（`InputMode.LidarPosition`・`LidarPositionInputSource`）が読むファイルは `LidarPreviewConfig.asset` の
+  「使用する LiDAR トラッカー」（`Tracker`）で選ぶ**（ADR-33 / Issue #83）:
+  `LidarTracker`＝`tools/lidar-tracker/out/position.txt`、`LidarTracker3`＝`tools/lidar-tracker3/out/position.txt`、
+  `LidarTracker1Plus3`＝`tools/lidar-tracker1+3/out/position.txt`（現在の設定）、`Custom`＝`Position File Relative` の手入力値。
+  環境変数 `KAKIGORI_POSITION_FILE` があればそれが常に優先、ビルドは `persistentDataPath/position.txt`。
+  Play 開始時に Console へ `[LidarPosition] tracker = … / file = …` が出るので、トラッカーを変えたらここで突き合わせる。
 
 ### `tools/`（Unity インポート対象外。`Assets/`・`Packages/` の外に uv/C++ で隔離）
 

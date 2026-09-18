@@ -455,4 +455,13 @@
 
 - **検証**: EditMode 207 本緑（`AvalancheContactTests` 8 本追加）。Unity-MCP で TH を Play、位置ファイルへ `seq,x,y,1` を書く模擬トラッカーで ①ParticleContact・中腹 r=5：雪崩の通り道の敵が触れた順に倒れ、52〜63 秒で 100 体クリア、FPS 175（粒 4,300 個の走査で性能問題なし）②Legacy へ実行時切替：判定点が r=9.9 まで歩き `TryKillNearest` で撃破 ③境界外 r=9：`IsEmitting=false`・撃破 0、を確認。
 
-- **残課題**: ①`EnemyBodyWidthUnits` と `ShieldTrooper.asset` の `ParticleHitPoints` を現場で実測・調整（盾兵は前の爆発兵の爆発でほぼ倒れるため、粒耐久が効く場面は稀）②境界付近で落氷点が揺れると雪崩が点滅しうる（必要なら余裕幅）③Unity 側の位置ファイル既定パス（`tools/lidar-tracker/out/position.txt`）と `tracker1p3.py` の出力先（`tools/lidar-tracker1+3/out/position.txt`）が違う。
+- **残課題**: ①`EnemyBodyWidthUnits` と `ShieldTrooper.asset` の `ParticleHitPoints` を現場で実測・調整（盾兵は前の爆発兵の爆発でほぼ倒れるため、粒耐久が効く場面は稀）②境界付近で落氷点が揺れると雪崩が点滅しうる（必要なら余裕幅）③~~Unity 側の位置ファイル既定パス（`tools/lidar-tracker/out/position.txt`）と `tracker1p3.py` の出力先（`tools/lidar-tracker1+3/out/position.txt`）が違う~~ → ADR-33 で Inspector 切替に解消。
+
+## ADR-33: Unity が読む LiDAR 共有ファイルを「トラッカーの選択」で切り替える（`LidarPreviewConfigSO.Tracker`）— Accepted（`83-changeLiDARtoUnity`・2026-09-18・Issue #83）
+
+- **背景**: `tools/` には出力契約（`seq,x,y,shaving`）が同じ LiDAR トラッカーが 3 つある（`lidar-tracker`＝T-mini 単体 / `lidar-tracker3`＝S1 単体 / `lidar-tracker1+3`＝T-mini + S1 ペアの束ね・展示本番）。どれも自分の `out/position.txt` に書く。一方 Unity 側は `LidarPreviewConfig.asset` の `_positionFileRelative`（文字列）が `tools/lidar-tracker/out/position.txt` を指したままで、`tracker1p3.py` を動かしても Unity が読めない（ADR-32 残課題③）。文字列パスの手入力は typo とフォルダ名の記憶に依存し、現場で切り替えにくい。
+- **決定**: `LidarTrackerKind` enum（`LidarTracker` / `LidarTracker3` / `LidarTracker1Plus3` / `Custom`）を `LidarPreviewConfigSO._tracker` として Inspector の先頭に置き、`PositionFileRelative` は `ResolveRelativePath(kind, customPath)`（純関数・static）で解決する。プリセットは各トラッカーの既定出力先 `tools/<dir>/out/position.txt` に固定し、`Custom` のときだけ従来の `_positionFileRelative` 文字列を使う。既存アセットは `_tracker` を持たない＝値 0＝`LidarTracker` に解決するので追加だけでは挙動が変わらない（後方互換）。`LidarPreviewConfig.asset` は Editor 経由で `LidarTracker1Plus3` に設定した（展示本番の構成）。`LidarPositionInputSource.Configure` はトラッカー名と解決パスをログに出し、Editor でファイルが無ければ警告する（トラッカー未起動・選択違いを起動直後に気付けるように）。
+- **変わらないもの**: 解決順の上位（環境変数 `KAKIGORI_POSITION_FILE`）とビルド時の `persistentDataPath/position.txt` はそのまま。Python 側の `config.toml [output] position_file` の解決順も無改変。`InputMode.Vision`（旧 `VisionInputSource` / `VisionConfigSO`）はこの選択の対象外（旧経路・`seq,channel,shaving` 契約）。
+- **不採用**: ①環境変数で揃える（両プロセスの起動手順に依存し、展示当日の手順が増える）②Python 側の出力先を全ツールで 1 箇所に統一する（各ツールを単独でも動かすので、他ツールの出力を上書きし合う事故が起きる）③トラッカー選択を `GameManager` の `[SerializeField]` に置く（パスは LiDAR 設定の一部なので `LidarPreviewConfigSO` に同居させた方が現場で 1 画面に収まる）。
+- **検証**: EditMode `LidarPreviewConfigSOTests` に 3 本追加（プリセット 3 種の解決 / Custom の透過 / 既定値の後方互換）、計 214 本緑（Unity-MCP `tests-run`・全件）。
+

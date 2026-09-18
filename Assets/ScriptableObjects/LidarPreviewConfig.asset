@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a98263625ce19466bbd572097daa404b, type: 3}
   m_Name: LidarPreviewConfig
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Data.LidarPreviewConfigSO
+  _tracker: 2
   _pollIntervalSec: 0.05
   _lostTimeoutSec: 0.3
   _positionFileRelative: tools/lidar-tracker/out/position.txt
@@ -29,9 +30,13 @@ MonoBehaviour:
   _entranceSpeed: 6
   _maxEnemies: 48
   _spawnAngleStepDeg: 15
+  _enemyTiltDeg: 30
   _queueSpacing: 1.8
   _queueMaxDepth: 2
   _queueAdvanceSpeed: 3.5
+  _hitMode: 1
+  _enemyBodyWidthUnits: 1
+  _contactHeightUnits: 2
   _killRadiusUnits: 1.5
   _overlapRadiusUnits: 1.1
   _cooldownCenterSec: 0.25

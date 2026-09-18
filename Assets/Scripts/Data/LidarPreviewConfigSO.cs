@@ -16,10 +16,20 @@ namespace KakigoriTD.Data
     [CreateAssetMenu(menuName = "KakigoriTD/LidarPreviewConfig")]
     public class LidarPreviewConfigSO : ScriptableObject
     {
+        [Header("使用する LiDAR トラッカー（Issue #83 / ADR-33）")]
+        [Tooltip("Unity が読む共有ファイルをどのトラッカー（tools/ 配下）の出力にするか。\n"
+               + "LidarTracker：tools/lidar-tracker/out/position.txt（T-mini Plus 単体）\n"
+               + "LidarTracker3：tools/lidar-tracker3/out/position.txt（RPLIDAR S1 単体）\n"
+               + "LidarTracker1Plus3：tools/lidar-tracker1+3/out/position.txt（T-mini + S1 ペア・展示本番）\n"
+               + "Custom：下の Position File Relative をそのまま使う。\n"
+               + "環境変数 KAKIGORI_POSITION_FILE が設定されていればそちらが常に優先。Editor 専用（ビルドは persistentDataPath）。")]
+        [SerializeField] private LidarTrackerKind _tracker = LidarTrackerKind.LidarTracker;
+
         [Header("ファイル読み・ロスト検知")]
         [SerializeField] private float _pollIntervalSec = 0.05f;
         [SerializeField] private float _lostTimeoutSec = 0.3f;
-        [Tooltip("Editor：プロジェクトルート相対の共有ファイル。Python preview.toml の position_file と対。")]
+        [Tooltip("Editor：プロジェクトルート相対の共有ファイル。Tracker が Custom のときだけ使う（プリセット選択時は無視）。"
+               + "Python config.toml の [output] position_file と対。")]
         [SerializeField] private string _positionFileRelative = "tools/lidar-tracker/out/position.txt";
         [Tooltip("ビルド：persistentDataPath 下のファイル名。")]
         [SerializeField] private string _positionFilePersistent = "position.txt";
@@ -100,7 +110,9 @@ namespace KakigoriTD.Data
 
         public float PollIntervalSec => _pollIntervalSec;
         public float LostTimeoutSec => _lostTimeoutSec;
-        public string PositionFileRelative => _positionFileRelative;
+        public LidarTrackerKind Tracker => _tracker;
+        /// <summary>Editor が読む共有ファイルのプロジェクトルート相対パス。<see cref="Tracker"/> のプリセット、Custom なら手入力値。</summary>
+        public string PositionFileRelative => ResolveRelativePath(_tracker, _positionFileRelative);
         public string PositionFilePersistent => _positionFilePersistent;
         public float ScaleUnitsPerMm => _scaleUnitsPerMm;
         public float WorldRotationDeg => _worldRotationDeg;
@@ -130,6 +142,18 @@ namespace KakigoriTD.Data
         public float SpreadEdgeDeg => _spreadEdgeDeg;
         public Key FieldOffsetKey => _fieldOffsetKey;
         public float FieldOffsetStepMm => _fieldOffsetStepMm;
+
+        /// <summary>トラッカー選択 → プロジェクトルート相対パス。Custom は <paramref name="customPath"/> をそのまま返す（純関数・EditMode テスト対象）。</summary>
+        public static string ResolveRelativePath(LidarTrackerKind kind, string customPath)
+        {
+            switch (kind)
+            {
+                case LidarTrackerKind.LidarTracker: return "tools/lidar-tracker/out/position.txt";
+                case LidarTrackerKind.LidarTracker3: return "tools/lidar-tracker3/out/position.txt";
+                case LidarTrackerKind.LidarTracker1Plus3: return "tools/lidar-tracker1+3/out/position.txt";
+                default: return customPath;
+            }
+        }
 
         /// <summary>検知点の中心距離 d[mm]（0..RadiusMm にクランプ済み）を 0..1 の正規化係数へ。</summary>
         public float NormalizedDistance(float dMm)

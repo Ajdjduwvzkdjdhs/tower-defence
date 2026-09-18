@@ -44,6 +44,33 @@ namespace KakigoriTD.Tests.EditMode
         }
 
         [Test]
+        public void ResolveRelativePath_Presets_PointAtEachTrackerOutput()
+        {
+            // Issue #83 / ADR-33: Inspector のトラッカー選択でパスが切り替わる。契約 seq,x,y,shaving は全トラッカー共通。
+            Assert.That(LidarPreviewConfigSO.ResolveRelativePath(LidarTrackerKind.LidarTracker, "x"),
+                Is.EqualTo("tools/lidar-tracker/out/position.txt"));
+            Assert.That(LidarPreviewConfigSO.ResolveRelativePath(LidarTrackerKind.LidarTracker3, "x"),
+                Is.EqualTo("tools/lidar-tracker3/out/position.txt"));
+            Assert.That(LidarPreviewConfigSO.ResolveRelativePath(LidarTrackerKind.LidarTracker1Plus3, "x"),
+                Is.EqualTo("tools/lidar-tracker1+3/out/position.txt"));
+        }
+
+        [Test]
+        public void ResolveRelativePath_Custom_UsesHandTypedPath()
+        {
+            Assert.That(LidarPreviewConfigSO.ResolveRelativePath(LidarTrackerKind.Custom, "elsewhere/position.txt"),
+                Is.EqualTo("elsewhere/position.txt"));
+        }
+
+        [Test]
+        public void DefaultTracker_IsLidarTracker_SoOldAssetsKeepTheirPath()
+        {
+            // 既存の LidarPreviewConfig.asset は _tracker を持たない（値 0 = LidarTracker）。追加前と同じパスに解決すること。
+            Assert.That(_cfg.Tracker, Is.EqualTo(LidarTrackerKind.LidarTracker));
+            Assert.That(_cfg.PositionFileRelative, Is.EqualTo("tools/lidar-tracker/out/position.txt"));
+        }
+
+        [Test]
         public void NormalizedDistance_ClampedZeroToOne()
         {
             Assert.That(_cfg.NormalizedDistance(-10f), Is.EqualTo(0f).Within(1e-4f));
