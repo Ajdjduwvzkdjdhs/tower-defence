@@ -458,6 +458,8 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 ### 未整備
 
 - [x] 爆発・ビームの正式 VFX（2026-09-17 `main` の `ExplosionTelegraph` / `BeamCannon.prefab`＋`BeamSweepVfx`＋衝撃波 / `AvalancheSnowEffect` を接続。ADR-31）
+- [x] 雪崩の当たり判定を粒そのものにする `ParticleContact` モード（2026-09-18 `76-avalanche-hitbox`。粒が敵に触れたら吸収＋1 ダメージ、耐久は `EnemyTypeSO.ParticleHitPoints`、静止線より外は雪崩なし。分岐点の判定は `Legacy` として `LidarPreviewConfigSO.HitMode` で切替。ADR-32）
+  - [ ] `LidarPreviewConfig.asset` の `_enemyBodyWidthUnits` と `ShieldTrooper.asset` の `_particleHitPoints` を現場で実測・調整
 - [ ] 盾兵の残り耐久表示（現状は per-instance MPB で暗くするだけ。ヒビ・欠け等への差し替え）
 - [ ] クリアタイムのランキング保存（現状は 1 プレイ分を表示するのみ）
 

@@ -132,6 +132,26 @@
 > ユーザーが「複数台使いたい」と言ったら、常に「冗長性を上げたい」の意味で解釈すること。
 > 貸与上限は 6 台。可視化は全台を束ねた単一の点群プロット（`valley_tracker.py` の `MergedView`）。
 
+## 雪崩の当たり判定モード（`LidarPreviewConfigSO.HitMode`・ADR-32）
+
+雪崩の「敵が倒れる判定」は 2 方式あり、**Inspector で切り替える**（コード変更不要・Play 中でも即反映）。
+
+1. Project ウィンドウで `Assets/ScriptableObjects/LidarPreviewConfig.asset` を選ぶ
+2. Inspector の見出し **「雪崩の当たり判定の方式（ADR-32）」** → **Hit Mode** を選ぶ
+   - **Particle Contact**（既定）… 雪の粒が敵に触れたら粒は吸収され 1 ダメージ。触れた敵はすべて倒れる（クールダウンなし）。
+     静止線より外（敵の上）に落としても雪崩は起きない
+   - **Legacy** … 2026-09-18 の `main`（`0d047c8`）時点の挙動そのまま。見えない判定点が落氷点から 4 u/s で外へ歩き、
+     撃破半径内の前列 1 体だけを倒す（前列ルール・d 連動クールダウン・1 雪崩 1 撃）
+3. モードごとに効く調整値が違う：
+
+| モード | 効く調整値 |
+|---|---|
+| Particle Contact | `LidarPreviewConfig`：`Enemy Body Width Units`（敵の体幅・実測値）／`Contact Height Units`。各 `EnemyTypeSO`（`BasicEnemy` / `BombTrooper` / `ShieldTrooper` …）：`Particle Hit Points`（粒何個で倒れるか） |
+| Legacy | `LidarPreviewConfig`：`Kill Radius Units`／`Overlap Radius Units`／`Cooldown Center/Edge Sec`／`End Radius`。`StageConfig`：`Shield Hits` |
+
+> 両モードで耐久の単位が違う（Legacy＝雪崩の個数、Particle Contact＝粒の個数）ので、値は共有しない。
+> `.asset` の YAML を直接編集しない（Editor で変更する）。詳細な設計判断は `docs/architecture.md` ADR-32。
+
 ## リポジトリ構成
 
 ```

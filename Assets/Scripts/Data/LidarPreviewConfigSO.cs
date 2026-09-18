@@ -66,7 +66,16 @@ namespace KakigoriTD.Data
         [Tooltip("前列が倒れたときの繰り上がり歩行速度（ADR-20）。")]
         [SerializeField] private float _queueAdvanceSpeed = 3.5f;
 
-        [Header("撃破（一般化した位置到達）")]
+        [Header("雪崩の当たり判定の方式（ADR-32）")]
+        [Tooltip("Legacy：分岐点（main）の挙動そのまま（歩く判定点・撃破半径・前列ルール・クールダウン）。\n"
+               + "ParticleContact：雪の粒が敵に触れたら吸収されて 1 ダメージ（耐久は EnemyTypeSO.ParticleHitPoints）。")]
+        [SerializeField] private AvalancheHitMode _hitMode = AvalancheHitMode.ParticleContact;
+        [Tooltip("ParticleContact：敵の体の幅（XZ・ゲーム単位）。接触半径 ＝ この半分 ＋ 粒の半径（Prefab から自動）。現場でモデルの実寸を入れる。")]
+        [SerializeField] private float _enemyBodyWidthUnits = 1.0f;
+        [Tooltip("ParticleContact：接触とみなす高さの許容幅。粒の Y が敵の足元 ± この値の外なら当たらない（地形の下に落ちた粒・高く跳ねた粒を除外）。")]
+        [SerializeField] private float _contactHeightUnits = 2.0f;
+
+        [Header("撃破（一般化した位置到達・Legacy モード専用）")]
         [Tooltip("雪玉→敵 撃破半径（XZ・ゲーム単位）。")]
         [SerializeField] private float _killRadiusUnits = 0.6f;
         [Tooltip("前列判定の重なり半径。この距離内により古い生存敵がいる敵は「まだ前列でない」として撃破対象から外す。" +
@@ -114,6 +123,9 @@ namespace KakigoriTD.Data
         public float OverlapRadiusUnits => _overlapRadiusUnits;
         public float CooldownCenterSec => _cooldownCenterSec;
         public float CooldownEdgeSec => _cooldownEdgeSec;
+        public AvalancheHitMode HitMode => _hitMode;
+        public float EnemyBodyWidthUnits => _enemyBodyWidthUnits;
+        public float ContactHeightUnits => _contactHeightUnits;
         public float SpreadCenterDeg => _spreadCenterDeg;
         public float SpreadEdgeDeg => _spreadEdgeDeg;
         public Key FieldOffsetKey => _fieldOffsetKey;

@@ -12,11 +12,14 @@ namespace KakigoriTD.Gameplay
     /// の**真上に snowEffectPrefab（ParticleSystem 付き）を生成し最初から再生**する（雪玉転がし廃止）。
     /// 粒子速度の XZ 成分は山中心→検知点の外向きベクトルへ整え（AvalancheSnowEffect が向き設定）、
     /// 山から外側へ流れる（phase-preview-feedback.md §3.4 の後継・物理不使用）。
-    /// 演出はプール（<see cref="AvalancheSnowEffect"/>、ADR-4 踏襲）、撃破は移動中の位置で半径判定し 1 個 1 撃。
+    /// 演出はプール（<see cref="AvalancheSnowEffect"/>、ADR-4 踏襲）。
     ///
-    /// d（＝検知点の中心距離[mm]）に連動して:
-    ///  - **撃破クールダウン** <see cref="LidarPreviewConfigSO.CooldownSecFor"/>（中心 0.6s → 外周 0.0s）
-    /// 中心付近＝クールダウン長め / 外周＝連射可。
+    /// 撃破は <see cref="LidarPreviewConfigSO.HitMode"/>（ADR-32）で切り替える:
+    ///  - <b>Legacy</b>：移動中の判定点の位置で半径判定し 1 個 1 撃。d（＝検知点の中心距離[mm]）に連動した
+    ///    **撃破クールダウン** <see cref="LidarPreviewConfigSO.CooldownSecFor"/>（中心付近＝長め / 外周＝連射可）。
+    ///  - <b>ParticleContact</b>：粒が敵に触れたら吸収されて 1 ダメージ（<see cref="EnemyField.TryAbsorbParticle"/>）。
+    ///    クールダウンなし。検知点が敵の静止半径より外（＝敵の上に直接）なら「山から雪を転がした」ことに
+    ///    ならないので雪崩を起こさない（演出・判定・雪崩音すべてなし）。
     ///
     /// 氷は無限（ADR-30 で <c>IceStock</c> ごと廃止。システム側のリソース管理を使わない方針）。
     /// </summary>
@@ -31,6 +34,8 @@ namespace KakigoriTD.Gameplay
         private float _spawnAccum;
         private float _lastDMm;
         private bool _wasEmitting;
+        private readonly System.Collections.Generic.List<AvalancheSnowEffect> _activeContact
+            = new System.Collections.Generic.List<AvalancheSnowEffect>(); // ParticleContact：活性中の雪崩（削り終了時に吹き出しを止める）
 
         /// <summary>放出（＝雪崩）の on/off が変化したフレームに発火（音の雪崩ループ用・エッジ）。</summary>
         public event Action<bool> OnAvalancheChanged;
@@ -61,8 +66,20 @@ namespace KakigoriTD.Gameplay
             if (_input != null && _field != null && _config != null && _pool != null
                 && _input.HasPoint && _input.IsShaving && !_input.IsLost)
             {
-                emitting = true;
-                Emit();
+                if (_config.HitMode == AvalancheHitMode.ParticleContact)
+                {
+                    Vector3 p = _input.WorldPoint;
+                    if (p.x * p.x + p.z * p.z <= _config.RestRadius * _config.RestRadius)
+                    {
+                        emitting = true;
+                        EmitContact(p);
+                    }
+                }
+                else
+                {
+                    emitting = true;
+                    Emit();
+                }
             }
 
             if (!emitting) _spawnAccum = 0f; // 溜まった分が次に噴き出さないよう 0 に戻す
@@ -71,6 +88,13 @@ namespace KakigoriTD.Gameplay
             {
                 _wasEmitting = emitting;
                 OnAvalancheChanged?.Invoke(emitting);
+
+                // ParticleContact：氷が落ちなくなったら雪崩も止まる。Prefab の吹き出し時間（2 s）を待たず、
+                // 活性中の全雪崩の吹き出しを止める（飛んでいる粒は寿命で消える）。Legacy は main どおり歩いて打ち切る。
+                if (!emitting)
+                {
+                    for (int i = 0; i < _activeContact.Count; i++) _activeContact[i].StopEmitting();
+                }
             }
         }
 
@@ -88,7 +112,29 @@ namespace KakigoriTD.Gameplay
             }
         }
 
-        // 雪玉が毎フレーム自分の現在位置で呼ぶ。cooldown は「今フレームの検知点の d」（切れていたら直近の d）。
+        // ParticleContact：吹き出し口を検知点に固定した雪崩を生成し、粒ごとの接触判定を EnemyField へ委ねる。
+        private void EmitContact(Vector3 p)
+        {
+            _spawnAccum += _config.SpawnRate * Time.deltaTime;
+            while (_spawnAccum >= 1f)
+            {
+                _spawnAccum -= 1f;
+                var fx = _pool.Get();
+                _activeContact.Add(fx);
+                fx.SpawnContact(p, _heightAt, TryAbsorb, RaisePassed, ReleaseContact);
+            }
+        }
+
+        private bool TryAbsorb(Vector3 particlePos, float particleRadius)
+            => _field.TryAbsorbParticle(particlePos, particleRadius);
+
+        private void ReleaseContact(AvalancheSnowEffect fx)
+        {
+            _activeContact.Remove(fx);
+            _pool.Release(fx);
+        }
+
+        // Legacy：雪玉が毎フレーム自分の現在位置で呼ぶ。cooldown は「今フレームの検知点の d」（切れていたら直近の d）。
         private bool TryKill(Vector3 worldPos)
         {
             float d = (_input != null && _input.HasPoint) ? _input.DistanceMm : _lastDMm;

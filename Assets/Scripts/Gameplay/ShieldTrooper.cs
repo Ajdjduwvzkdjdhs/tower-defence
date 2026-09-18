@@ -12,6 +12,9 @@ namespace KakigoriTD.Gameplay
     ///
     /// ヒットのたびに per-instance MPB で色を暗くし、残り耐久を視覚的に伝える（sharedMaterial は汚さない）。
     /// 元の色はマテリアルから読み取って保存し、それを暗くする（モデル本来の色を白く飛ばさないため）。
+    ///
+    /// 耐久は当たり判定の方式（ADR-32）で別カウント: Legacy は本クラスの <see cref="MaxHits"/>（雪崩 1 個 = 1）、
+    /// ParticleContact は基底 <see cref="Enemy.ParticleHpMax"/>（粒 1 個 = 1）。暗くする演出は両方で共通。
     /// </summary>
     public class ShieldTrooper : Enemy
     {
@@ -38,8 +41,11 @@ namespace KakigoriTD.Gameplay
         {
             _hitsLeft = _maxHits;
             if (_renderers == null) CacheRenderers();
-            ApplyDamageTint();
+            ApplyDamageTint(1f);
         }
+
+        // ParticleContact モード：粒を吸収するたびに残り割合で暗くする。
+        protected override void OnParticleDamaged(float remaining01) => ApplyDamageTint(remaining01);
 
         /// <summary>
         /// 雪玉が 1 発当たった。耐久を 1 減らし、0 になったら true（＝撃破）を返す。
@@ -51,7 +57,7 @@ namespace KakigoriTD.Gameplay
             _hitsLeft--;
             if (_hitsLeft > 0)
             {
-                ApplyDamageTint();
+                ApplyDamageTint(_maxHits > 0 ? (float)_hitsLeft / _maxHits : 1f);
                 return false;
             }
             _hitsLeft = 0;
@@ -72,13 +78,12 @@ namespace KakigoriTD.Gameplay
             }
         }
 
-        // 残り耐久に応じて暗くする（満タン＝元の色、瀕死＝暗い）。正式な表現は後日差し替え。
-        private void ApplyDamageTint()
+        // 残り耐久の割合 t（1＝満タン＝元の色、0＝瀕死＝暗い）で暗くする。正式な表現は後日差し替え。
+        private void ApplyDamageTint(float t)
         {
             if (_renderers == null || _hitMpb == null) return;
 
-            float t = _maxHits > 0 ? (float)_hitsLeft / _maxHits : 1f;
-            float k = Mathf.Lerp(0.35f, 1f, t);
+            float k = Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(t));
 
             for (int i = 0; i < _renderers.Length; i++)
             {

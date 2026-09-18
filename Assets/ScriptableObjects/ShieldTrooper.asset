@@ -16,7 +16,9 @@ MonoBehaviour:
   _fireInterval: 3
   _initialFireDelay: 0
   _projectile: {fileID: 11400000, guid: c216f61ffc4f146f79549bc0598a0649, type: 2}
+  _attackWindup: 0.4
   _isAlly: 0
   _isDisguised: 0
   _tint: {r: 0.55, g: 0.6, b: 0.75, a: 1}
   _allyLifetime: 6
+  _particleHitPoints: 150
