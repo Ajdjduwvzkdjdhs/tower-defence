@@ -67,6 +67,18 @@ namespace KakigoriTD.Gameplay
         private readonly List<bool> _aliveScratch = new List<bool>();
         private readonly List<Vector3> _slotScratch = new List<Vector3>();  // スロット占有判定用（GC 回避）
 
+        // ParticleContact モード（ADR-32）：1 フレーム内の多数の粒から共有する敵スナップショット（GC 回避）。
+        private float _enemyBodyWidth = 1f;
+        private float _contactHeight = 2f;
+        [SerializeField] private float _absorbFeedbackMinIntervalSec = 0.1f; // 吸収の手応え（パフ・SE）の間引き。粒ごとだと連打になる
+        private readonly List<Enemy> _contactScratch = new List<Enemy>();
+        private readonly List<Vector3> _contactPos = new List<Vector3>();
+        private readonly List<bool> _contactAlive = new List<bool>();
+        private int _contactFrame = -1;
+        private bool _contactDirty;
+        private float _minAliveRadius;
+        private float _lastAbsorbFeedbackTime = float.NegativeInfinity;
+
         // 爆発連鎖用のスクラッチ（毎回の撃破で確保しないよう使い回す）。
         private readonly List<float> _chainX = new List<float>();
         private readonly List<float> _chainZ = new List<float>();
@@ -124,6 +136,9 @@ namespace KakigoriTD.Gameplay
                 // 前列判定の重なり半径が段間隔より小さいと、後段が前段を飛び越して撃破できてしまう
                 // （＝前から剥がれる手触りが壊れる）。現場で段間隔だけ広げても崩れないよう下限を効かせる。
                 _overlapRadius = Mathf.Max(config.OverlapRadiusUnits, config.QueueSpacing * 1.05f);
+
+                _enemyBodyWidth = config.EnemyBodyWidthUnits;
+                _contactHeight = config.ContactHeightUnits;
             }
         }
 
@@ -320,6 +335,85 @@ namespace KakigoriTD.Gameplay
 
             KillOne(_enemies[idx], KillSource.Snowball);
             return true;
+        }
+
+        //--- ParticleContact（ADR-32）------------------------------------------
+
+        /// <summary>
+        /// 雪崩の粒 1 個が敵に当たったか（ParticleContact モード）。当たれば敵に 1 ダメージを与え true
+        /// （粒は呼び出し側が消す＝吸収）。耐久が尽きれば <see cref="KillOne"/>（爆発兵なら連鎖）。
+        /// 接触半径 ＝ 敵の半身 ＋ <paramref name="particleRadius"/>、高さは敵の足元 ± ContactHeightUnits。
+        /// 同一フレーム内の多数の粒から呼ばれる前提で、敵のスナップショットはフレームごとに 1 回だけ作る。
+        /// </summary>
+        public bool TryAbsorbParticle(Vector3 particlePos, float particleRadius)
+        {
+            if (_enemies.Count == 0) return false;
+            PrepareContactFrame();
+
+            float radius = _enemyBodyWidth * 0.5f + particleRadius;
+
+            // 早期棄却：最も内側の生存敵より radius 以上内側の粒は誰にも触れない（頂上付近の粒を毎回走査しない）。
+            float inner = _minAliveRadius - radius;
+            if (inner > 0f && particlePos.x * particlePos.x + particlePos.z * particlePos.z < inner * inner) return false;
+
+            int idx = AvalancheContact.FindHit(_contactPos, _contactAlive, particlePos, radius, _contactHeight);
+            if (idx < 0) return false;
+
+            var e = _contactScratch[idx];
+            if (!e.TakeParticleHit())
+            {
+                // 耐えた（盾兵など）。手応えは間引いて出す。
+                if (Time.time - _lastAbsorbFeedbackTime >= _absorbFeedbackMinIntervalSec)
+                {
+                    _lastAbsorbFeedbackTime = Time.time;
+                    _puffPool?.Get().Play(e.transform.position, _puffPool.Release);
+                    OnShieldHit?.Invoke();
+                }
+                return true;
+            }
+
+            _contactAlive[idx] = false;          // 同フレームの別の粒が同じ敵に当たらないように
+            KillOne(e, KillSource.Snowball);
+            _contactDirty = true;                // 爆発連鎖で他の敵も倒れうる → 生存フラグを同期し直す
+            return true;
+        }
+
+        // フレーム先頭で敵のスナップショットを作る。同フレームで撃破があれば生存フラグだけ同期し直す
+        // （_enemies から外れた参照も _contactScratch には残るので添字はフレーム内で安定）。
+        private void PrepareContactFrame()
+        {
+            int frame = Time.frameCount;
+            if (_contactFrame == frame && !_contactDirty) return;
+
+            if (_contactFrame != frame)
+            {
+                _contactScratch.Clear();
+                _contactPos.Clear();
+                _contactAlive.Clear();
+                _minAliveRadius = float.PositiveInfinity;
+                for (int i = 0; i < _enemies.Count; i++)
+                {
+                    var e = _enemies[i];
+                    bool alive = e != null && e.IsAlive;
+                    Vector3 p = alive ? e.transform.position : Vector3.positiveInfinity;
+                    _contactScratch.Add(e);
+                    _contactPos.Add(p);
+                    _contactAlive.Add(alive);
+                    if (alive)
+                    {
+                        float r = Mathf.Sqrt(p.x * p.x + p.z * p.z);
+                        if (r < _minAliveRadius) _minAliveRadius = r;
+                    }
+                }
+                if (float.IsPositiveInfinity(_minAliveRadius)) _minAliveRadius = 0f;
+                _contactFrame = frame;
+            }
+            else
+            {
+                for (int i = 0; i < _contactScratch.Count; i++)
+                    _contactAlive[i] = _contactScratch[i] != null && _contactScratch[i].IsAlive;
+            }
+            _contactDirty = false;
         }
 
         /// <summary>

@@ -52,6 +52,17 @@ namespace KakigoriTD.Gameplay
         /// <summary>生存しているか（撃破されると false）。</summary>
         public bool IsAlive => _alive;
 
+        // ParticleContact モード（ADR-32）の耐久。雪崩の粒を 1 個吸収するごとに 1 減り、0 で撃破。
+        // Legacy モードでは使わない（盾兵は ShieldTrooper.TakeSnowballHit の別カウント）。
+        private int _particleHpMax = 1;
+        private int _particleHpLeft = 1;
+
+        /// <summary>雪崩の粒で倒れるまでの残り耐久（ParticleContact モード）。</summary>
+        public int ParticleHpLeft => _particleHpLeft;
+
+        /// <summary>雪崩の粒で倒れるまでの最大耐久（ParticleContact モード・EnemyTypeSO.ParticleHitPoints）。</summary>
+        public int ParticleHpMax => _particleHpMax;
+
         /// <summary>これまでに発射した弾数（検証用の可観測性）。</summary>
         public int ShotsFired { get; private set; }
 
@@ -88,6 +99,8 @@ namespace KakigoriTD.Gameplay
             _fireTimer = type != null ? type.InitialFireDelay : 0f;
             ShotsFired = 0;
             _alive = true;
+            _particleHpMax = type != null ? type.ParticleHitPoints : 1;
+            _particleHpLeft = _particleHpMax;
             _targetPos = transform.position;
             SetAnimationPlaying(true); // プール再利用時に前回 StopAnimation 済みでも歩行再生を復帰させる
             if (_renderer != null)
@@ -110,6 +123,26 @@ namespace KakigoriTD.Gameplay
         /// Init 完了後に呼ばれる仮想フック。派生クラス（例: ShieldTrooper の耐久初期化）で使う。
         /// </summary>
         protected virtual void OnInitialized() { }
+
+        /// <summary>
+        /// 雪崩の粒が 1 個当たった（ParticleContact モード）。耐久を 1 減らし、0 になったら true（＝撃破。
+        /// 呼び出し側が KillOne する）。残っていれば <see cref="OnParticleDamaged"/> を呼んで false。
+        /// </summary>
+        public bool TakeParticleHit()
+        {
+            if (!_alive) return false;
+            _particleHpLeft--;
+            if (_particleHpLeft > 0)
+            {
+                OnParticleDamaged(_particleHpMax > 0 ? (float)_particleHpLeft / _particleHpMax : 1f);
+                return false;
+            }
+            _particleHpLeft = 0;
+            return true;
+        }
+
+        /// <summary>粒を吸収したが倒れなかったときの見た目フック（残り耐久の割合 0..1）。既定は何もしない。</summary>
+        protected virtual void OnParticleDamaged(float remaining01) { }
 
         protected virtual void Update()
         {
