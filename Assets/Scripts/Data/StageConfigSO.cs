@@ -50,11 +50,15 @@ namespace KakigoriTD.Data
 
         [Header("コンボ")]
         [Tooltip("この秒数以内に次を倒せばコンボ継続。爆発の連鎖撃破も 1 体ずつ加算される。")]
-        [SerializeField] private float _comboWindowSec = 2.0f;
+        [SerializeField] private float _comboWindowSec = 1.0f;
+        [Tooltip("ビーム砲が敵を倒した瞬間から、進行中コンボが切れるまでの猶予秒（ADR-35）。"
+               + "ビーム撃破はコンボに加算しない。Combo Window Sec より短くして、一掃後にコンボだけが長く生き残らないようにする。"
+               + "この猶予内に雪崩で倒せばコンボは継続し、猶予は Combo Window Sec に戻る。")]
+        [SerializeField] private float _beamComboGraceSec = 0.5f;
 
         [Header("必殺ビーム砲（ゲージMAXで自動発動）")]
-        [Tooltip("MAX となる充填量。1ゲーム中に約2回MAXになる総量から逆算する。")]
-        [SerializeField] private float _gaugeMax = 100f;
+        [Tooltip("MAX となる充填量。大きいほどビーム砲の発動頻度が下がる（目安：1ゲーム中に約1回MAXになる総量から逆算）。")]
+        [SerializeField] private float _gaugeMax = 60f;
         [Tooltip("撃破 1 体あたりの基礎充填量（撃破数がメイン）。")]
         [SerializeField] private float _gaugePerKill = 1.0f;
         [Tooltip("コンボ 1 あたりの上乗せ係数（コンボはボーナス）。0 ならコンボ無関係。")]
@@ -83,6 +87,9 @@ namespace KakigoriTD.Data
 
         /// <summary>コンボ継続の猶予秒。</summary>
         public float ComboWindowSec => _comboWindowSec;
+
+        /// <summary>ビーム撃破の瞬間から進行中コンボが切れるまでの猶予秒（ADR-35）。</summary>
+        public float BeamComboGraceSec => _beamComboGraceSec;
 
         /// <summary>ゲージ MAX の充填量。</summary>
         public float GaugeMax => _gaugeMax;

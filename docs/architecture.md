@@ -32,6 +32,7 @@
 | ゲーム性刷新 | 3Wave 制を廃し、単一ステージの「目標撃破数レース」へ。爆発兵の無制限連鎖・盾兵（雪玉N発）・コンボ・ゲージMAXで自動発動する必殺ビーム。スコアはクリア＝クリアタイム／失敗＝到達撃破数。味方NPC・変装敵・ペナルティ・氷ストックは削除 | ADR-30 |
 | 演出とロジックの合流 | `main` で独立に作られた演出（爆発テレグラフ・ビーム砲モデル＋光線＋衝撃波・パーティクル雪崩）を ADR-30 のロジックに接続。爆発演出は見た目のみ（判定は `ExplosionChain`）、ビームは光線一周→衝撃波の瞬間に全員撃破、半径は常にロジック側が渡す。旧プレースホルダ（`ExplosionRing`／白フラッシュ `BeamCannon`）と `main` 側の独自ロジック（`KillTally`／撃破数閾値／`KillAllWithin`）は削除 | ADR-31 |
 | 雪崩の当たり判定＝粒 | 雪崩の粒そのものを判定にする `ParticleContact` モード：粒が敵に触れたら吸収されて 1 ダメージ（耐久は `EnemyTypeSO.ParticleHitPoints`・種別ごと）。前列が生きている間は雪がそこで止まるので前列から倒れる。クールダウン・1 雪崩 1 撃なし。静止線より外に落としたら雪崩なし。分岐点の挙動は `Legacy` として Inspector で切替可 | ADR-32 |
+| ビーム後のコンボ猶予・ビーム頻度 | ビーム撃破はコンボ非加算のまま、進行中コンボの残り猶予を `BeamComboGraceSec`（既定 0.5s）に縮める（`ComboTracker.ShortenGrace`）。通常のコンボ猶予 `ComboWindowSec` 2→1s、ゲージ `GaugeMax` 40→60 でビーム頻度を約 1 回/ゲームへ。3 値とも `StageConfig.asset` の Inspector で調整 | ADR-35 |
 
 ---
 
@@ -477,3 +478,13 @@
 - **不採用**: ①SQLite（`Mono.Data.Sqlite` ＋各プラットフォームのネイティブ `sqlite3` を `Plugins/` に入れる必要があり、展示ビルドの依存とリスクが増える。件数は高々数百件で JSON で十分。必要になれば `IScoreStore` の実装差し替えで対応）②`PlayerPrefs`（レジストリ/plist に埋まり、現場でファイルとして取り出し・退避・リセットしにくい）③`GameResultHolder` を MonoBehaviour / Singleton 化（ADR-5 に反する。static の値置き場のまま項目を 2 つ足すだけにした）④タイトル画面へのランキング表示（今回は Result のみ。必要なら `TitleScene` が `JsonFileScoreStore` を直接読む形で追加できる）。
 - **リセット（展示運用）**: Title / Result 画面で **`D` キーを 5 秒長押し**するとランキングファイルを削除する（`IScoreStore.Clear`）。判定は Core の `HoldToConfirm`（押下中だけ積算・離せばリセット・到達で 1 回だけ発火）、表示と削除は plain class `Scenes/RankingResetHotkey`（左上に進捗バー → 「消去しました」）。`TitleScene` / `ResultScene` の既存コンポーネントが生成して `Update` / `OnGUI` を呼ぶのでシーンには部品を足していない。戦闘中の `TH` には入れない（誤発動防止。展示では `D` は谷選択キーの名残でもある）。秒数は各シーンの `Ranking Reset Hold Sec`。
 - **検証**: EditMode `ScoreRankingTests` 11 本＋`JsonFileScoreStoreTests` 7 本（往復・未作成・破損退避・パス解決・上書き・Clear）＋`HoldToConfirmTests` 5 本、計 237 本緑（Unity-MCP `tests-run`・全件）。Play 検証（2026-09-19）: `ResultScene` で `InputSystem.QueueStateEvent` により `D` 押下を注入 → 進捗バー → Console `[Ranking] D 長押しでランキングを消去`、`ranking.json` 削除、右上の表と「第N位」が消える。※Editor が背面だと `PointersAndKeyboardsRespectGameViewFocus` で Player ループに入力が届かないため、検証時のみ `AllDeviceInputAlwaysGoesToGameView` に切替（終了後に復元）。
+
+## ADR-35: ビーム撃破後のコンボ猶予を短縮し、ビーム砲の頻度を下げる（`ComboTracker.ShortenGrace` + `StageConfigSO.BeamComboGraceSec`）— Accepted（`85-beam-combo-tuning`・2026-09-19・Issue #85）
+
+- **背景**: ADR-30 でビーム撃破は「コンボに加算も中断もしない中立」とした。その結果、ビームが盤面を一掃したあとも直前のコンボが `ComboWindowSec`（2 秒）いっぱい生き残り、湧き直した敵を雪崩で倒すとビーム前のコンボが継続して見える。また `GaugeMax`=40 では 1 ゲーム（目標 100 体）に約 2 回ビームが出て、見せ場としては多すぎた。
+- **決定**:
+  - **Core（ADR-8）**: `ComboTracker` に `ShortenGrace(now, graceSec)` を追加。コンボ数は変えず、切れる時刻を `min(現在の期限, now + graceSec)` に縮める（延長はしない・Count 0 なら no-op・負は 0 に丸め）。内部表現を `_lastKillTime` から `_expireAt`（期限時刻）に置き換え、`AddKill` は期限を改めて `now + WindowSec` に戻す＝縮めた猶予内に雪崩で倒せばコンボは継続し、通常の窓に復帰する。境界は従来どおり「超えたら切れる（ちょうどは継続）」。
+  - **Data**: `StageConfigSO` に `_beamComboGraceSec`（既定 0.5）を追加。既定値も `_comboWindowSec` 2.0→1.0、`_gaugeMax` 100→60 に変更（`StageConfig.asset` は Editor 経由で 1 / 0.5 / 60 に設定）。
+  - **配線**: `GameManager.OnEnemyKilled` で `KillSource.Beam` のとき `_combo.ShortenGrace(Time.time, _stageConfig.BeamComboGraceSec)` を呼んで return（撃破数のみ算入・ゲージ非算入は ADR-30 のまま）。ビームは 1 体ずつ通知されるが `ShortenGrace` は最小値を保つので同一フレームの多重呼び出しは無害。
+- **不採用**: ①ビーム撃破をコンボに加算し猶予だけ短くする（30 体一掃で +30 され最大コンボ＝ランキング表示が「ビームを引いた回数」で決まってしまう）②ビーム撃破で即コンボを 0 にする（衝撃波と同時に雪崩で倒した分が理不尽に途切れる。`BeamComboGraceSec`=0 にすれば Inspector だけでほぼ同じ挙動にできる）③頻度をビーム側のクールダウンで下げる（発動条件を「ゲージ MAX」1 つに保つ ADR-30 の理解コスト 0 の方針を優先。`GaugeMax` だけで調整可）。
+- **検証**: EditMode `ComboTrackerTests` 17 本（`ShortenGrace` 系 8 本追加：非加算・早期失効・非延長・多重呼び出し・猶予内撃破で窓復帰・猶予後撃破で 1 から・負値クランプ・Count 0 no-op）、全 245 本緑（Unity-MCP `tests-run`）。

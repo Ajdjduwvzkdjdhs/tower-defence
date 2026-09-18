@@ -427,14 +427,19 @@ namespace KakigoriTD.Bootstrap
         /// <summary>
         /// 敵を 1 体撃破したときの集計（ADR-30）。出どころで扱いを分ける:
         ///  ・雪玉／爆発 … 撃破数・コンボ・ゲージすべてに算入（連鎖 20 体ならコンボも +20）
-        ///  ・ビーム … 撃破数のみ算入。ゲージには入れず（自己充填ループの防止）、コンボは中立
+        ///  ・ビーム … 撃破数のみ算入。ゲージには入れず（自己充填ループの防止）、コンボには加算しないが
+        ///    進行中コンボの残り猶予を <c>BeamComboGraceSec</c> に縮める（ADR-35）
         /// </summary>
         private void OnEnemyKilled(KillSource source, Vector3 position)
         {
             _audio?.PlayEnemyKilled();
             _progress.Add();
 
-            if (source == KillSource.Beam) return;
+            if (source == KillSource.Beam)
+            {
+                _combo.ShortenGrace(Time.time, _stageConfig.BeamComboGraceSec);
+                return;
+            }
 
             _combo.AddKill(Time.time);
             _gauge.AddKill(_combo.Count);
