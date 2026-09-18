@@ -28,7 +28,7 @@
 - エンジン: Unity **6000.3.16f1**（Unity 6.3 / URP 17.3）— バージョンは確定済み
 - 主要パッケージ: URP 17.3 / Cinemachine 3.1 / Input System 1.19（**新** Input System のみ）/ Test Framework 1.6
 - 言語: C#
-- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、237本）
+- テスト: Unity Test Framework（**EditMode を主**とする。`Assets/Tests/EditMode/`、245本）
 
 ## 実行とテスト
 
@@ -57,7 +57,7 @@
 
 ### テスト方針
 
-- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在192本）。
+- 純ロジック（`Assets/Scripts/Core/` 配下）は **EditMode テスト**を必須とする（`Assets/Tests/EditMode/`、現在245本）。
 - Unity 固有の挙動（シーン遷移・Play Mode の動き・UI 表示・演出）は **起動中の Editor を `unity` CLI で駆動して**スクリーンショット/ログで確認する（下記）。
   「動いた気がする」で終わらせず、客観的な証拠を残してから次へ進む。
 
@@ -164,6 +164,15 @@
 
 > 両モードで耐久の単位が違う（Legacy＝雪崩の個数、Particle Contact＝粒の個数）ので、値は共有しない。
 > `.asset` の YAML を直接編集しない（Editor で変更する）。詳細な設計判断は `docs/architecture.md` ADR-32。
+
+## コンボ・ビーム砲の調整値（`StageConfig.asset`・ADR-30/35）
+
+`Assets/ScriptableObjects/StageConfig.asset` の Inspector で調整する（コード変更不要）:
+
+- **Combo Window Sec**（既定 1.5）… この秒数以内に次を倒せばコンボ継続
+- **Beam Combo Grace Sec**（既定 0.5）… ビーム砲が敵を倒した瞬間から進行中コンボが切れるまでの猶予。ビーム撃破はコンボに加算しない。
+  0 にすれば衝撃波の直後にほぼ即断ち切る
+- **Gauge Max**（既定 60）… 大きいほどビーム砲の発動頻度が下がる（`Gauge Per Kill`／`Gauge Combo Bonus` と合わせて逆算）
 
 ## リポジトリ構成
 
