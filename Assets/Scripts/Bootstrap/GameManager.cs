@@ -41,7 +41,7 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private AudioConfigSO _audioConfig;
 
         [Header("調整値（spec §主要パラメータ）")]
-        [SerializeField] private int _fortHpMax = 1000;
+        [SerializeField] private int _fortHpMax = 2500;
         [Tooltip("砦を山頂の斜面高さから上下にずらすオフセット。負の値で少し埋める。")]
         [SerializeField] private float _fortHeightOffset = 0f;
         [SerializeField] private GameObject _enemyPrefab;
