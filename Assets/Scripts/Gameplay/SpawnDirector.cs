@@ -6,14 +6,18 @@ using Random = UnityEngine.Random;
 namespace KakigoriTD.Gameplay
 {
     /// <summary>
-    /// 単一ステージの敵湧きを管理する MonoBehaviour アダプタ（ADR-8 / ADR-30）。旧 <c>WaveManager</c> の置き換え。
-    /// <see cref="StageConfigSO.SpawnRatePerSecond"/>（体/秒）から算出した間隔ごとに 1 体湧かせる。
-    /// タイミングの純ロジックは <see cref="SpawnClock"/>（EditMode 検証）。
+    /// 単一ステージの敵湧きを管理する MonoBehaviour アダプタ（ADR-8 / ADR-30 / ADR-36）。旧 <c>WaveManager</c> の置き換え。
+    /// 湧き方式は <see cref="StageConfigSO.SpawnMode"/> で切り替える:
+    ///  - <see cref="SpawnMode.Population"/>（既定）… 盤面の生存数を <see cref="StageConfigSO.FieldPopulationAt"/>（進捗で補間）に
+    ///    保つ。倒した分だけ <see cref="StageConfigSO.RefillRatePerSecond"/> を上限に補充する（<see cref="PopulationSpawnClock"/>）。
+    ///    倒す速さがそのままクリアタイムになるための方式。
+    ///  - <see cref="SpawnMode.FixedRate"/> … <see cref="StageConfigSO.SpawnRatePerSecond"/>（体/秒）の一定間隔で 1 体湧かせる
+    ///    （<see cref="SpawnClock"/>）。クリアタイムの下限が 目標撃破数÷湧きレート に固定される旧方式。
+    /// タイミングの純ロジックはどちらも Core（EditMode 検証）。
     ///
     /// 種別は <see cref="SpawnSelector"/> で抽選する。盾兵が選ばれたときは爆発兵とのペアで湧く。出現率は**撃破数の進捗 0..1** に対する
-    /// <c>AnimationCurve</c> を <see cref="StageConfigSO"/> 側で評価して得る（Core を UnityEngine 非依存に保つため、
-    /// カーブの評価はこの層で行い、Core には float だけを渡す）。
-    /// 湧きレート自体はランプさせない（盤面の混雑度は「湧き速度 − 撃破速度」の平衡に任せる）。
+    /// 2 値補間を <see cref="StageConfigSO"/> 側で評価して得る（Core を UnityEngine 非依存に保つため、
+    /// 評価はこの層で行い、Core には float だけを渡す）。
     ///
     /// 終了判定・結果表示は <c>BattleState</c>＋<c>GameManager(IGameContext)</c> が担う。
     /// 本クラスは「開始されたら湧かせ、止められたら止める」だけに徹する。
@@ -22,7 +26,8 @@ namespace KakigoriTD.Gameplay
     {
         private EnemyField _field;
         private KillProgress _progress;
-        private SpawnClock _clock;
+        private SpawnClock _clock;                     // FixedRate 用
+        private PopulationSpawnClock _populationClock; // Population 用
         private StageConfigSO _config;
         private bool _running;
         private int _spawned;
@@ -47,6 +52,7 @@ namespace KakigoriTD.Gameplay
             float rate = config != null ? config.SpawnRatePerSecond : 0.667f;
             // SpawnClock は間隔(秒)で駆動するため、Inspector 上のレート(体/秒)をここで変換する。
             _clock = new SpawnClock(rate > 0f ? 1f / rate : float.MaxValue);
+            _populationClock = new PopulationSpawnClock(config != null ? config.RefillRatePerSecond : 6f);
             _running = true;
             _spawned = 0;
         }
@@ -58,13 +64,17 @@ namespace KakigoriTD.Gameplay
         {
             if (!_running || _field == null || _config == null) return;
 
-            int n = _clock.Tick(Time.deltaTime);
+            int n = _config.SpawnMode == SpawnMode.Population
+                ? _populationClock.Tick(Time.deltaTime, _field.EnemyCount, _config.FieldPopulationAt(Progress01))
+                : _clock.Tick(Time.deltaTime);
             for (int i = 0; i < n; i++) SpawnOne();
         }
 
+        private float Progress01 => _progress != null ? _progress.Progress01 : 0f;
+
         private void SpawnOne()
         {
-            float progress01 = _progress != null ? _progress.Progress01 : 0f;
+            float progress01 = Progress01;
 
             var kind = SpawnSelector.Select(
                 _config.BomberChanceAt(progress01),
