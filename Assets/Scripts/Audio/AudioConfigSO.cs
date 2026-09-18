@@ -29,6 +29,10 @@ namespace KakigoriTD.Audio
         [Tooltip("敵撃破音。複数入れると鳴るたびに上から順番に切り替わる。空なら上の単発クリップを使う。")]
         [SerializeField] private AudioClip[] _enemyKilledClips;
 
+        [Header("カウントダウン SE")]
+        [SerializeField] private AudioClip _countdownBeep; // "3"/"2"/"1"
+        [SerializeField] private AudioClip _countdownGo;   // "スタート"
+
         [Header("雪崩（ループ gate・専用 source）")]
         [SerializeField] private AudioClip _avalanche;
 
@@ -43,6 +47,8 @@ namespace KakigoriTD.Audio
         [Range(0f, 1f)][SerializeField] private float _enemyAttackVolume = 0.1f;
         [Range(0f, 1f)][SerializeField] private float _avalancheVolume = 1.0f;
         [Range(0f, 1f)][SerializeField] private float _allyCaughtVolume = 1.0f;
+        [Range(0f, 1f)][SerializeField] private float _countdownBeepVolume = 1.0f;
+        [Range(0f, 1f)][SerializeField] private float _countdownGoVolume = 1.0f;
 
         public AudioClip Bgm => _bgm;
         public float BgmVolume => _bgmVolume;
@@ -87,5 +93,10 @@ namespace KakigoriTD.Audio
 
         public AudioClip AllyCaught => _allyCaught;
         public float AllyCaughtVolume => _allyCaughtVolume;
+
+        public AudioClip CountdownBeep => _countdownBeep;
+        public float CountdownBeepVolume => _countdownBeepVolume;
+        public AudioClip CountdownGo => _countdownGo;
+        public float CountdownGoVolume => _countdownGoVolume;
     }
 }

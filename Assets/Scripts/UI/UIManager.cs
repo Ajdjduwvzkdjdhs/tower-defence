@@ -40,6 +40,14 @@ namespace KakigoriTD.UI
         private string _trackerWarning = ""; // 位置検知ロスト（状態Y）警告。空なら非表示（Phase 5）
         private bool _resultShown;
         private StageResult _result;
+        // 開始前カウントダウン（"3"/"2"/"1"/"スタート"）。プロジェクター投影を想定し、
+        // 画面全体を暗転させたうえで超大型・黒縁取り文字を出す（CountdownState が都度 SetCountdown で更新）。
+        private string _countdownText = "";
+        private bool _countdownIsFinal;
+        private float _countdownSetAt = -999f;
+        private const float CountdownPopInSec = 0.15f; // 出現直後にひと回り大きく→縮むポップイン演出の時間
+        private const float CountdownStepSec = 1.0f;   // CountdownState.StepSec と同じ長さ（1ステップ=1秒）
+        private static Texture2D _sonarSweepTex; // ソナー掃引の実行時生成テクスチャ（キャッシュ・使い回し）
 
         // コンボポップアップ（敵の撃破位置に一瞬表示。GameManager.OnEnemyKilled が都度追加）。
         // _comboMilestoneInterval コンボごとの節目だけは撃破位置ではなく画面中央に大きく表示する（IsMilestone）。
@@ -72,6 +80,21 @@ namespace KakigoriTD.UI
             if (_fort != null) _fort.OnHpChanged -= OnHpChanged; // 購読解除（ADR-3）
         }
 
+
+        /// <summary>
+        /// カウントダウンの1ステップを表示する（"3"/"2"/"1"/"スタート"）。呼ばれるたびにポップイン
+        /// アニメーションを頭から再生する。<paramref name="isFinal"/> は「スタート」のみ true
+        /// （色・サイズを変えて強調する）。
+        /// </summary>
+        public void SetCountdown(string text, bool isFinal)
+        {
+            _countdownText = text;
+            _countdownIsFinal = isFinal;
+            _countdownSetAt = Time.time;
+        }
+
+        /// <summary>カウントダウン表示を消す（Battle開始時）。</summary>
+        public void ClearCountdown() => _countdownText = "";
         /// <summary>
         /// 戦闘中の集計を更新する（ADR-30）。GameManager が毎フレーム呼ぶ。
         /// </summary>
@@ -196,6 +219,126 @@ namespace KakigoriTD.UI
                 GUI.Label(new Rect(box.x, box.y + 112, box.width, 28), "[Enter] で再挑戦");
                 GUI.skin.label.alignment = prev;
             }
+            DrawCountdown();
+        }
+
+        private void DrawCountdown()
+        {
+            if (string.IsNullOrEmpty(_countdownText)) return;
+
+            // 画面全体を軽く暗転。数字/文字そのものではなく「今が特別な瞬間」であることを伝える。
+            GUI.color = new Color(0f, 0f, 0f, 0.35f);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            float t = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownPopInSec);
+            float pop = 1f + 0.4f * (1f - t); // 出現時1.4倍 → 0.15秒で1.0倍まで縮む
+
+            // 数字は元の 240 の 0.7 倍、「スタート」は SE を主役にして控えめに 0.3 倍。
+            int baseSize = _countdownIsFinal ? Mathf.RoundToInt(190 * 0.3f) : Mathf.RoundToInt(240 * 0.7f);
+            int fontSize = Mathf.RoundToInt(baseSize * pop);
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fontSize,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
+
+            float h = fontSize * 1.6f;
+            var rect = new Rect(0f, Screen.height * 0.5f - h * 0.5f, Screen.width, h);
+
+            // 数字("3"/"2"/"1")と「スタート」で色が違って見えると不安定な印象になるため、
+            // ステップによらず同じ色で統一する。
+            Color fill = new Color(1f, 0.85f, 0.15f);
+
+            if (!_countdownIsFinal) DrawSonarSweep(rect);
+
+            // 縁取り（黒）: 4方向にオフセットして描画するIMGUI定番の疑似アウトライン。
+            style.normal.textColor = Color.black;
+            const float o = 4f;
+            GUI.Label(new Rect(rect.x - o, rect.y, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x + o, rect.y, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x, rect.y - o, rect.width, rect.height), _countdownText, style);
+            GUI.Label(new Rect(rect.x, rect.y + o, rect.width, rect.height), _countdownText, style);
+
+            // 塗り（本体）。
+            style.normal.textColor = fill;
+            GUI.Label(rect, _countdownText, style);
+        }
+
+        private const float SonarTrailDeg = 130f; // 掃引の尾の長さ（度）。先端が最も明るく、ここまでかけて減衰する。
+
+        /// <summary>
+        /// 数字カウントダウン（"3"/"2"/"1"）専用の演出。潜水艦ソナーのように、先端が明るく尾を引いて
+        /// 減衰する扇形の濃淡が1ステップ（1秒）かけて時計回りに1周する。「スタート」では出さない。
+        /// </summary>
+        private void DrawSonarSweep(Rect numberRect)
+        {
+            float cx = Screen.width * 0.5f;
+            float cy = numberRect.y + numberRect.height * 0.5f;
+            float diameter = numberRect.height * 1.15f;
+
+            float sweepT = Mathf.Clamp01((Time.time - _countdownSetAt) / CountdownStepSec);
+
+            var prevColor = GUI.color;
+            var prevMatrix = GUI.matrix;
+
+            GUI.color = new Color(0.5f, 1f, 0.65f, 0.9f);
+            GUIUtility.RotateAroundPivot(sweepT * 360f, new Vector2(cx, cy));
+            GUI.DrawTexture(new Rect(cx - diameter * 0.5f, cy - diameter * 0.5f, diameter, diameter), SonarSweepTexture());
+
+            GUI.matrix = prevMatrix;
+            GUI.color = prevColor;
+        }
+
+        /// <summary>
+        /// 「先端が明るく尾を引いて減衰する扇形」の濃淡テクスチャを一度だけ生成して使い回す
+        /// （毎フレーム生成しない）。境界は smoothstep で滑らかにし、拡大表示してもジャギーが出ないようにする。
+        /// </summary>
+        private static Texture2D SonarSweepTexture()
+        {
+            if (_sonarSweepTex != null) return _sonarSweepTex;
+
+            const int size = 256;
+            const float half = size * 0.5f;
+            const float outerR = half - 2f;
+            float trailRad = SonarTrailDeg * Mathf.Deg2Rad;
+
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - half + 0.5f;
+                    float dy = y - half + 0.5f;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    // 真上(12時)を0度、時計回りに増える角度。
+                    float angle = Mathf.Atan2(dx, -dy);
+                    if (angle < 0f) angle += 2f * Mathf.PI;
+
+                    // 尾は指数0.8でゆるやかに減衰させ、くっきりした扇形ではなく「じわっと」した濃淡にする。
+                    float angleFade = angle <= trailRad ? Mathf.Pow(1f - angle / trailRad, 0.8f) : 0f;
+                    // 掃引が当たっていない部分もソナー画面らしくうっすら常時見せる（ベース濃度）。
+                    const float baseWash = 0.12f;
+                    float shade = Mathf.Max(baseWash, angleFade);
+                    // 外周を2pxかけて滑らかにフェードさせ、拡大表示時のジャギーを防ぐ。
+                    float edgeFade = Mathf.Clamp01((outerR - dist) / 2f);
+
+                    byte a = (byte)Mathf.RoundToInt(shade * edgeFade * 255f);
+                    pixels[y * size + x] = new Color32(255, 255, 255, a);
+                }
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            _sonarSweepTex = tex;
+            return tex;
         }
 
         // 縁取り用のオフセット（周囲8方向）。IMGUIには太字の縁取りが無いので黒を少しずつずらして重ね描きする。

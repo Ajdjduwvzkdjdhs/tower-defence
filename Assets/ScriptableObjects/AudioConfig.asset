@@ -23,6 +23,8 @@ MonoBehaviour:
   - {fileID: 8300000, guid: d2b5b0702c3c94e6194adb84522b4014, type: 3}
   - {fileID: 8300000, guid: d3e72a49d62b844a9936757b77fc469a, type: 3}
   - {fileID: 8300000, guid: dece56ebebc7c47f58aec6f8f90843dd, type: 3}
+  _countdownBeep: {fileID: 0}
+  _countdownGo: {fileID: 8300000, guid: 125fe0dac46e2452aa479b46eb50b9e6, type: 3}
   _avalanche: {fileID: 8300000, guid: b016c78ffb3594daea3435ac800564bd, type: 3}
   _allyCaught: {fileID: 0}
   _clearVolume: 1
@@ -32,3 +34,5 @@ MonoBehaviour:
   _enemyAttackVolume: 0.4
   _avalancheVolume: 1
   _allyCaughtVolume: 1
+  _countdownBeepVolume: 1
+  _countdownGoVolume: 1

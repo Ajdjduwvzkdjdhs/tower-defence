@@ -87,5 +87,43 @@ namespace KakigoriTD.Audio
         public void PlayEnemyKilled() { if (_cfg != null) PlaySe(_cfg.NextEnemyKilled(), _cfg.EnemyKilledVolume); }
         public void PlayEnemyAttack() { if (_cfg != null) PlaySe(_cfg.EnemyAttack, _cfg.EnemyAttackVolume); }
         public void PlayAllyCaught() { if (_cfg != null) PlaySe(_cfg.AllyCaught, _cfg.AllyCaughtVolume); }
+
+        /// <summary>
+        /// "3"/"2"/"1" のビープ。専用クリップが SO に割り当てられていればそれを使い、
+        /// 無ければ陸上競技のスタート音を意識した短いビープ音をその場で合成して鳴らす（ADR-11・表現層のみ）。
+        /// </summary>
+        public void PlayCountdownBeep()
+        {
+            var clip = _cfg != null && _cfg.CountdownBeep != null ? _cfg.CountdownBeep : GeneratedBeepClip();
+            PlaySe(clip, _cfg != null ? _cfg.CountdownBeepVolume : 1f);
+        }
+
+        public void PlayCountdownGo() { if (_cfg != null) PlaySe(_cfg.CountdownGo, _cfg.CountdownGoVolume); }
+
+        private static AudioClip _generatedBeepClip;
+
+        /// <summary>短いサイン波のビープ音を一度だけ合成して使い回す（クリック音防止に頭とお尻をフェード）。</summary>
+        private static AudioClip GeneratedBeepClip()
+        {
+            if (_generatedBeepClip != null) return _generatedBeepClip;
+
+            const int sampleRate = 44100;
+            const float freqHz = 1500f;
+            const float durationSec = 0.09f;
+            const int fadeSamples = 200;
+
+            int sampleCount = Mathf.RoundToInt(sampleRate * durationSec);
+            var data = new float[sampleCount];
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleRate;
+                float envelope = Mathf.Min(Mathf.Min(i, sampleCount - i) / (float)fadeSamples, 1f);
+                data[i] = Mathf.Sin(2f * Mathf.PI * freqHz * t) * envelope;
+            }
+
+            _generatedBeepClip = AudioClip.Create("CountdownBeep_Generated", sampleCount, 1, sampleRate, false);
+            _generatedBeepClip.SetData(data, 0);
+            return _generatedBeepClip;
+        }
     }
 }
