@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using KakigoriTD.Core;
 using KakigoriTD.Gameplay;
@@ -5,21 +6,34 @@ using KakigoriTD.Gameplay;
 namespace KakigoriTD.UI
 {
     /// <summary>
-    /// プロトタイプ UI（U1）。砦HPバー・撃破数・コンボ・必殺ゲージ・経過タイム・リザルトを表示する
+    /// プロトタイプ UI（U1）。砦HPバー・撃破数・必殺ゲージ・経過タイム・リザルトを表示する
     /// （ADR-30 で氷バーと Wave タイマーを廃止）。砦HP は <see cref="Fort.OnHpChanged"/> を購読
-    /// （ADR-3、<c>OnDestroy</c> で解除）。撃破数・コンボ・ゲージは連続値のため GameManager が毎フレーム渡す。
+    /// （ADR-3、<c>OnDestroy</c> で解除）。撃破数・ゲージは連続値のため GameManager が毎フレーム渡す。
+    /// コンボは画面固定表示をやめ、撃破位置に一瞬出るポップアップに変更した（<see cref="ShowComboPopup"/>）
+    /// ——実プレイ中はプレイヤーが画面端を見ないため。
     ///
     /// 描画は IMGUI（OnGUI）— Phase1 はプレースホルダ図形のみで、uGUI 化は後続の見栄え調整に委ねる
     /// （**ADR-13**）。配線は <c>GameManager</c>（Composition Root）が <see cref="Configure"/> で行う。
     /// </summary>
     public class UIManager : MonoBehaviour
     {
+        [Tooltip("コンボポップアップが表示され続ける秒数。")]
+        [SerializeField] private float _comboPopupLifetimeSec = 0.8f;
+        [Tooltip("コンボポップアップが寿命までに上へ浮く距離（スクリーンピクセル）。")]
+        [SerializeField] private float _comboPopupRisePx = 50f;
+        [Tooltip("コンボポップアップの基準フォントサイズ（通常撃破・撃破位置に表示）。")]
+        [SerializeField] private int _comboPopupFontSize = 44;
+        [Tooltip("節目ポップアップのフォントサイズ（画面中央に表示）。")]
+        [SerializeField] private int _comboMilestoneFontSize = 90;
+        [Tooltip("出現直後に拡大→収束させるポップ演出の秒数。")]
+        [SerializeField] private float _comboPopupPopDurationSec = 0.12f;
+
         private Fort _fort;
 
         private int _hp, _maxHp;
 
         // 戦闘中の可視化（GameManager が毎フレーム SetBattleStats で更新）。
-        private int _kills, _targetKills, _combo;
+        private int _kills, _targetKills;
         private float _gauge01, _elapsedSec;
         private string _status = "";
         private string _banner = "";
@@ -35,13 +49,24 @@ namespace KakigoriTD.UI
         private const float CountdownStepSec = 1.0f;   // CountdownState.StepSec と同じ長さ（1ステップ=1秒）
         private static Texture2D _sonarSweepTex; // ソナー掃引の実行時生成テクスチャ（キャッシュ・使い回し）
 
+        // コンボポップアップ（敵の撃破位置に一瞬表示。GameManager.OnEnemyKilled が都度追加）。
+        // _comboMilestoneInterval コンボごとの節目だけは撃破位置ではなく画面中央に大きく表示する（IsMilestone）。
+        private struct ComboPopup { public Vector3 WorldPos; public int Combo; public float StartTime; public bool IsMilestone; }
+        private readonly List<ComboPopup> _comboPopups = new List<ComboPopup>();
+
+        // UIManager は GameManager が実行時に AddComponent で生成する（ADR-5）ため、
+        // このコンポーネント自体に [SerializeField] を置いても Play せずに調整できない。
+        // Play せずに現場調整できるよう、値は GameManager 側の SerializeField から Configure で受け取る。
+        private int _comboMilestoneInterval = 10;
+
         /// <summary>砦を注入し、砦HP イベントを購読する。</summary>
-        public void Configure(Fort fort)
+        public void Configure(Fort fort, int comboMilestoneInterval)
         {
             _fort = fort;
             _hp = fort.CurrentHp;
             _maxHp = fort.MaxHp;
             fort.OnHpChanged += OnHpChanged;
+            _comboMilestoneInterval = Mathf.Max(1, comboMilestoneInterval);
         }
 
         private void OnHpChanged(int current, int max)
@@ -73,13 +98,27 @@ namespace KakigoriTD.UI
         /// <summary>
         /// 戦闘中の集計を更新する（ADR-30）。GameManager が毎フレーム呼ぶ。
         /// </summary>
-        public void SetBattleStats(int kills, int targetKills, int combo, float gauge01, float elapsedSec)
+        public void SetBattleStats(int kills, int targetKills, float gauge01, float elapsedSec)
         {
             _kills = kills;
             _targetKills = targetKills;
-            _combo = combo;
             _gauge01 = gauge01;
             _elapsedSec = elapsedSec;
+        }
+
+        /// <summary>
+        /// 敵を撃破した位置にコンボ数を一瞬表示する。GameManager.OnEnemyKilled がコンボ 2 以上のときだけ呼ぶ。
+        /// <see cref="_comboMilestoneInterval"/> コンボごとの節目は撃破位置ではなく画面中央に大きく表示する。
+        /// </summary>
+        public void ShowComboPopup(Vector3 worldPos, int combo)
+        {
+            _comboPopups.Add(new ComboPopup
+            {
+                WorldPos = worldPos,
+                Combo = combo,
+                StartTime = Time.time,
+                IsMilestone = combo % _comboMilestoneInterval == 0,
+            });
         }
 
         /// <summary>上部ステータス（Title / 経過タイムなど）。GameManager が毎フレーム設定。</summary>
@@ -134,17 +173,12 @@ namespace KakigoriTD.UI
             GUI.Label(new Rect(16, 96, 400, 36), $"撃破 {_kills} / {_targetKills}", killStyle);
             GUI.contentColor = Color.white;
 
-            // コンボ（2 以上のときだけ大きく出す）
-            if (_combo >= 2)
+            // コンボポップアップ（撃破位置に一瞬表示。画面固定の常設表示は廃止）
+            for (int i = _comboPopups.Count - 1; i >= 0; i--)
             {
-                var comboStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 34,
-                    alignment = TextAnchor.UpperRight,
-                };
-                GUI.contentColor = new Color(1f, 0.75f, 0.25f);
-                GUI.Label(new Rect(Screen.width - 320, 40, 300, 48), $"{_combo} COMBO", comboStyle);
-                GUI.contentColor = Color.white;
+                float age = Time.time - _comboPopups[i].StartTime;
+                if (age >= _comboPopupLifetimeSec) { _comboPopups.RemoveAt(i); continue; }
+                DrawComboPopup(_comboPopups[i], age);
             }
 
             // 中央バナー（WaveIntro / WaveLull。リザルト表示中は非表示）
@@ -307,6 +341,120 @@ namespace KakigoriTD.UI
             return tex;
         }
 
+        // 縁取り用のオフセット（周囲8方向）。IMGUIには太字の縁取りが無いので黒を少しずつずらして重ね描きする。
+        private static readonly Vector2[] ComboPopupOutlineOffsets =
+        {
+            new Vector2(-2, -2), new Vector2(0, -2), new Vector2(2, -2),
+            new Vector2(-2, 0),                       new Vector2(2, 0),
+            new Vector2(-2, 2),  new Vector2(0, 2),   new Vector2(2, 2),
+        };
+
+        // コンボポップアップ 1 件を描画する。節目（10コンボ毎）は画面中央に大きく、それ以外は撃破位置に小さく表示する。
+        private void DrawComboPopup(ComboPopup popup, float age)
+        {
+            if (popup.IsMilestone) DrawMilestonePopup(popup, age);
+            else DrawKillPopup(popup, age);
+        }
+
+        // 通常撃破（節目以外）: ワールド座標→スクリーン座標に変換し、撃破位置に小さく出す。
+        // 出現直後は拡大→収束するポップ演出、以後は上に浮かせつつフェードアウトする。
+        private void DrawKillPopup(ComboPopup popup, float age)
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+
+            Vector3 screenPos = cam.WorldToScreenPoint(popup.WorldPos);
+            if (screenPos.z <= 0f) return; // カメラの後ろ（描画しない）
+
+            float t = age / _comboPopupLifetimeSec;
+            float guiY = Screen.height - screenPos.y - t * _comboPopupRisePx; // GUI 座標は上下反転＋上昇演出
+            float pop = age < _comboPopupPopDurationSec
+                ? Mathf.Lerp(1.6f, 1f, age / _comboPopupPopDurationSec)
+                : 1f;
+
+            // _comboMilestoneInterval コンボごとに階層が上がり、フォントも色も豪華になっていく（節目の中央大表示とは別に、通常表示側でも変化させる）。
+            int tier = Mathf.Min(popup.Combo / _comboMilestoneInterval, ComboPopupMaxTier);
+            int tieredFontSize = _comboPopupFontSize + tier * 6;
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.RoundToInt(tieredFontSize * pop),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = false,
+                clipping = TextClipping.Overflow, // ポップ演出でフォントが箱より大きくなる瞬間があるため、切り捨てない
+            };
+
+            string text = $"{popup.Combo} COMBO";
+            float alpha = 1f - t;
+            const float w = 220f, h = 90f, margin = 8f; // h はポップ最大時のフォント(約70px)より余裕を持たせる
+            float x = Mathf.Clamp(screenPos.x - w * 0.5f, margin, Screen.width - w - margin);
+            float y = Mathf.Clamp(guiY - h * 0.5f, margin, Screen.height - h - margin);
+            var rect = new Rect(x, y, w, h);
+
+            DrawOutlinedLabel(rect, text, style, ComboTierColor(tier), alpha);
+        }
+
+        private const int ComboPopupMaxTier = 5; // 50コンボ以降は虹色に固定（それ以上は上げない）
+
+        // 階層ごとの色。最終階層（50コンボ以降）は時間で色相を回して虹色にする（最高潮の演出）。
+        private static Color ComboTierColor(int tier)
+        {
+            switch (tier)
+            {
+                case 0: return new Color(1f, 0.85f, 0.15f);  // 黄色（2〜9コンボ）
+                case 1: return new Color(1f, 0.55f, 0.1f);   // オレンジ（10〜19）
+                case 2: return new Color(1f, 0.25f, 0.25f);  // 赤（20〜29）
+                case 3: return new Color(0.85f, 0.3f, 1f);   // 紫（30〜39）
+                case 4: return new Color(0.3f, 0.8f, 1f);    // 水色（40〜49）
+                default: return Color.HSVToRGB(Mathf.Repeat(Time.time * 0.6f, 1f), 0.85f, 1f); // 50コンボ以降：虹色
+            }
+        }
+
+        // 節目（10コンボ毎）: 撃破位置ではなく画面中央に大きく、虹色で出す。
+        private void DrawMilestonePopup(ComboPopup popup, float age)
+        {
+            float t = age / _comboPopupLifetimeSec;
+            float pop = age < _comboPopupPopDurationSec
+                ? Mathf.Lerp(1.8f, 1f, age / _comboPopupPopDurationSec)
+                : 1f;
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.RoundToInt(_comboMilestoneFontSize * pop),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = false,
+                clipping = TextClipping.Overflow,
+            };
+
+            string text = $"{popup.Combo} COMBO!!";
+            float alpha = 1f - t;
+            const float w = 800f, h = 160f;
+            var rect = new Rect(Screen.width * 0.5f - w * 0.5f, Screen.height * 0.5f - h * 0.5f, w, h);
+
+            Color c = Color.HSVToRGB(Mathf.Repeat(Time.time * 0.6f, 1f), 0.85f, 1f); // 節目はすべて虹色（時間で色相回転）
+            DrawOutlinedLabel(rect, text, style, c, alpha);
+        }
+
+        // 黒縁取り（周囲8方向に重ね描き）＋本体色でラベルを1つ描画する共通処理。
+        private static void DrawOutlinedLabel(Rect rect, string text, GUIStyle style, Color fillColor, float alpha)
+        {
+            GUI.contentColor = new Color(0f, 0f, 0f, alpha * 0.85f);
+            for (int i = 0; i < ComboPopupOutlineOffsets.Length; i++)
+            {
+                var r = rect;
+                r.x += ComboPopupOutlineOffsets[i].x;
+                r.y += ComboPopupOutlineOffsets[i].y;
+                GUI.Label(r, text, style);
+            }
+
+            GUI.contentColor = new Color(fillColor.r, fillColor.g, fillColor.b, alpha);
+            GUI.Label(rect, text, style);
+            GUI.contentColor = Color.white;
+        }
+
+        // 背景（薄暗い）＋ 充填（color）の横バー。
         private static void Bar(Rect rect, float fill01, Color color)
         {
             if (fill01 < 0f) fill01 = 0f; else if (fill01 > 1f) fill01 = 1f;
