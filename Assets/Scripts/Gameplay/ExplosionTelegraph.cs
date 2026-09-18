@@ -63,6 +63,25 @@ namespace KakigoriTD.Gameplay
 
         private System.Action<Vector3, float> _onExplode;
 
+        // true の間は Update が進行しない（カチッと止める）。ビーム撃破前のカットイン演出中、
+        // このプレハブ（衝撃波）は「SpecialAttackText を拡大→保持」のために先に Instantiate して
+        // 置く必要があるが、その間に爆発演出・自壊を走らせてはならないため、
+        // SpecialAttackController が SetSuppressed(true) で凍結し、撃破の瞬間に解除する。
+        private bool _suppressed;
+
+        /// <summary>true にすると演出の進行と自壊を停止する。PlayImmediate すると自動的に解除される。</summary>
+        public void SetSuppressed(bool suppressed)
+        {
+            _suppressed = suppressed;
+            if (suppressed)
+            {
+                // Awake が作った WarningZone 円柱（衝撃波の見た目）は、カットイン中は隠す。
+                // 解放時 (PlayImmediate→Phase.Explode) に Update が元のスケールを再設定する。
+                if (_warningDisc != null) _warningDisc.localScale = Vector3.zero;
+                if (_fillDisc != null) _fillDisc.localScale = Vector3.zero;
+            }
+        }
+
         private void Awake()
         {
             _mpb = new MaterialPropertyBlock();
@@ -91,6 +110,7 @@ namespace KakigoriTD.Gameplay
         public void PlayImmediate(System.Action<Vector3, float> onExplode = null)
         {
             _onExplode = onExplode;
+            _suppressed = false; // 解除：PlayInstant した時点で演出を進める
             _phase = Phase.Explode;
             _t = 0f;
             StartExplode();
@@ -117,6 +137,8 @@ namespace KakigoriTD.Gameplay
 
         private void Update()
         {
+            if (_suppressed) return; // カットイン中は演出・自壊を凍結（SpecialAttackController が解除する）
+
             _t += Time.deltaTime;
 
             switch (_phase)

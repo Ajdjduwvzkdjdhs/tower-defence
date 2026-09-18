@@ -23,6 +23,12 @@ namespace KakigoriTD.Data
         [Header("衝撃波演出（ビーム一周後、少し遅れて発生し敵を撃破する）")]
         [SerializeField] private float _shockwaveDelay = 0.35f;
 
+        [Header("カットイン演出（SpecialAttackText の拡大→保持→消去）")]
+        [Tooltip("SpecialAttackText を0から（プレハブ設定値）まで拡大しきる秒数。")]
+        [SerializeField] private float _textScaleInDuration = 0.5f;
+        [Tooltip("拡大完了後に固定表示しておく秒数。経過後に消去して光線一周へ。")]
+        [SerializeField] private float _textHoldSeconds = 1.0f;
+
         [Header("配置（山頂・Fort からのオフセット）")]
         [SerializeField] private Vector3 _cannonOffset = new Vector3(0f, 1.5f, -2.5f);
 
@@ -40,6 +46,12 @@ namespace KakigoriTD.Data
 
         /// <summary>ビーム一周後、衝撃波が発生するまでの遅延秒数。</summary>
         public float ShockwaveDelay => _shockwaveDelay;
+
+        /// <summary>SpecialAttackText を設定済みの大きさまで拡大しきるまでの秒数。</summary>
+        public float TextScaleInDuration => _textScaleInDuration;
+
+        /// <summary>拡大後に固定表示しておく秒数（経過後に消去して光線→衝撃波へ）。</summary>
+        public float TextHoldSeconds => _textHoldSeconds;
 
         /// <summary>ビーム砲モデルを置く、Fort からのオフセット。</summary>
         public Vector3 CannonOffset => _cannonOffset;
