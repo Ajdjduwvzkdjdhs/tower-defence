@@ -27,6 +27,7 @@ namespace KakigoriTD.Gameplay
         private float _duration = 2f;
 
         private System.Func<Vector3, bool> _tryKillNear;
+        private System.Action<Vector3> _onPassed;
         private System.Action<AvalancheSnowEffect> _onDone;
         private Vector3 _outwardDir = Vector3.forward;
         private float _elapsed;
@@ -52,14 +53,17 @@ namespace KakigoriTD.Gameplay
         /// <param name="heightAt">(x,z)→world Y の斜面サンプラ。</param>
         /// <param name="endRadius">麓の距離。外向き移動がここまで進むと早期完了。</param>
         /// <param name="tryKillNear">現在位置の半径内で 1 体撃破できたら true。</param>
+        /// <param name="onPassed">移動中の現在位置で毎フレーム呼ばれる（通過痕跡の記録用）。</param>
         /// <param name="onDone">再生完了時に呼びプール返却するコールバック。</param>
         public void Spawn(Vector3 worldPoint,
             System.Func<float, float, float> heightAt, float endRadius,
             System.Func<Vector3, bool> tryKillNear,
+            System.Action<Vector3> onPassed,
             System.Action<AvalancheSnowEffect> onDone)
         {
             _heightAt = heightAt;
             _tryKillNear = tryKillNear;
+            _onPassed = onPassed;
             _onDone = onDone;
             _endRadius = endRadius;
             _elapsed = 0f;
@@ -92,6 +96,7 @@ namespace KakigoriTD.Gameplay
             pos += _outwardDir * _travelSpeed * dt;
             if (_heightAt != null) pos.y = _heightAt(pos.x, pos.z);
             transform.position = pos;
+            _onPassed?.Invoke(transform.position); // 通過痕跡は毎フレーム記録（tryKillNear と違い単発ガード無し）
 
             if (!_reachedFront && _tryKillNear != null && _tryKillNear(transform.position))
             {

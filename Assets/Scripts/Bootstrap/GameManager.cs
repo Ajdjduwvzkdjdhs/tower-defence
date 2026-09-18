@@ -26,6 +26,9 @@ namespace KakigoriTD.Bootstrap
         [Header("LiDAR 位置入力・雪玉放出・敵スポーンの調整値（未割り当てなら既定値インスタンス）")]
         [SerializeField] private LidarPreviewConfigSO _lidarPreviewConfig;
 
+        [Tooltip("雪崩が通った箇所を一定時間白く塗る演出の調整値。未割り当てなら既定値インスタンス。")]
+        [SerializeField] private SnowPaintConfigSO _snowPaintConfig;
+
         [Header("3D 表現（Phase 4 / ADR-21。未割り当てなら高さ0＝平面フォールバック）")]
         [SerializeField] private Terrain _terrain; // 雪山。斜面高さのフォールバック
 
@@ -74,6 +77,7 @@ namespace KakigoriTD.Bootstrap
         private IInputSource _input;   // 決定キー（Title/Result の Enter）専用
         private LidarPositionInputSource _lidarPosSource; // ロスト警告用に保持（LiDAR/マウスOR合成でも常時生成）
         private LidarAvalancheVfx _lidarVfx;
+        private SnowPaintTrail _snowPaintTrail;
         private SpawnDirector _spawnDirector;
         private UIManager _ui;
         private GameStateMachine _machine;
@@ -127,6 +131,9 @@ namespace KakigoriTD.Bootstrap
 
             // LiDAR 連続座標（LidarPosition）／マウス疑似（SimPointer）の位置入力＋雪玉放出。
             BuildLidarPath();
+
+            // 雪崩が通った箇所を一定時間白く塗る演出（見た目のみ。_lidarVfx が生成済みの後で配線）。
+            BuildSnowPaintOverlay();
 
             _machine = new GameStateMachine();
             _machine.Change(new TitleState(_machine, this));
@@ -278,6 +285,34 @@ namespace KakigoriTD.Bootstrap
             _lidarVfx = NewChild("LidarAvalancheVfx").AddComponent<LidarAvalancheVfx>();
             _lidarVfx.Configure(posInput, _field, HeightAt, CreateAvalancheEffect, cfg);
             _lidarVfx.OnAvalancheChanged += OnAvalancheChangedForAudio; // 雪崩ループ音（エッジ）
+        }
+
+        // 山メッシュにほぼ重ねたオーバーレイへ、雪崩の通過痕跡（軌跡点）を描く（見た目のみ・Core非改変）。
+        // 山本体のマテリアル／シェーダーには一切触れない。_groundSurface に MeshFilter が無ければ何もしない。
+        private void BuildSnowPaintOverlay()
+        {
+            if (_snowPaintConfig == null) _snowPaintConfig = ScriptableObject.CreateInstance<SnowPaintConfigSO>();
+
+            var groundMesh = _groundSurface != null ? _groundSurface.GetComponent<MeshFilter>() : null;
+            if (groundMesh == null || groundMesh.sharedMesh == null)
+            {
+                Debug.LogWarning("SnowPaintOverlay: _groundSurface に MeshFilter が無いため雪崩の白塗り演出をスキップします。");
+                return;
+            }
+
+            var go = NewChild("SnowPaintOverlay");
+            go.transform.SetPositionAndRotation(_groundSurface.transform.position, _groundSurface.transform.rotation);
+            go.transform.localScale = _groundSurface.transform.lossyScale;
+
+            go.AddComponent<MeshFilter>().sharedMesh = groundMesh.sharedMesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = MakeSnowPaintOverlayMaterial(_snowPaintConfig);
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            _snowPaintTrail = go.AddComponent<SnowPaintTrail>();
+            _snowPaintTrail.Configure(mr, _snowPaintConfig);
+            _lidarVfx.OnAvalanchePassed += _snowPaintTrail.AddPoint;
         }
 
         // (x,z)→world Y の斜面サンプラ（ADR-21）。コライダー不使用＝物理なしを維持。
@@ -537,6 +572,23 @@ namespace KakigoriTD.Bootstrap
             return m;
         }
 
+        // 雪崩の通過痕跡オーバーレイ用マテリアル（Custom/SnowPaintOverlay）。
+        private static Material MakeSnowPaintOverlayMaterial(SnowPaintConfigSO cfg)
+        {
+            var shader = Shader.Find("Custom/SnowPaintOverlay");
+            if (shader == null)
+            {
+                Debug.LogWarning("Custom/SnowPaintOverlay が見つかりません。雪崩の白塗り演出は Unlit で代替します。");
+                return MakeUnlit(cfg.PaintColor);
+            }
+            var m = new Material(shader);
+            m.SetColor("_PaintColor", cfg.PaintColor);
+            m.SetFloat("_PaintFadeSec", cfg.PaintFadeSec);
+            m.SetFloat("_SectorDeg", cfg.SectorDeg);
+            m.SetFloat("_MaxRadius", cfg.MaxRadius);
+            return m;
+        }
+
         private static Texture2D _dotTex;
 
         private static Texture2D DotTexture()
@@ -568,6 +620,7 @@ namespace KakigoriTD.Bootstrap
             if (_field != null) _field.OnEnemyKilled -= OnEnemyKilled;
             if (_projectileFactory != null) _projectileFactory.OnCreated -= OnProjectileCreatedForAudio;
             if (_lidarVfx != null) _lidarVfx.OnAvalancheChanged -= OnAvalancheChangedForAudio;
+            if (_lidarVfx != null && _snowPaintTrail != null) _lidarVfx.OnAvalanchePassed -= _snowPaintTrail.AddPoint;
             if (_fort != null) _fort.OnHpChanged -= OnFortHpChangedForAudio;
         }
     }
