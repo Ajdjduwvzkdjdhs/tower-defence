@@ -75,7 +75,7 @@ namespace KakigoriTD.Scenes
 
             GUI.contentColor = HighlightColor;
             GUI.skin.label.fontSize = 34;
-            string headline = StageResult.FormatTime(r.ClearTimeSec);
+            string headline = StageResult.FormatTime(r.ClearTimeSec, GameResultHolder.ShowClearTimeTenths);
             if (rank != ScoreRanking.Unranked) headline += $"   第{rank}位";
             GUI.Label(new Rect(band.x, band.y + 2f, band.width, 44f), headline);
 
@@ -124,7 +124,7 @@ namespace KakigoriTD.Scenes
 
                 GUI.skin.label.alignment = TextAnchor.MiddleLeft;
                 GUI.Label(new Rect(row.x, row.y, 44f, rowH), $"{i + 1}.");
-                GUI.Label(new Rect(row.x + 44f, row.y, 110f, rowH), StageResult.FormatTime(e.ClearTimeSec));
+                GUI.Label(new Rect(row.x + 44f, row.y, 110f, rowH), StageResult.FormatTime(e.ClearTimeSec, GameResultHolder.ShowClearTimeTenths));
                 GUI.skin.label.alignment = TextAnchor.MiddleRight;
                 GUI.Label(new Rect(row.x + 154f, row.y, row.width - 154f, rowH), $"コンボ {e.MaxCombo}");
             }

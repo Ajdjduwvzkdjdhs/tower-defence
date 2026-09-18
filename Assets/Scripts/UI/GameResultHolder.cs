@@ -28,6 +28,9 @@ namespace KakigoriTD.UI
         /// </summary>
         public static int LastRank { get; set; } = ScoreRanking.Unranked;
 
+        /// <summary>クリアタイムを 0.1 秒単位で表示するか（<c>GameManager</c> の Inspector 値を ResultScene に引き継ぐ・ADR-36）。</summary>
+        public static bool ShowClearTimeTenths { get; set; } = true;
+
         /// <summary>受け渡し済みの結果を捨てる（タイトルに戻るときなど）。</summary>
         public static void Clear()
         {

@@ -7,9 +7,11 @@ namespace KakigoriTD.Data
     /// 単一ステージ（Wave 制廃止・ADR-30）の設定。旧 <c>WaveConfigSO</c>×3 の置き換え。
     /// 調整値は Inspector で編集する（ADR-1：マジックナンバー直書き禁止）。
     ///
-    /// **難度調整の主ノブは <see cref="TargetKillCount"/>**。湧きレートは固定値で、
-    /// 進行に応じてランプするのは爆発兵率・盾兵率の 2 つだけ（撃破数の進捗 0..1 でカーブを評価）。
-    /// 盤面の混雑度は「湧き速度 − プレイヤーの撃破速度」の自然な平衡に任せる。
+    /// **難度調整の主ノブは <see cref="TargetKillCount"/>**。
+    /// 湧きは既定で「盤面の敵数を目標人数に保つ」<see cref="Data.SpawnMode.Population"/>（ADR-36）：
+    /// 倒した分だけ補充するので、倒す速さがそのままクリアタイムになる。人数は開始→終了を進捗で線形補間。
+    /// 旧方式 <see cref="Data.SpawnMode.FixedRate"/>（一定間隔・ADR-30）は比較・切り戻し用に残す。
+    /// 進行に応じてランプするのは 盤面人数・爆発兵率・盾兵率（撃破数の進捗 0..1 で評価）。
     ///
     /// 出現率は「進捗 0 のとき」「進捗 1 のとき」の 2 値を線形補間する（現場で数字を直接触れるようにするため、
     /// カーブではなく 2 値で持つ）。<c>SpawnDirector</c> がここで評価した float を <c>SpawnSelector</c> に渡す。
@@ -21,8 +23,19 @@ namespace KakigoriTD.Data
         [Tooltip("クリアに必要な撃破数。ステージの長さと難度を決める主ノブ。")]
         [SerializeField] private int _targetKillCount = 100;
 
-        [Header("湧き")]
-        [Tooltip("1秒あたりの敵出現数(体/秒)。展示現場で直感的に調整できるよう秒間スポーン数で持つ"
+        [Header("湧き（ADR-36）")]
+        [Tooltip("湧き方式。Population（既定）＝盤面の敵数を目標人数に保ち、倒した分だけ補充する（腕前がクリアタイムに出る）。"
+               + "FixedRate＝ADR-36 の作業前そのまま（Spawn Rate Per Second の一定間隔で湧く。"
+               + "クリアタイムの下限が 目標撃破数÷湧きレート に固定される）。")]
+        [SerializeField] private SpawnMode _spawnMode = SpawnMode.Population;
+        [Tooltip("[Population] 開始時（撃破 0 体）に盤面へ維持する敵数。多いほど砦への圧が強く、雪崩 1 回の巻き込みも増える。")]
+        [SerializeField] private int _fieldPopulationStart = 8;
+        [Tooltip("[Population] 終了時（目標撃破数に到達）に維持する敵数。開始→終了を進捗で線形補間。")]
+        [SerializeField] private int _fieldPopulationEnd = 16;
+        [Tooltip("[Population] 補充の上限レート(体/秒)。目標人数を下回っている間、この速さまでで補充する。"
+               + "腕前の上限より十分速くしておく（遅いと再び湧き律速になる）。")]
+        [SerializeField] private float _refillRatePerSecond = 6f;
+        [Tooltip("[FixedRate] 1秒あたりの敵出現数(体/秒)。展示現場で直感的に調整できるよう秒間スポーン数で持つ"
                + "(内部では間隔=1/レートへ変換)。進行によるランプはかけない固定値。")]
         [SerializeField] private float _spawnRatePerSecond = 0.667f;
         [Tooltip("通常敵の種別プール。ここからランダムに 1 種を選ぶ。")]
@@ -67,7 +80,13 @@ namespace KakigoriTD.Data
         /// <summary>クリアに必要な撃破数。</summary>
         public int TargetKillCount => _targetKillCount;
 
-        /// <summary>1秒あたりの敵出現数（体/秒）。</summary>
+        /// <summary>湧き方式（ADR-36）。</summary>
+        public SpawnMode SpawnMode => _spawnMode;
+
+        /// <summary>[Population] 補充の上限レート（体/秒）。</summary>
+        public float RefillRatePerSecond => _refillRatePerSecond;
+
+        /// <summary>[FixedRate] 1秒あたりの敵出現数（体/秒）。</summary>
         public float SpawnRatePerSecond => _spawnRatePerSecond;
 
         /// <summary>通常敵の種別プール（読み取り専用）。</summary>
@@ -99,6 +118,10 @@ namespace KakigoriTD.Data
 
         /// <summary>コンボ 1 あたりのゲージ上乗せ係数。</summary>
         public float GaugeComboBonus => _gaugeComboBonus;
+
+        /// <summary>[Population] 進捗 0..1 において盤面へ維持する敵数（開始→終了の線形補間・四捨五入・0 以上）。</summary>
+        public int FieldPopulationAt(float progress01)
+            => Mathf.Max(0, Mathf.RoundToInt(Mathf.Lerp(_fieldPopulationStart, _fieldPopulationEnd, Mathf.Clamp01(progress01))));
 
         /// <summary>進捗 0..1 における爆発兵の出現確率（開始→終了の線形補間・0..1 にクランプ）。</summary>
         public float BomberChanceAt(float progress01)

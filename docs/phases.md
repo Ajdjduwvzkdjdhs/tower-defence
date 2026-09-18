@@ -437,7 +437,7 @@ EditMode **120本緑**（回帰ゼロ）。Singleton=`GameManager` のみ・入�
 | 新しい敵 | `BombTrooper`（爆発・誘爆連鎖）／ `ShieldTrooper`（雪玉N発・爆発なら一撃） |
 | 新しい集計 | `KillProgress` / `ComboTracker` / `SpecialGauge` / `KillSource` / `ExplosionChain`（すべて Core・UnityEngine 非依存） |
 | 必殺技 | `SpecialAttackController`（旧 `BeamCannon`）。ゲージMAXで自動発動 → 砲出現→光線一周→衝撃波の瞬間に全方位一掃（ADR-31）。撃破数には算入、ゲージには非算入、コンボは非加算（進行中コンボの残り猶予を `BeamComboGraceSec` に縮める・ADR-35） |
-| 難易度 | 撃破数の進捗に対する爆発兵率・盾兵率のカーブのみ。湧きレートは固定 |
+| 難易度 | 撃破数の進捗に対する爆発兵率・盾兵率・盤面人数（ADR-36）の 2 値補間。湧きは既定で盤面人数維持（Population）、旧来の固定レート（FixedRate）は Inspector で切り戻し可 |
 | 削除 | `EnemyMatrix` / `IceStock` / `PenaltyTally` / `Scoring` / `AllyNPC` / `DisguisedEnemy` / `WaveConfigSO` と対応テスト |
 | シーン | 結果を `GameResultHolder` で受け渡し、クリア→`ResultScene` / 失敗→`GameOverScene` |
 

@@ -22,6 +22,15 @@ namespace KakigoriTD.Tests.EditMode
         }
 
         [Test]
+        public void FormatTime_WithTenths_ShowsOneDecimal()
+        {
+            Assert.That(StageResult.FormatTime(42.96f, showTenths: true), Is.EqualTo("42.9秒")); // 切り捨て
+            Assert.That(StageResult.FormatTime(102.34f, showTenths: true), Is.EqualTo("1分42.3秒"));
+            Assert.That(StageResult.FormatTime(59.99f, showTenths: true), Is.EqualTo("59.9秒")); // 1分00.0秒 に繰り上がらない
+            Assert.That(StageResult.FormatTime(-1f, showTenths: true), Is.EqualTo("0.0秒"));
+        }
+
+        [Test]
         public void FormatTime_Negative_ClampsToZero()
         {
             Assert.That(StageResult.FormatTime(-5f), Is.EqualTo("0秒"));
@@ -32,6 +41,7 @@ namespace KakigoriTD.Tests.EditMode
         {
             var r = new StageResult(true, 102f, 100, 100, 12);
             Assert.That(r.Headline, Is.EqualTo("1分42秒 でクリア！"));
+            Assert.That(r.HeadlineFor(showTenths: true), Is.EqualTo("1分42.0秒 でクリア！"));
         }
 
         [Test]

@@ -46,10 +46,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: KakigoriTD.Runtime::KakigoriTD.Bootstrap.GameManager
   _stageConfig: {fileID: 11400000, guid: 70b4e5bf25b0449189287c6ff2a3009a, type: 2}
   _lidarPreviewConfig: {fileID: 11400000, guid: 38f103d2b7e054c77ad9fc19367b4967, type: 2}
+  _snowPaintConfig: {fileID: 0}
   _terrain: {fileID: 4358695569998069333}
   _groundSurface: {fileID: 3739809722233026105}
   _audioConfig: {fileID: 11400000, guid: 69afdf17b0cfc4df69a786965e09747e, type: 2}
-  _fortHpMax: 1000
+  _fortHpMax: 2500
+  _showClearTimeTenths: 1
   _fortHeightOffset: 0
   _enemyPrefab: {fileID: 0}
   _bomberPrefab: {fileID: 6684815093208432099, guid: 56902edd330634f53b0518ad785a3e57, type: 3}
@@ -60,6 +62,9 @@ MonoBehaviour:
   _specialAttackShockwavePrefab: {fileID: 4060460244147941742, guid: 7c073a6fc018b48a4a22a09ff57d4d0d, type: 3}
   _resultLimit: 3
   _gameOverLimit: 1
+  _comboMilestoneInterval: 10
+  _rankingCapacity: 100
+  _rankingFileName: ranking.json
 --- !u!1 &184031253997498005
 GameObject:
   m_ObjectHideFlags: 0

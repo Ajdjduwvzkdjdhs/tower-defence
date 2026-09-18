@@ -41,7 +41,11 @@ namespace KakigoriTD.Bootstrap
         [SerializeField] private AudioConfigSO _audioConfig;
 
         [Header("調整値（spec §主要パラメータ）")]
-        [SerializeField] private int _fortHpMax = 1000;
+        [Tooltip("砦の最大 HP。盤面人数維持の湧き（ADR-36）では被弾が「プレイ時間 × 盤面人数」に比例するので、"
+               + "どれだけ遅い人を敗北にするかをここで決める。ADR-36 の作業前は 1000。")]
+        [SerializeField] private int _fortHpMax = 2500;
+        [Tooltip("クリアタイムをリザルト／ランキングで 0.1 秒単位に表示する（ADR-36）。OFF で作業前どおり秒単位。")]
+        [SerializeField] private bool _showClearTimeTenths = true;
         [Tooltip("砦を山頂の斜面高さから上下にずらすオフセット。負の値で少し埋める。")]
         [SerializeField] private float _fortHeightOffset = 0f;
         [SerializeField] private GameObject _enemyPrefab;
@@ -135,6 +139,7 @@ namespace KakigoriTD.Bootstrap
 
             _ui = NewChild("UIManager").AddComponent<UIManager>();
             _ui.Configure(_fort, _comboMilestoneInterval);
+            _ui.SetClearTimeTenths(_showClearTimeTenths);
 
             // オーディオは購読対象（Fort/Factory/EnemyField）が揃った後に配線（ADR-26）。
             BuildAudio();
@@ -243,6 +248,7 @@ namespace KakigoriTD.Bootstrap
             _ui.ShowResult(result, rank);
             GameResultHolder.Last = result; // 次のシーン（Result / GameOver）へ受け渡す
             GameResultHolder.LastRank = rank;
+            GameResultHolder.ShowClearTimeTenths = _showClearTimeTenths;
             GameResultHolder.Ranking = result.IsWin ? _ranking.Top(_ranking.Count) : null;
 
             // 勝敗ジングルは BGM に重ねる（BGM は止めない・Q4-A / ADR-26）。
