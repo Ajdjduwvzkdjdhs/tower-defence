@@ -7,15 +7,21 @@ namespace KakigoriTD.Gameplay
     /// <summary>
     /// 必殺技「ビーム砲」の演出進行役（ADR-30）。発動条件は GameManager 側の <c>SpecialGauge</c>（ゲージ MAX で
     /// 自動発動）が決め、本クラスは <see cref="Fire"/> で呼ばれてから一連の演出を進める:
-    /// 山頂にビーム砲モデルが出現 → 紫の光線(<see cref="BeamSweepVfx"/>)が敵の並ぶ輪を一周 → 少し遅れて
+    /// 山頂にビーム砲モデルが出現 → <see cref="SpecialAttackShockwave"/> の子テキスト(SpecialAttackText)
+    /// を 0 からプレハブ設定値まで拡大して保持（**カットイン**） → テキストを消去 →
+    /// 紫の光線(<see cref="BeamSweepVfx"/>)が敵の並ぶ輪を一周 → 少し遅れて
     /// 衝撃波(<see cref="ExplosionTelegraph"/> の色違いプレハブ)が走り、**その瞬間に盤面の敵を全員**
     /// <see cref="EnemyField.KillAllForBeam"/> で撃破 → 衝撃波が消えたら砲も消える。
     /// 展示にはプレイヤーが押せるボタンが無いため照準入力を持たず、全方位に均一に効かせる。
     /// 演出中（<see cref="IsPlaying"/>）は GameManager が次の発動を待たせる。
+    ///
+    /// ※ カットイン用の秒数（拡大時間、保持時間）は <see cref="SpecialAttackConfigSO"/> に集約（ADR-1）。
+    ///   実際の値を編集するのは `Assets/ScriptableObjects/SpecialAttackConfig.asset`（TH_Stage プレハブの
+    ///   GameManager から渡される SO）。Prefab / シーン内オブジェクトではなくこの ScriptableObject から設定する。
     /// </summary>
     public class SpecialAttackController : MonoBehaviour
     {
-        private enum Phase { Waiting, Charged, Beaming, WaitingShockwave, Firing }
+        private enum Phase { Waiting, TextIn, TextHold, TextOut, Beaming, WaitingShockwave, Firing }
 
         private EnemyField _field;
         private Transform _fortTransform;
@@ -27,6 +33,8 @@ namespace KakigoriTD.Gameplay
         private Quaternion _cannonInitialRotation;
         private BeamSweepVfx _activeBeam;
         private GameObject _shockwaveInstance;
+        private Transform _cutinText; // SpecialAttackShockwave の子（SpecialAttackText）
+        private Vector3 _cutinTargetScale; // プレハブに焼き込まれた最終スケール（拡大の目標）
 
         private Phase _phase = Phase.Waiting;
         private float _phaseT;
@@ -76,22 +84,71 @@ namespace KakigoriTD.Gameplay
         /// <summary>
         /// ビーム砲を発動する（ゲージ MAX で GameManager が呼ぶ）。演出中の再入は無視する。
         /// 撃破は光線一周＋遅延の後、衝撃波の瞬間に起きる（発動と同時ではない）。
+        /// カットイン演出（テキスト拡大→保持→消去）が先頭に来る（ADR-30 延長）。
         /// </summary>
         public void Fire()
         {
             if (_phase != Phase.Waiting) return;
 
-            _phase = Phase.Charged;
+            _phaseT = 0f;
             if (_cannonInstance != null) _cannonInstance.SetActive(true);
+
+            // 衝撃波プレハブ（SpecialAttackShockwave）は先頭で Instantiate し、
+            // ExplosionTelegraph を抑制して「テキストだけが浮いている状態」を作る。
+            if (_shockwavePrefab != null)
+            {
+                Vector3 center = _fortTransform.position;
+                _shockwaveInstance = Instantiate(_shockwavePrefab, center, Quaternion.identity);
+                var telegraph = _shockwaveInstance.GetComponent<ExplosionTelegraph>();
+                if (telegraph != null) telegraph.SetSuppressed(true);
+
+                _cutinText = FindCutinText(_shockwaveInstance.transform);
+                if (_cutinText != null)
+                {
+                    _cutinTargetScale = _cutinText.localScale; // プレハブ値を目標として控えて…
+                    _cutinText.localScale = Vector3.zero;       // …0 から拡大する
+                }
+            }
+
+            _phase = Phase.TextIn;
         }
 
         private void Update()
         {
             switch (_phase)
             {
-                case Phase.Charged:
-                    StartBeam();
+                case Phase.TextIn:
+                {
+                    _phaseT += Time.deltaTime;
+                    float dur = _config.TextScaleInDuration;
+                    float k = dur > 0f ? Mathf.Clamp01(_phaseT / dur) : 1f;
+                    if (_cutinText != null)
+                        _cutinText.localScale = Vector3.Lerp(Vector3.zero, _cutinTargetScale, k);
+                    if (k >= 1f) EnterTextHold();
                     break;
+                }
+
+                case Phase.TextHold:
+                {
+                    _phaseT += Time.deltaTime;
+                    if (_phaseT >= _config.TextHoldSeconds) EnterTextOut();
+                    break;
+                }
+
+                case Phase.TextOut:
+                {
+                    // 消去は短く（拡大の 50% を目安に、SO には持たず）。
+                    _phaseT += Time.deltaTime;
+                    float dur = _config.TextScaleInDuration * 0.5f;
+                    float k = dur > 0f ? Mathf.Clamp01(_phaseT / dur) : 1f;
+                    if (_cutinText != null)
+                        _cutinText.localScale = Vector3.Lerp(_cutinTargetScale, Vector3.zero, k);
+                    if (k >= 1f) StartBeam();
+                    break;
+                }
+
+                case Phase.Beaming:
+                    break; // BeamSweepVfx が自身で一周し、OnBeamComplete で遷移する
 
                 case Phase.WaitingShockwave:
                     _phaseT += Time.deltaTime;
@@ -103,6 +160,32 @@ namespace KakigoriTD.Gameplay
                     if (_shockwaveInstance == null) FinishFiring();
                     break;
             }
+        }
+
+        private void EnterTextHold()
+        {
+            _phaseT = 0f;
+            _phase = Phase.TextHold;
+            // 保持開始時にプレハブ値で固定（縮み防止・浮動誤差の吸収）。
+            if (_cutinText != null) _cutinText.localScale = _cutinTargetScale;
+        }
+
+        private void EnterTextOut()
+        {
+            _phaseT = 0f;
+            _phase = Phase.TextOut;
+        }
+
+        // SpecialAttackShockwave の子に付いている SpecialAttackText（SpriteRenderer）を
+        // 名称で探す。見つかっていない場合は null を返し、カットインはスキップされる（ビーム・衝撃波は照常）。
+        private static Transform FindCutinText(Transform root)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name.Contains("SpecialAttackText") && t.GetComponent<SpriteRenderer>() != null)
+                    return t;
+            }
+            return null;
         }
 
         private void StartBeam()
@@ -153,17 +236,18 @@ namespace KakigoriTD.Gameplay
         private void FireShockwave()
         {
             _phase = Phase.Firing;
-            _shockwaveInstance = null;
 
-            float radius = RingRadius;
-            Vector3 center = _fortTransform.position;
-
-            if (_shockwavePrefab != null)
+            // Fire() の時点で抑制されて Shockwave は既に Instantiate 済み（テキストだけ見ていた状態）。
+            // ここのタイミングで初めて演出を解放して「爆発 + KillAll + 自壊」を走らせる。
+            if (_shockwaveInstance != null)
             {
-                _shockwaveInstance = Instantiate(_shockwavePrefab, center, Quaternion.identity);
                 var telegraph = _shockwaveInstance.GetComponent<ExplosionTelegraph>();
-                if (telegraph != null) telegraph.PlayImmediate(radius, (_, __) => KillAll());
-                else KillAll();
+                if (telegraph != null)
+                {
+                    telegraph.PlayImmediate(RingRadius, (_, __) => KillAll());
+                    return;
+                }
+                KillAll();
             }
             else
             {
@@ -171,7 +255,7 @@ namespace KakigoriTD.Gameplay
             }
 
             // 砲台を消すタイミングは Update() の Phase.Firing 側で、衝撃波オブジェクトが自壊した
-            // (=衝撃波の演出が消えた)瞬間に合わせる（FinishFiring）。プレハブ未設定時は次フレームで即完了する。
+            // (=衝撃波の演出が消えた)瞬間に合わせる（FinishFiring）。
         }
 
         private void KillAll()
