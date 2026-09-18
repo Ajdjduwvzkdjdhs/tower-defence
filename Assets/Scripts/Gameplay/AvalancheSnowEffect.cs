@@ -35,6 +35,7 @@ namespace KakigoriTD.Gameplay
         private float _particleRadius;
         private bool _contactMode;
         private System.Func<Vector3, float, bool> _tryAbsorb;
+        private bool _emissionStopped;
 
         private System.Func<Vector3, bool> _tryKillNear;
         private System.Action<Vector3> _onPassed;
@@ -89,6 +90,7 @@ namespace KakigoriTD.Gameplay
             _reachedFront = false;
             _contactMode = false;
             _tryAbsorb = null;
+            _emissionStopped = false;
 
             PlaceAndPlay(worldPoint);
         }
@@ -113,8 +115,20 @@ namespace KakigoriTD.Gameplay
             _elapsed = 0f;
             _reachedFront = false;
             _contactMode = true;
+            _emissionStopped = false;
 
             PlaceAndPlay(worldPoint);
+        }
+
+        /// <summary>
+        /// 吹き出しを止める（ParticleContact：削るのをやめた瞬間に LidarAvalancheVfx が活性中の全雪崩へ呼ぶ）。
+        /// 飛んでいる粒は寿命（Prefab 0.9 s）で自然に消え、粒が無くなったらプールへ返る。
+        /// </summary>
+        public void StopEmitting()
+        {
+            if (_emissionStopped) return;
+            _emissionStopped = true;
+            if (_ps != null) _ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
         }
 
         // 検知点の真上に置き、外向きへ向きを設定して最初から再生する（両モード共通）。
@@ -162,6 +176,7 @@ namespace KakigoriTD.Gameplay
             }
 
             bool finished = _elapsed >= _duration || _elapsed >= _maxLifetimeSec;
+            if (!finished && _emissionStopped && _ps != null && _ps.particleCount == 0) finished = true; // 止めた後は粒が尽きたら即返却
             if (!finished && _endRadius > 0f)
             {
                 Vector3 flat = new Vector3(transform.position.x, 0f, transform.position.z);

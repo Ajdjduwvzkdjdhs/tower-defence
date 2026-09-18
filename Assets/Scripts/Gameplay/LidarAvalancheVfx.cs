@@ -34,6 +34,8 @@ namespace KakigoriTD.Gameplay
         private float _spawnAccum;
         private float _lastDMm;
         private bool _wasEmitting;
+        private readonly System.Collections.Generic.List<AvalancheSnowEffect> _activeContact
+            = new System.Collections.Generic.List<AvalancheSnowEffect>(); // ParticleContact：活性中の雪崩（削り終了時に吹き出しを止める）
 
         /// <summary>放出（＝雪崩）の on/off が変化したフレームに発火（音の雪崩ループ用・エッジ）。</summary>
         public event Action<bool> OnAvalancheChanged;
@@ -86,6 +88,13 @@ namespace KakigoriTD.Gameplay
             {
                 _wasEmitting = emitting;
                 OnAvalancheChanged?.Invoke(emitting);
+
+                // ParticleContact：氷が落ちなくなったら雪崩も止まる。Prefab の吹き出し時間（2 s）を待たず、
+                // 活性中の全雪崩の吹き出しを止める（飛んでいる粒は寿命で消える）。Legacy は main どおり歩いて打ち切る。
+                if (!emitting)
+                {
+                    for (int i = 0; i < _activeContact.Count; i++) _activeContact[i].StopEmitting();
+                }
             }
         }
 
@@ -110,12 +119,20 @@ namespace KakigoriTD.Gameplay
             while (_spawnAccum >= 1f)
             {
                 _spawnAccum -= 1f;
-                _pool.Get().SpawnContact(p, _heightAt, TryAbsorb, RaisePassed, _pool.Release);
+                var fx = _pool.Get();
+                _activeContact.Add(fx);
+                fx.SpawnContact(p, _heightAt, TryAbsorb, RaisePassed, ReleaseContact);
             }
         }
 
         private bool TryAbsorb(Vector3 particlePos, float particleRadius)
             => _field.TryAbsorbParticle(particlePos, particleRadius);
+
+        private void ReleaseContact(AvalancheSnowEffect fx)
+        {
+            _activeContact.Remove(fx);
+            _pool.Release(fx);
+        }
 
         // Legacy：雪玉が毎フレーム自分の現在位置で呼ぶ。cooldown は「今フレームの検知点の d」（切れていたら直近の d）。
         private bool TryKill(Vector3 worldPos)
