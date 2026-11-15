@@ -50,10 +50,7 @@
 壊れていれば `ranking.json.corrupt-<時刻>` に退避して空から始まる。保持件数は `GameManager` の `Ranking Capacity`（既定 100）。
 **リセット**は Title / Result 画面で `D` キーを 5 秒長押し（左上に進捗バー → 「ランキングを消去しました」）。
 
-**Build 対象外の開発用シーン**（再生して個別検証に使う）:
-- `Assets/Scenes/SampleScene.unity` — Phase 5/6 期の旧セットアップ（GameManager をシーンに直置き）。TH_Stage プレハブ化前の名残
-- `Assets/Scenes/nadare_test.unity` — 雪崩演出の検証
-- `Assets/Scenes/character_test.unity` — アクターのモデル/アニメ検証
+> 旧開発用シーン（`SampleScene` / `nadare_test` / `character_test` / `TH 1` / `TH2`）は削除済み。`Assets/Scenes/` には上記 4 本のみ。
 
 ### テスト方針
 
@@ -82,7 +79,7 @@
 | 再コンパイル | `unity command recompile` → `unity command recompile_status`（`completed`/`up_to_date` までポーリング） |
 | EditMode テスト | `unity command run_tests --mode editor --filter <TestClass>`（全件は重いので `--filter` 推奨。JSON は `--json`） |
 | ゲーム画面キャプチャ | `unity command screenshot --view game --output Temp/pipeline-screenshots/x.png`（Play中の overlay UI 込みは `capture_game_view --source screen`） |
-| Console ログ | `unity command get_console_logs --severity error` |
+| Console ログ | `unity command console --level error --tail 50`（件数だけ見るなら `console_status`） |
 | シーン階層 | `unity command get_scene_hierarchy` / GameObject は `find_gameobjects` |
 
 編集→検証ループ: `.cs` を編集 → `unity command recompile` → `recompile_status` をポーリング → `unity command run_tests --mode editor --filter <対象>`。
@@ -108,7 +105,8 @@
 
 | 実装 | 役割 | 由来 |
 |------|------|------|
-| `KeyboardInputSource` | 開発用。`W/A/S/D`＝谷選択（ラッチ）、`Space` 長押し＝削り、`Enter`＝決定 | ADR-6/10 |
+| `KeyboardInputSource` | **旧方式（谷選択）**。`W/A/S/D`＝谷選択（ラッチ）、`Space` 長押し＝削り、`Enter`＝決定。現行の `TH` シーンの雪崩は下記の位置入力を使う | ADR-6/10 |
+| `LidarPositionInputSource` + `SimPositionInputSource`（`IPositionInputSource`） | **現行の落氷位置入力**。LiDAR の連続座標に検知点があればそれを、無ければ疑似入力（マウス左ボタン長押し／矢印キーで位置移動＋`Space` 長押しで削り）を使う。`CompositePositionInputSource` が常時併用で合成し、`InputMode` による切替は廃止済み（`GameManager.BuildLidarPath`） | ADR-32 / phase-preview-feedback |
 | `SerialInputSource` + `SerialInputProtocol` + `SerialHandler` | かき氷機ハンドルの回転（シリアル/BT シリアル）→ 削り。谷選択・決定はしない | ADR-15 / Phase 1.5 |
 | `VisionInputSource` + `VisionInputProtocol` | 氷の位置検知 → 谷選択（`ActiveChannel`）。LiDAR 版はさらに 3列目 `shaving` で削りも | ADR-24 / Phase 5・LiDAR は 2026-08 |
 | `CompositeInputSource` + `InputMode` | 上記を合成。谷選択＝`InputMode` で Keyboard/Vision 切替、削り＝keyboard `Space` OR シリアル OR LiDAR shaving の論理和、決定＝keyboard | ADR-15/24 |
