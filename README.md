@@ -63,3 +63,7 @@ tools/                   位置検知トラッカー（Python / C++）
 ```
 
 設計の詳細は [docs/architecture.md](docs/architecture.md) と [docs/spec-summary.md](docs/spec-summary.md) を参照してください。
+
+https://github.com/user-attachments/assets/9b9008c4-68a8-4e24-8b18-7737e11ab359
+
+
